@@ -36,10 +36,10 @@ export default function LotMapPage({ params }: { params: Promise<{ id: string, f
                     db.getAll('lots')
                 ]);
 
-                const clientFarms = allFarms.filter(f => f.clientId === id && f.boundary);
-                const clientLots = allLots.filter(l => {
+                const clientFarms = allFarms.filter((f: Farm) => f.clientId === id && f.boundary);
+                const clientLots = allLots.filter((l: Lot) => {
                     // Find if this lot belongs to a farm of this client
-                    const farm = allFarms.find(f => f.id === l.farmId);
+                    const farm = allFarms.find((f: Farm) => f.id === l.farmId);
                     return farm?.clientId === id && l.boundary;
                 });
 
