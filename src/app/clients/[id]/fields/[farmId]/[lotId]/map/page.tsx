@@ -44,8 +44,8 @@ export default function LotMapPage({ params }: { params: Promise<{ id: string, f
                 });
 
                 const layers: MapLayer[] = [
-                    ...clientFarms.map(f => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary })),
-                    ...clientLots.map(l => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary }))
+                    ...clientFarms.map((f: Farm) => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary })),
+                    ...clientLots.map((l: Lot) => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary }))
                 ];
 
                 setAllLayers(layers);
