@@ -9,7 +9,6 @@ const withPWA = require("next-pwa")({
 
 const nextConfig: NextConfig = {
   /* config options here */
-  // @ts-expect-error - Force webpack for next-pwa support
   experimental: {
     turbopack: false
   }
