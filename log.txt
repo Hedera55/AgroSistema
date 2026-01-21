@@ -1,0 +1,18 @@
+> [PWA] Auto register service worker with: /vercel/path0/node_modules/next-pwa/register.js
+> [PWA] Service worker: /vercel/path0/public/sw.js
+> [PWA]   url: /sw.js
+> [PWA]   scope: /
+✓ Compiled successfully in 15.1s
+  Running TypeScript ...
+Failed to compile.
+./src/app/clients/[id]/fields/[farmId]/map/page.tsx:39:53
+Type error: Parameter 'f' implicitly has an 'any' type.
+  37 |                 ]);
+  38 |
+> 39 |                 const clientFarms = allFarms.filter(f => f.clientId === id && f.boundary);
+     |                                                     ^
+  40 |                 const clientLots = allLots.filter(l => {
+  41 |                     const farm = allFarms.find(f => f.id === l.farmId);
+  42 |                     return farm?.clientId === id && l.boundary;
+Next.js build worker exited with code: 1 and signal: null
+Error: Command "npm run build" exited with 1

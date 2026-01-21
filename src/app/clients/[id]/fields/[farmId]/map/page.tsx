@@ -36,15 +36,15 @@ export default function FarmMapPage({ params }: { params: Promise<{ id: string, 
                     db.getAll('lots')
                 ]);
 
-                const clientFarms = allFarms.filter(f => f.clientId === id && f.boundary);
-                const clientLots = allLots.filter(l => {
-                    const farm = allFarms.find(f => f.id === l.farmId);
+                const clientFarms = allFarms.filter((f: Farm) => f.clientId === id && f.boundary);
+                const clientLots = allLots.filter((l: Lot) => {
+                    const farm = allFarms.find((f: Farm) => f.id === l.farmId);
                     return farm?.clientId === id && l.boundary;
                 });
 
                 const layers: MapLayer[] = [
-                    ...clientFarms.map(f => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary })),
-                    ...clientLots.map(l => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary }))
+                    ...clientFarms.map((f: Farm) => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary })),
+                    ...clientLots.map((l: Lot) => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary }))
                 ];
 
                 setAllLayers(layers);
