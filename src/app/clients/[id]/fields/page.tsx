@@ -96,7 +96,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
                 await updateLot({
                     ...lot,
-                    boundary: geojson,
+                    boundary: geojson as any,
                     lastUpdatedBy: displayName || 'Sistema'
                 });
                 alert('KML cargado correctamente.');
@@ -121,7 +121,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
                 await updateFarm({
                     ...farm,
-                    boundary: geojson,
+                    boundary: geojson as any,
                     lastUpdatedBy: displayName || 'Sistema'
                 });
                 alert('KML cargado correctamente.');

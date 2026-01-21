@@ -1,18 +1,27 @@
+▲ Next.js 16.1.3 (webpack)
+  Creating an optimized production build ...
+> [PWA] Compile server
+> [PWA] Compile server
+> [PWA] Compile client (static)
 > [PWA] Auto register service worker with: /vercel/path0/node_modules/next-pwa/register.js
 > [PWA] Service worker: /vercel/path0/public/sw.js
 > [PWA]   url: /sw.js
 > [PWA]   scope: /
-✓ Compiled successfully in 15.1s
+✓ Compiled successfully in 16.0s
   Running TypeScript ...
 Failed to compile.
-./src/app/clients/[id]/fields/[farmId]/map/page.tsx:39:53
-Type error: Parameter 'f' implicitly has an 'any' type.
-  37 |                 ]);
-  38 |
-> 39 |                 const clientFarms = allFarms.filter(f => f.clientId === id && f.boundary);
-     |                                                     ^
-  40 |                 const clientLots = allLots.filter(l => {
-  41 |                     const farm = allFarms.find(f => f.id === l.farmId);
-  42 |                     return farm?.clientId === id && l.boundary;
+
+./src/app/clients/[id]/fields/page.tsx:99:21
+Type error: Type 'FeatureCollection<Geometry | null, GeoJsonProperties>' is not assignable to type 'string | FeatureCollection<Geometry, GeoJsonProperties> | undefined'.
+  Type 'FeatureCollection<Geometry | null, GeoJsonProperties>' is not assignable to type 'FeatureCollection<Geometry, GeoJsonProperties>'.
+    Type 'Geometry | null' is not assignable to type 'Geometry'.
+      Type 'null' is not assignable to type 'Geometry'.
+   97 |                 await updateLot({
+   98 |                     ...lot,
+>  99 |                     boundary: geojson,
+      |                     ^
+  100 |                     lastUpdatedBy: displayName || 'Sistema'
+  101 |                 });
+  102 |                 alert('KML cargado correctamente.');
 Next.js build worker exited with code: 1 and signal: null
 Error: Command "npm run build" exited with 1
