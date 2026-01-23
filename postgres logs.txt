@@ -1,0 +1,89 @@
+{
+  "event_message": "current transaction is aborted, commands ignored until end of transaction block",
+  "id": "37c3e453-00e8-45a8-acc6-773ac6eed956",
+  "metadata": [
+    {
+      "file": null,
+      "host": "db-bvtolyxkwkeqjkpmsngv",
+      "metadata": [],
+      "parsed": [
+        {
+          "application_name": null,
+          "backend_type": "client backend",
+          "command_tag": "DEALLOCATE",
+          "connection_from": "127.0.0.1:32491",
+          "context": null,
+          "database_name": "postgres",
+          "detail": null,
+          "error_severity": "ERROR",
+          "hint": null,
+          "internal_query": null,
+          "internal_query_pos": null,
+          "leader_pid": null,
+          "location": null,
+          "process_id": 63931,
+          "query": "deallocate \"pgx_0\"",
+          "query_id": 0,
+          "query_pos": null,
+          "session_id": "6971132b.f9bb",
+          "session_line_num": 5,
+          "session_start_time": "2026-01-21 17:55:55 UTC",
+          "sql_state_code": "25P02",
+          "timestamp": "2026-01-21 17:55:55.183 UTC",
+          "transaction_id": 1768,
+          "user_name": "supabase_auth_admin",
+          "virtual_transaction_id": "37/0"
+        }
+      ],
+      "parsed_from": null,
+      "project": null,
+      "source_type": null
+    }
+  ],
+  "timestamp": 1769018155183000
+}
+
+{
+  "event_message": "function uuid_generate_v4() does not exist",
+  "id": "1a1c5560-c1f4-4de8-8b90-e168e73e819a",
+  "metadata": [
+    {
+      "file": null,
+      "host": "db-bvtolyxkwkeqjkpmsngv",
+      "metadata": [],
+      "parsed": [
+        {
+          "application_name": null,
+          "backend_type": "client backend",
+          "command_tag": "INSERT",
+          "connection_from": "127.0.0.1:32491",
+          "context": "PL/pgSQL function public.handle_new_user_registration() line 13 at assignment",
+          "database_name": "postgres",
+          "detail": null,
+          "error_severity": "ERROR",
+          "hint": "No function matches the given name and argument types. You might need to add explicit type casts.",
+          "internal_query": "new_client_id := uuid_generate_v4()",
+          "internal_query_pos": 18,
+          "leader_pid": null,
+          "location": null,
+          "process_id": 63931,
+          "query": "INSERT INTO \"users\" (\"aud\", \"banned_until\", \"confirmation_sent_at\", \"confirmation_token\", \"created_at\", \"deleted_at\", \"email\", \"email_change\", \"email_change_confirm_status\", \"email_change_sent_at\", \"email_change_token_current\", \"email_change_token_new\", \"email_confirmed_at\", \"encrypted_password\", \"id\", \"instance_id\", \"invited_at\", \"is_anonymous\", \"is_sso_user\", \"last_sign_in_at\", \"phone\", \"phone_change\", \"phone_change_sent_at\", \"phone_change_token\", \"phone_confirmed_at\", \"raw_app_meta_data\", \"raw_user_meta_data\", \"reauthentication_sent_at\", \"reauthentication_token\", \"recovery_sent_at\", \"recovery_token\", \"role\", \"updated_at\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)",
+          "query_id": -5643122554370342000,
+          "query_pos": null,
+          "session_id": "6971132b.f9bb",
+          "session_line_num": 4,
+          "session_start_time": "2026-01-21 17:55:55 UTC",
+          "sql_state_code": "42883",
+          "timestamp": "2026-01-21 17:55:55.183 UTC",
+          "transaction_id": 1768,
+          "user_name": "supabase_auth_admin",
+          "virtual_transaction_id": "37/394"
+        }
+      ],
+      "parsed_from": null,
+      "project": null,
+      "source_type": null
+    }
+  ],
+  "timestamp": 1769018155183000
+}

@@ -1,0 +1,14 @@
+Ok, we need to change some things. 
+
+The client needs to be able to do some more things...
+
+Here's a couple functions we're enabling to clients:
+They can change the information on campos and lotes. They can add kml, change hectacres ammount, and everything.
+
+They can add products to the catalogs, and have all available functions in the galpón virtual.
+
+They cannot change things in orders. Those are just managed by the admin.
+
+And... a client only sees their own client dashboard. Different from an admin, who can see various clients dashboards.
+
+Implement this.
