@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 export default function ClientDashboard({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
-    const { role, profile, isMaster, loading: authLoading } = useAuth();
+    const { role, profile, isMaster, isContratista, loading: authLoading } = useAuth();
     const [client, setClient] = useState<Client | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -29,18 +29,29 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
         }
     }, [id, authLoading, isMaster, profile, router]);
 
-    if (authLoading || loading) return <div className="p-8 text-center text-slate-500">Cargando cliente...</div>;
+    useEffect(() => {
+        if (!authLoading && isContratista) {
+            router.push(`/clients/${id}/orders`);
+        }
+    }, [isContratista, authLoading, id, router]);
+
+    if (authLoading || loading || isContratista) {
+        return <div className="p-8 text-center text-slate-500">Cargando cliente...</div>;
+    }
+
     if (!client) return <div className="p-8 text-center text-red-500">Cliente no encontrado</div>;
 
-    const cards = [
+    const allCards = [
         {
+            id: 'stock',
             title: 'Galpón Virtual',
             description: 'Gestión de stock, compras y saldos de insumos.',
-            icon: '🏭',
+            icon: '📦',
             href: `/clients/${id}/stock`,
             color: 'bg-orange-50 text-orange-700 hover:border-orange-200'
         },
         {
+            id: 'fields',
             title: 'Campos y Lotes',
             description: 'Mapa, límites de lotes y gestión de ambientes.',
             icon: '🚜',
@@ -48,6 +59,7 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
             color: 'bg-green-50 text-green-700 hover:border-green-200'
         },
         {
+            id: 'orders',
             title: 'Órdenes',
             description: 'Ver órdenes de pulverización y planillas de siembra.',
             icon: '📋',
@@ -55,6 +67,10 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
             color: 'bg-blue-50 text-blue-700 hover:border-blue-200'
         },
     ];
+
+    const cards = isContratista
+        ? allCards.filter(c => c.id === 'orders')
+        : allCards;
 
     return (
         <div className="space-y-6">

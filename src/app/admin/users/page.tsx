@@ -18,7 +18,8 @@ export default function UserManagementPage() {
         const roleOrder: Record<string, number> = {
             'MASTER_ADMIN': 1,
             'ADMIN': 2,
-            'CLIENT': 3
+            'CLIENT': 3,
+            'CONTRATISTA': 4
         };
         return [...userList].sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
     };
@@ -77,6 +78,25 @@ export default function UserManagementPage() {
         } catch (err) {
             console.error('Error updating role:', err);
             alert('Error al actualizar el rol');
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    const handleCuitChange = async (userId: string, newCuit: string) => {
+        setSavingId(userId);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ cuit: newCuit.trim() })
+                .eq('id', userId);
+
+            if (error) throw error;
+
+            setUsers(users.map(u => u.id === userId ? { ...u, cuit: newCuit } : u));
+        } catch (err) {
+            console.error('Error updating CUIT:', err);
+            alert('Error al actualizar el CUIT');
         } finally {
             setSavingId(null);
         }
@@ -260,6 +280,7 @@ export default function UserManagementPage() {
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Usuario / Email</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Rol</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">CUIT</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Clientes Asignados</th>
                             {isMaster && <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider"></th>}
                         </tr>
@@ -291,9 +312,10 @@ export default function UserManagementPage() {
                                             onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
                                             disabled={savingId === user.id}
                                         >
-                                            <option value="CLIENT">Cliente (Solo Lectura)</option>
-                                            <option value="ADMIN">Admin (Lectura/Escritura)</option>
-                                            <option value="MASTER_ADMIN">Master Admin</option>
+                                            <option value="CLIENT">Cliente (Solo Lectura Stock)</option>
+                                            <option value="CONTRATISTA">Contratista (Solo Órdenes)</option>
+                                            <option value="ADMIN">Admin (Acceso total al cliente)</option>
+                                            <option value="MASTER_ADMIN">Master Admin (Sistema)</option>
                                         </select>
                                     ) : (
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'MASTER_ADMIN' ? 'bg-purple-100 text-purple-700' :
@@ -303,6 +325,26 @@ export default function UserManagementPage() {
                                             {user.role}
                                         </span>
                                     )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                    <input
+                                        type="text"
+                                        className="text-sm rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 p-1 w-32 disabled:opacity-50 font-mono"
+                                        placeholder="CUIT..."
+                                        defaultValue={user.cuit || ''}
+                                        onBlur={(e) => {
+                                            if (e.target.value !== (user.cuit || '')) {
+                                                handleCuitChange(user.id, e.target.value);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                const input = e.currentTarget as HTMLInputElement;
+                                                input.blur();
+                                            }
+                                        }}
+                                        disabled={savingId === user.id}
+                                    />
                                 </td>
                                 <td className="px-6 py-4">
                                     {isMaster ? (

@@ -114,3 +114,30 @@ export function useClientStock(clientId: string) {
 
     return { stock, loading, updateStock, refresh };
 }
+
+export function useClientMovements(clientId: string) {
+    const [movements, setMovements] = useState<any[]>([]); // Use simplified type to avoid circular dep if needed, or import InventoryMovement
+    const [loading, setLoading] = useState(true);
+
+    const refresh = useCallback(async () => {
+        if (!clientId) return;
+        setLoading(true);
+        try {
+            const allMovements = await db.getAll('movements');
+            const clientMovements = allMovements.filter((m: any) => m.clientId === clientId);
+            // Sort by date desc
+            clientMovements.sort((a: any, b: any) => new Date(b.date + 'T' + (b.time || '00:00')).getTime() - new Date(a.date + 'T' + (a.time || '00:00')).getTime());
+            setMovements(clientMovements);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }, [clientId]);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    return { movements, loading, refresh };
+}

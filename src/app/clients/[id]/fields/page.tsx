@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import DynamicMap from '@/components/DynamicMap';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { kml } from '@tmcw/togeojson';
+import { ObservationsSection } from '@/components/ObservationsSection';
 
 export default function FieldsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -32,6 +33,33 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [editingLotId, setEditingLotId] = useState<string | null>(null);
     const [lotName, setLotName] = useState('');
     const [lotHectares, setLotHectares] = useState('');
+
+
+    // Bottom Observations Section State
+    const [obsContext, setObsContext] = useState<{
+        type: 'farm' | 'lot';
+        id: string;
+        farmId: string; // The parent farm ID
+        lotId?: string; // Specific lot ID if type is lot
+        name: string;
+        subtitle?: string;
+    } | null>(null);
+
+    const obsSectionRef = useRef<HTMLDivElement>(null);
+
+    const openObservations = (type: 'farm' | 'lot', id: string, farmId: string, lotId: string | undefined, name: string, subtitle?: string) => {
+        // Toggle if already open with same ID
+        if (obsContext?.id === id) {
+            setObsContext(null);
+            return;
+        }
+
+        setObsContext({ type, id, farmId, lotId, name, subtitle });
+        // Smooth scroll to section
+        setTimeout(() => {
+            obsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    };
 
     const handleAddLot = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -186,6 +214,17 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setNewFarmName('');
     };
 
+    if (role === 'CONTRATISTA') {
+        return (
+            <div className="p-12 text-center bg-white rounded-xl shadow-sm border border-slate-200">
+                <div className="text-4xl mb-4">🚫</div>
+                <h2 className="text-xl font-bold text-slate-800">Acceso Denegado</h2>
+                <p className="text-slate-500 mt-2">Los contratistas solo tienen acceso a la sección de órdenes asignadas.</p>
+                <Link href={`/clients/${id}/orders`} className="inline-block mt-6 text-emerald-600 font-bold hover:underline font-mono">Ir a Mis Órdenes →</Link>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -270,6 +309,18 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 Ver mapa
                                             </Link>
                                         )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openObservations('farm', farm.id, farm.id, undefined, farm.name);
+                                            }}
+                                            className={`p-1 px-2 text-xs font-semibold rounded border transition-colors ${obsContext?.id === farm.id
+                                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 ring-1 ring-emerald-300'
+                                                : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                                                }`}
+                                        >
+                                            Obs.
+                                        </button>
                                         {!isReadOnly && (
                                             <>
                                                 <button
@@ -367,46 +418,59 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         lots
                                             .filter(lot => lot.id !== editingLotId)
                                             .map(lot => (
-                                                <div
-                                                    key={lot.id}
-                                                    className={`flex justify-between items-center p-3 rounded-xl border-2 transition-all group cursor-pointer ${selectedLotId === lot.id ? 'border-emerald-500 bg-slate-50' : 'bg-slate-50 border-slate-100'}`}
-                                                    onClick={() => setSelectedLotId(selectedLotId === lot.id ? null : lot.id)}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-medium text-slate-700">{lot.name}</span>
-                                                        <span className="text-sm text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{lot.hectares} ha</span>
-                                                    </div>
-                                                    {!isReadOnly && (
-                                                        <div className="flex gap-2 transition-opacity">
-                                                            <Link
-                                                                href={`/clients/${id}/map?selected=${lot.id}`}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${lot.boundary
-                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                                                    : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed hidden'}`}
-                                                            >
-                                                                Ver mapa
-                                                            </Link>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleEditLot(lot);
-                                                                }}
-                                                                className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
-                                                            >
-                                                                Editar
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDeleteLot(lot.id);
-                                                                }}
-                                                                className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-red-300 hover:text-red-700 transition-colors"
-                                                            >
-                                                                Eliminar
-                                                            </button>
+                                                <div key={lot.id}>
+                                                    <div
+                                                        className={`flex justify-between items-center p-3 rounded-xl border-2 transition-all group cursor-pointer ${selectedLotId === lot.id ? 'border-emerald-500 bg-slate-50' : 'bg-slate-50 border-slate-100'}`}
+                                                        onClick={() => setSelectedLotId(selectedLotId === lot.id ? null : lot.id)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="font-medium text-slate-700">{lot.name}</span>
+                                                            <span className="text-sm text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{lot.hectares} ha</span>
                                                         </div>
-                                                    )}
+                                                        {!isReadOnly && (
+                                                            <div className="flex gap-2 transition-opacity">
+                                                                <Link
+                                                                    href={`/clients/${id}/map?selected=${lot.id}`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${lot.boundary
+                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                                        : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed hidden'}`}
+                                                                >
+                                                                    Ver mapa
+                                                                </Link>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openObservations('lot', lot.id, selectedFarmId!, lot.id, lot.name, `Lote de ${farms.find(f => f.id === selectedFarmId)?.name}`);
+                                                                    }}
+                                                                    className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${obsContext?.id === lot.id
+                                                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 ring-1 ring-emerald-300'
+                                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                                                                        }`}
+                                                                >
+                                                                    Obs.
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleEditLot(lot);
+                                                                    }}
+                                                                    className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDeleteLot(lot.id);
+                                                                    }}
+                                                                    className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-red-300 hover:text-red-700 transition-colors"
+                                                                >
+                                                                    Eliminar
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))
                                     )}
@@ -421,6 +485,42 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     </div>
                 </div>
             </div>
+
+            {/* Bottom Observations Section - Full Width Block */}
+            {obsContext && (
+                <div
+                    ref={obsSectionRef}
+                    className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-6"
+                >
+                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800">
+                                Observaciones
+                            </h2>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+                                    {obsContext.name}
+                                </span>
+                                {obsContext.subtitle && (
+                                    <span className="text-xs text-slate-500">
+                                        &bull; {obsContext.subtitle}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setObsContext(null)} className="text-slate-400 hover:text-slate-600">
+                            ✕ Cerrar
+                        </Button>
+                    </div>
+                    <div className="px-2 pb-2">
+                        <ObservationsSection
+                            clientId={id}
+                            farmId={obsContext.farmId}
+                            lotId={obsContext.lotId}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

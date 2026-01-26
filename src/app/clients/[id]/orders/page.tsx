@@ -42,21 +42,24 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     // Enrich orders with Farm/Lot names
     const orders = useMemo(() => {
         if (loading) return [];
-        return rawOrders.map(o => ({
+        let filtered = rawOrders;
+        // Previously we filtered by applicatorId, but now we'll show all orders 
+        // for assigned clients to simplify the workflow.
+        return filtered.map(o => ({
             ...o,
             farmName: farms.find(f => f.id === o.farmId)?.name || 'Unknown Farm',
             lotName: lots.find(l => l.id === o.lotId)?.name || 'Unknown Lot',
             hectares: lots.find(l => l.id === o.lotId)?.hectares || 0
         })); // The hook already sorts by date
-    }, [rawOrders, farms, lots, loading]);
+    }, [rawOrders, farms, lots, loading, role, profile]);
 
     const { generateOrderPDF } = usePDF();
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
-    const handleDownload = (order: Order & { farmName: string; lotName: string }) => {
+    const handleDownload = async (order: Order & { farmName: string; lotName: string }) => {
         if (client) {
-            generateOrderPDF(order, client.name);
+            await generateOrderPDF(order, client);
         }
     };
 
@@ -66,7 +69,15 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         const nextStatus = order.status === 'DONE' ? 'PENDING' : 'DONE';
 
         try {
-            await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema');
+            const auditData = nextStatus === 'DONE' ? {
+                appliedBy: displayName || 'Sistema',
+                appliedAt: new Date().toISOString()
+            } : {
+                appliedBy: undefined,
+                appliedAt: undefined
+            };
+
+            await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema', auditData);
         } catch (e) {
             alert('Error al actualizar el estado');
         }
@@ -93,11 +104,16 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <Link href={`/clients/${id}`} className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block">← Volver al Dashboard</Link>
+                    <Link
+                        href={role === 'CONTRATISTA' ? '/clients' : `/clients/${id}`}
+                        className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block"
+                    >
+                        {role === 'CONTRATISTA' ? '← Mis Clientes' : '← Volver al Dashboard'}
+                    </Link>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Órdenes</h1>
                     <p className="text-slate-500 mt-1">Ver órdenes de pulverización y planillas de siembra.</p>
                 </div>
-                {!isReadOnly && (
+                {!isReadOnly && role !== 'CONTRATISTA' && (
                     <Link href={`/clients/${id}/orders/new`}>
                         <Button>+ Nueva Orden</Button>
                     </Link>
@@ -145,8 +161,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-center">
                                         <button
-                                            onClick={() => !isReadOnly && handleToggleStatus(order.id)}
-                                            className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all ${!isReadOnly ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
+                                            onClick={() => (!isReadOnly || role === 'CONTRATISTA') && handleToggleStatus(order.id)}
+                                            className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all ${(!isReadOnly || role === 'CONTRATISTA') ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
                                          ${order.status === 'DONE' ? 'bg-green-100 text-green-800' :
                                                     (order.status === 'PENDING' && isExpired(order.date)) ? 'bg-red-100 text-red-800' :
                                                         order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :

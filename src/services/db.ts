@@ -40,10 +40,20 @@ interface AgronomicDB extends DBSchema {
         value: import('@/types').OrderActivity;
         indexes: { 'by-order': string; 'by-client': string };
     };
+    warehouses: {
+        key: string;
+        value: import('@/types').Warehouse;
+        indexes: { 'by-client': string };
+    };
+    observations: {
+        key: string;
+        value: import('@/types').Observation;
+        indexes: { 'by-client': string; 'by-farm': string; 'by-lot': string };
+    };
 }
 
 const DB_NAME = 'agronomic-db';
-const DB_VERSION = 3; // Incrementing version to add order_activities store
+const DB_VERSION = 5; // Incrementing version to add observations store
 
 export const dbPromise = typeof window !== 'undefined'
     ? openDB<AgronomicDB>(DB_NAME, DB_VERSION, {
@@ -98,6 +108,19 @@ export const dbPromise = typeof window !== 'undefined'
                 const store = db.createObjectStore('order_activities', { keyPath: 'id' });
                 store.createIndex('by-order', 'orderId');
                 store.createIndex('by-client', 'clientId');
+            }
+
+            // Warehouses
+            if (!db.objectStoreNames.contains('warehouses')) {
+                const store = db.createObjectStore('warehouses', { keyPath: 'id' });
+                store.createIndex('by-client', 'clientId');
+            }
+            // Observations
+            if (!db.objectStoreNames.contains('observations')) {
+                const store = db.createObjectStore('observations', { keyPath: 'id' });
+                store.createIndex('by-client', 'clientId');
+                store.createIndex('by-farm', 'farmId');
+                store.createIndex('by-lot', 'lotId');
             }
         },
     }) : Promise.resolve(null as any);

@@ -78,9 +78,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Effective Client ID for navigation context: 
     // - For CLIENT role: ALWAYS use assignedId.
     // - For ADMIN/MASTER: URL takes precedence, then persisted selection.
-    const effectiveId = role === 'CLIENT'
+    const effectiveId = (role === 'CLIENT')
         ? assignedId
-        : (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
+        : (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null) || assignedId);
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {
@@ -98,12 +98,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     const navigation = [
         // For Admin/Master: General Client list
-        { name: 'Clientes', href: '/clients', show: isMaster || role === 'ADMIN' },
+        { name: 'Clientes', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CONTRATISTA' },
         // For Master: User management
         { name: 'Usuarios', href: '/admin/users', show: isMaster },
         // For Client Context (available to all if viewing a client)
-        { name: 'Galpón', href: `/clients/${effectiveId}/stock`, show: showClientMenu },
-        { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu },
+        { name: 'Galpón', href: `/clients/${effectiveId}/stock`, show: showClientMenu && role !== 'CONTRATISTA' },
+        { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Órdenes', href: `/clients/${effectiveId}/orders`, show: showClientMenu },
     ].filter(item => item.show);
 

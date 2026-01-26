@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { db } from './db';
-import { Client, Farm, Lot, Product, Order, InventoryMovement, ClientStock, OrderActivity } from '@/types';
+import { Client, Farm, Lot, Product, Order, InventoryMovement, ClientStock, OrderActivity, Observation } from '@/types';
 
 // Explicit mappers for each entity to ensure correct column names and data types for Supabase
 const mappers = {
@@ -44,6 +44,7 @@ const mappers = {
     stock: (s: ClientStock) => ({
         id: s.id,
         client_id: s.clientId,
+        warehouse_id: s.warehouseId,
         product_id: s.productId,
         quantity: s.quantity,
         updated_at: s.updatedAt || s.lastUpdated || new Date().toISOString()
@@ -54,10 +55,13 @@ const mappers = {
         client_id: o.clientId,
         farm_id: o.farmId,
         lot_id: o.lotId,
+        warehouse_id: o.warehouseId,
         type: o.type,
         status: o.status,
         date: o.date,
         time: o.time,
+        application_start: o.applicationStart,
+        application_end: o.applicationEnd,
         treated_area: o.treatedArea,
         items: o.items,
         applicator_name: o.applicatorName,
@@ -71,6 +75,7 @@ const mappers = {
     movement: (m: InventoryMovement) => ({
         id: m.id,
         client_id: m.clientId,
+        warehouse_id: m.warehouseId,
         product_id: m.productId,
         product_name: m.productName,
         type: m.type,
@@ -92,6 +97,19 @@ const mappers = {
         description: a.description,
         user_name: a.userName,
         timestamp: a.timestamp
+    }),
+    observation: (o: Observation) => ({
+        id: o.id,
+        client_id: o.clientId,
+        farm_id: o.farmId,
+        lot_id: o.lotId,
+        user_name: o.userName,
+        date: o.date,
+        comments: o.comments,
+        created_at: o.createdAt || new Date().toISOString(),
+        deleted: o.deleted || false,
+        deleted_by: o.deletedBy,
+        deleted_at: o.deletedAt
     })
 };
 
@@ -139,6 +157,7 @@ const reverseMappers = {
     stock: (s: any): ClientStock => ({
         id: s.id,
         clientId: s.client_id,
+        warehouseId: s.warehouse_id,
         productId: s.product_id,
         quantity: s.quantity,
         updatedAt: s.updated_at,
@@ -151,10 +170,13 @@ const reverseMappers = {
         clientId: o.client_id,
         farmId: o.farm_id,
         lotId: o.lot_id,
+        warehouseId: o.warehouse_id,
         type: o.type,
         status: o.status,
         date: o.date,
         time: o.time,
+        applicationStart: o.application_start,
+        applicationEnd: o.application_end,
         treatedArea: o.treated_area,
         items: o.items,
         applicatorName: o.applicator_name,
@@ -168,6 +190,7 @@ const reverseMappers = {
     movement: (m: any): InventoryMovement => ({
         id: m.id,
         clientId: m.client_id,
+        warehouseId: m.warehouse_id,
         productId: m.product_id,
         productName: m.product_name || 'Unknown',
         type: m.type,
@@ -190,6 +213,20 @@ const reverseMappers = {
         description: a.description,
         userName: a.user_name,
         timestamp: a.timestamp,
+        synced: true
+    }),
+    observation: (o: any): Observation => ({
+        id: o.id,
+        clientId: o.client_id,
+        farmId: o.farm_id,
+        lotId: o.lot_id,
+        userName: o.user_name,
+        date: o.date,
+        comments: o.comments,
+        createdAt: o.created_at,
+        deleted: o.deleted,
+        deletedBy: o.deleted_by,
+        deletedAt: o.deleted_at,
         synced: true
     })
 };
@@ -331,6 +368,7 @@ export class SyncService {
         await this.pushStore('orders', 'orders', mappers.order);
         await this.pushStore('movements', 'inventory_movements', mappers.movement);
         await this.pushStore('order_activities', 'order_activities', mappers.activity);
+        await this.pushStore('observations', 'observations', mappers.observation);
     }
 
     private async pullChangesInternal() {
@@ -343,6 +381,7 @@ export class SyncService {
         await this.pullStore('orders', 'orders', reverseMappers.order);
         await this.pullStore('movements', 'inventory_movements', reverseMappers.movement);
         await this.pullStore('order_activities', 'order_activities', reverseMappers.activity);
+        await this.pullStore('observations', 'observations', reverseMappers.observation);
     }
 
     private async pushStore<T extends { id: string }>(

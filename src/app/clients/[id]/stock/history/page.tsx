@@ -4,23 +4,65 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { InventoryMovement } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
     const [movements, setMovements] = useState<InventoryMovement[]>([]);
     const [loading, setLoading] = useState(true);
+    const [uploadingId, setUploadingId] = useState<string | null>(null);
+
+    async function loadMovements() {
+        const allMovements = await db.getAll('movements');
+        const clientMovements = allMovements
+            .filter((m: InventoryMovement) => m.clientId === clientId)
+            .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.date + 'T' + (b.time || '00:00')).getTime() - new Date(a.date + 'T' + (a.time || '00:00')).getTime());
+        setMovements(clientMovements);
+        setLoading(false);
+    }
 
     useEffect(() => {
-        async function loadMovements() {
-            const allMovements = await db.getAll('movements');
-            const clientMovements = allMovements
-                .filter((m: InventoryMovement) => m.clientId === clientId)
-                .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            setMovements(clientMovements);
-            setLoading(false);
-        }
         loadMovements();
     }, [clientId]);
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, movementId: string) => {
+        if (!e.target.files || !e.target.files[0]) return;
+        const file = e.target.files[0];
+
+        setUploadingId(movementId);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const filePath = `${clientId}/facturas/${movementId}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('facturas')
+                .upload(filePath, file, { upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
+            const publicUrl = publicUrlData.publicUrl;
+
+            // Update movement in DB
+            const movement = movements.find(m => m.id === movementId);
+            if (movement) {
+                await db.put('movements', {
+                    ...movement,
+                    facturaImageUrl: publicUrl,
+                    synced: false,
+                    updatedAt: new Date().toISOString()
+                });
+                await loadMovements(); // Refresh UI
+            }
+        } catch (error) {
+            console.error('Error uploading factura:', error);
+            alert('Error al subir la factura');
+        } finally {
+            setUploadingId(null);
+            // Reset input
+            e.target.value = '';
+        }
+    };
 
     const formatDate = (isoString: string) => {
         const date = new Date(isoString);
@@ -63,6 +105,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase"></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200 text-sm">
@@ -90,6 +133,41 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-slate-400 italic">
                                                 {m.createdBy || 'Sistema'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                {m.type === 'IN' && (
+                                                    m.facturaImageUrl ? (
+                                                        <a
+                                                            href={m.facturaImageUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="Ver factura"
+                                                            className="inline-block"
+                                                        >
+                                                            <button
+                                                                className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
+                                                            >
+                                                                F
+                                                            </button>
+                                                        </a>
+                                                    ) : (
+                                                        <div className="inline-block relative">
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*,application/pdf"
+                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+                                                                onChange={(e) => handleFileUpload(e, m.id)}
+                                                                disabled={uploadingId === m.id}
+                                                                title="Subir factura faltante"
+                                                            />
+                                                            <button
+                                                                className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
+                                                            >
+                                                                {uploadingId === m.id ? '...' : 'F'}
+                                                            </button>
+                                                        </div>
+                                                    )
+                                                )}
                                             </td>
                                         </tr>
                                     );

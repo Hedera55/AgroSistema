@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Order, OrderItem } from '@/types';
+import QRCode from 'qrcode';
+import { Order, OrderItem, Client } from '@/types';
 
 // Augment jsPDF type for autoTable
 interface AutoTableUserOptions {
@@ -16,40 +17,53 @@ declare module 'jspdf' {
 
 export function usePDF() {
 
-    const generateOrderPDF = (order: Order & { farmName?: string; lotName?: string }, clientName: string) => {
+    const generateOrderPDF = async (order: Order & { farmName?: string; lotName?: string }, client: Client) => {
         const doc = new jsPDF();
 
         // Header
-        doc.setFontSize(22);
+        doc.setFontSize(20);
         doc.setTextColor(40);
-        doc.text("Orden de Pulverización", 14, 20);
+        doc.text("ORDEN DE PULVERIZACIÓN", 14, 20);
 
         doc.setFontSize(10);
-        doc.text("AgroSistema App", 14, 28);
+        doc.setTextColor(60);
+        doc.text(`Orden Nro ${order.orderNumber || '-'}`, 14, 28);
+        doc.text(`Fecha de creación: ${order.date} ${order.time || ''}`, 60, 28);
 
-        // Meta Data
-        doc.setFontSize(11);
-        doc.setTextColor(100);
+        // Meta Data Box
+        autoTable(doc, {
+            body: [
+                [`Cliente: ${client.name} ${client.cuit ? `(CUIT: ${client.cuit})` : ''}`, `Lote: ${order.lotName || 'N/A'}`],
+                [`Campo: ${order.farmName || 'N/A'}`, `Superficie: ${order.treatedArea} Has`],
+                [`Rango de aplicación: ${order.applicationStart || '-'} al ${order.applicationEnd || '-'}`, '']
+            ],
+            startY: 32,
+            theme: 'grid',
+            styles: {
+                fontSize: 10,
+                cellPadding: 3,
+                textColor: 60,
+                lineColor: [0, 0, 0],
+                lineWidth: 0.1
+            },
+            columnStyles: {
+                0: { cellWidth: 90 },
+                1: { cellWidth: 91 }
+            }
+        });
 
-        const rightColX = 120;
-
-        doc.text(`Fecha: ${order.date} ${order.time || ''}`, 14, 40);
-        doc.text(`Cliente: ${clientName}`, 14, 46);
-        doc.text(`Campo: ${order.farmName || 'N/A'}`, 14, 52);
-        doc.text(`Lote: ${order.lotName || 'N/A'}`, rightColX, 40);
-        doc.text(`Superficie: ${order.treatedArea} Has`, rightColX, 46);
-
-        // Status Badge if needed
-        // doc.text(`Estado: ${order.status}`, rightColX, 52);
+        const finalMetaY = (doc as any).lastAutoTable.finalY || 50;
 
         // Table
-        const tableColumn = ["Insumo", "Dosis"];
+        const tableColumn = ["P.A.", "Marca", "Dosis/Ha", "Dosis Total"];
         const tableRows: (string | number)[][] = [];
 
         order.items.forEach((item) => {
             const row = [
-                item.productName,
+                item.activeIngredient || item.productName,
+                item.brandName || '-',
                 `${item.dosage} ${item.unit}/ha`,
+                `${item.totalQuantity.toFixed(2)} ${item.unit}`
             ];
             tableRows.push(row);
         });
@@ -57,7 +71,7 @@ export function usePDF() {
         autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
-            startY: 65,
+            startY: finalMetaY + 5,
             theme: 'grid',
             headStyles: { fillColor: [16, 185, 129] }, // Emerald-500
             styles: { fontSize: 10 }
@@ -81,8 +95,20 @@ export function usePDF() {
         doc.line(120, 250, 186, 250);
         doc.text("Firma Aplicador", 120, 255);
 
+        // QR Code (Linking to Lot Map) - Smaller and top-right
+        try {
+            const baseUrl = window.location.origin;
+            const qrUrl = `${baseUrl}/clients/${order.clientId}/fields/${order.farmId}/map`;
+            const qrDataUrl = await QRCode.toDataURL(qrUrl);
+            doc.addImage(qrDataUrl, 'PNG', 175, 4, 20, 20); // Resized and moved up
+            doc.setFontSize(6);
+            doc.text("Ver mapa", 185, 26, { align: 'center' });
+        } catch (qrErr) {
+            console.error("Error generating QR:", qrErr);
+        }
+
         // Save
-        doc.save(`Orden_${clientName}_${order.date}.pdf`);
+        doc.save(`Orden_${client.name}_Nro${order.orderNumber || order.id.substring(0, 5)}_${order.date}.pdf`);
     };
 
     return { generateOrderPDF };

@@ -10,12 +10,16 @@ import Link from 'next/link';
 export default function ProfilePage() {
     const { user, profile, refreshProfile, loading } = useAuth();
     const [username, setUsername] = useState('');
+    const [cuit, setCuit] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
         if (profile?.username) {
             setUsername(profile.username);
+        }
+        if (profile?.cuit) {
+            setCuit(profile.cuit);
         }
     }, [profile]);
 
@@ -29,7 +33,10 @@ export default function ProfilePage() {
         try {
             const { error } = await supabase
                 .from('profiles')
-                .update({ username: username.trim() })
+                .update({
+                    username: username.trim(),
+                    cuit: cuit.trim()
+                })
                 .eq('id', user.id);
 
             if (error) throw error;
@@ -79,6 +86,12 @@ export default function ProfilePage() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
+                        />
+                        <Input
+                            label="CUIT"
+                            placeholder="ej. 30-12345678-9"
+                            value={cuit}
+                            onChange={(e) => setCuit(e.target.value)}
                         />
                         <p className="text-xs text-slate-400">
                             Este nombre aparecerá en los historiales de stock, órdenes y modificaciones de campos.

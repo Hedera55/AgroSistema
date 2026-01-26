@@ -57,7 +57,10 @@ export function useOrders(clientId: string) {
             const clientStock = currentStock.filter((s: ClientStock) => s.clientId === clientId);
 
             for (const item of items) {
-                const stockItem = clientStock.find((s: ClientStock) => s.productId === item.productId);
+                const stockItem = clientStock.find((s: ClientStock) =>
+                    s.productId === item.productId &&
+                    s.warehouseId === order.warehouseId
+                );
 
                 if (stockItem) {
                     await db.put('stock', {
@@ -71,6 +74,7 @@ export function useOrders(clientId: string) {
                     await db.put('stock', {
                         id: generateId(),
                         clientId: order.clientId,
+                        warehouseId: order.warehouseId,
                         productId: item.productId,
                         quantity: -item.totalQuantity,
                         updatedAt: new Date().toISOString(),
@@ -83,6 +87,7 @@ export function useOrders(clientId: string) {
                 await db.put('movements', {
                     id: generateId(),
                     clientId: order.clientId,
+                    warehouseId: order.warehouseId,
                     productId: item.productId,
                     productName: item.productName,
                     type: 'OUT',
@@ -91,7 +96,7 @@ export function useOrders(clientId: string) {
                     date: new Date().toISOString(),
                     time: new Date().toTimeString().split(' ')[0].substring(0, 5),
                     referenceId: order.id,
-                    notes: `Orden de Pulverización`,
+                    notes: `Orden Nro ${order.orderNumber ?? '-'}`,
                     createdBy: displayName,
                     synced: false,
                     updatedAt: new Date().toISOString(),
@@ -112,7 +117,8 @@ export function useOrders(clientId: string) {
     const updateOrderStatus = async (
         orderId: string,
         newStatus: 'PENDING' | 'DONE',
-        displayName: string
+        displayName: string,
+        auditData?: { appliedBy?: string; appliedAt?: string }
     ) => {
         try {
             const order = orders.find(o => o.id === orderId);
@@ -120,6 +126,7 @@ export function useOrders(clientId: string) {
 
             const updatedOrder = {
                 ...order,
+                ...auditData,
                 status: newStatus,
                 updatedAt: new Date().toISOString(),
                 updatedBy: displayName,

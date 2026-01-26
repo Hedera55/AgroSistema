@@ -73,7 +73,7 @@ export default function ClientsPage() {
         return [];
     }, [clients, isMaster, showAll, profile]);
 
-    const [newClient, setNewClient] = useState({ name: '', email: '', phone: '' });
+    const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', cuit: '' });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -85,10 +85,11 @@ export default function ClientsPage() {
                 id: generateId(),
                 name: newClient.name,
                 email: newClient.email,
-                phone: newClient.phone
+                phone: newClient.phone,
+                cuit: newClient.cuit
             });
             setShowForm(false);
-            setNewClient({ name: '', email: '', phone: '' });
+            setNewClient({ name: '', email: '', phone: '', cuit: '' });
         } finally {
             setIsSubmitting(false);
         }
@@ -143,6 +144,13 @@ export default function ClientsPage() {
                             value={newClient.phone}
                             onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
                         />
+                        <Input
+                            label="CUIT"
+                            type="text"
+                            placeholder="ej. 30-12345678-9"
+                            value={newClient.cuit}
+                            onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
+                        />
                         <Button type="submit" isLoading={isSubmitting} className="md:col-start-3">
                             Guardar Cliente
                         </Button>
@@ -189,6 +197,7 @@ export default function ClientsPage() {
                                             {client.name}
                                         </h3>
                                         <div className="mt-2 space-y-1 text-sm text-slate-500">
+                                            {client.cuit && <div className="flex items-center gap-2 font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded w-fit mb-1">CUIT: {client.cuit}</div>}
                                             {client.email && <div className="flex items-center gap-2">📧 {client.email}</div>}
                                             {client.phone && <div className="flex items-center gap-2">📱 {client.phone}</div>}
                                         </div>

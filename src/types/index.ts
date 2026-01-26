@@ -1,11 +1,12 @@
-export type UserRole = 'MASTER_ADMIN' | 'ADMIN' | 'CLIENT';
+export type UserRole = 'MASTER_ADMIN' | 'ADMIN' | 'CLIENT' | 'CONTRATISTA';
 
 export interface UserProfile {
     id: string; // Supabase UID
     email: string;
     username?: string;
     role: UserRole;
-    assigned_clients?: string[]; // IDs of clients for ADMIN role
+    cuit?: string;
+    assigned_clients?: string[]; // IDs of clients for ADMIN/CONTRATISTA role
 }
 
 // --- Location Entities ---
@@ -15,9 +16,19 @@ export interface Client {
     name: string;
     email?: string;
     phone?: string;
+    cuit?: string; // Government ID
     synced?: boolean;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface Warehouse {
+    id: string;
+    clientId: string;
+    name: string;
+    createdAt?: string;
+    updatedAt?: string;
+    synced?: boolean;
 }
 
 export interface Farm { // Campo
@@ -62,6 +73,7 @@ export interface Product {
     id: string;
     clientId?: string; // Optional: if missing, it's global; if present, it's client-specific
     name: string;
+    brandName?: string;
     type: ProductType;
     unit: Unit;
     activeIngredient?: string;
@@ -74,6 +86,7 @@ export interface Product {
 export interface ClientStock {
     id: string;
     clientId: string;
+    warehouseId?: string; // For multi-galpón support
     productId: string;
     quantity: number; // Current balance
     lastUpdated: string; // ISO Date
@@ -90,6 +103,8 @@ export interface OrderItem {
     id: string;
     productId: string;
     productName: string; // Cached for offline display
+    brandName?: string;  // Cached for PDF
+    activeIngredient?: string; // P.A. cached for PDF
     dosage: number; // Amount per hectare
     unit: Unit;
     totalQuantity: number; // dosage * area
@@ -99,6 +114,7 @@ export interface OrderItem {
 export interface InventoryMovement {
     id: string;
     clientId: string;
+    warehouseId?: string; // Origin/Destination warehouse
     productId: string;
     productName: string;
     type: 'IN' | 'OUT';
@@ -108,6 +124,7 @@ export interface InventoryMovement {
     time?: string;
     referenceId: string; // ID of the Order or Purchase event
     notes?: string;
+    facturaImageUrl?: string; // URL to uploaded invoice/receipt image
     createdBy?: string; // User ID/Name
     createdAt?: string;
     updatedAt?: string;
@@ -126,13 +143,19 @@ export interface Order {
     clientId: string;
     farmId: string;
     lotId: string;
+    warehouseId?: string; // Origin warehouse
 
     // Details
     treatedArea: number; // Hectares
     items: OrderItem[];
 
     // Execution
-    applicatorName?: string; // Contratista
+    applicatorId?: string; // Link to profile id
+    appliedAt?: string;
+    appliedBy?: string; // Name for audit trail
+    applicatorName?: string; // Legacy/Display name
+    applicationStart?: string; // ISO Date for range
+    applicationEnd?: string;   // ISO Date for range
     notes?: string;
     createdBy?: string;
 
@@ -153,4 +176,19 @@ export interface OrderActivity {
     userName: string;
     timestamp: string;
     synced?: boolean;
+}
+
+export interface Observation {
+    id: string;
+    clientId: string;
+    farmId: string;
+    lotId?: string; // Optional: can be a general farm observation
+    userName: string;
+    date: string; // ISO Date
+    comments: string;
+    createdAt: string;
+    synced?: boolean;
+    deleted?: boolean;
+    deletedBy?: string;
+    deletedAt?: string;
 }

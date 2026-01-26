@@ -4,6 +4,8 @@ import { use, useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { useClientStock, useInventory } from '@/hooks/useInventory';
+import { useWarehouses } from '@/hooks/useWarehouses';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
@@ -21,14 +23,24 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const { farms } = useFarms(clientId);
     const { products } = useInventory();
     const { stock, refresh: refreshStock } = useClientStock(clientId);
+    const { warehouses } = useWarehouses(clientId);
     const { addOrder } = useOrders(clientId);
 
     // Form State
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [selectedFarmId, setSelectedFarmId] = useState('');
     const [selectedLotId, setSelectedLotId] = useState('');
+    const [selectedOrderWarehouseId, setSelectedOrderWarehouseId] = useState('');
+    useEffect(() => {
+        if (!selectedOrderWarehouseId && warehouses.length > 0) {
+            setSelectedOrderWarehouseId(warehouses[0].id);
+        }
+    }, [warehouses, selectedOrderWarehouseId]);
+
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [time, setTime] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
+    const [appStart, setAppStart] = useState(new Date().toISOString().split('T')[0]);
+    const [appEnd, setAppEnd] = useState(new Date().toISOString().split('T')[0]);
 
     // Order Items
     const [items, setItems] = useState<OrderItem[]>([]);
@@ -36,6 +48,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     // Current Item Input
     const [currProdId, setCurrProdId] = useState('');
     const [currDosage, setCurrDosage] = useState('');
+
+    // Contractors
+    const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
+    const [selectedApplicatorId, setSelectedApplicatorId] = useState('');
 
     // Derived Data
     const { lots } = useLots(selectedFarmId);
@@ -51,6 +67,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             id: generateId(),
             productId: currProdId,
             productName: product.name,
+            brandName: product.brandName,
+            activeIngredient: product.activeIngredient,
             dosage: parseFloat(currDosage),
             unit: product.unit,
             totalQuantity: parseFloat(currDosage) * (selectedLot?.hectares || 0)
@@ -77,6 +95,17 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     }, [items, stock]);
 
 
+    useEffect(() => {
+        const fetchContractors = async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .eq('role', 'CONTRATISTA');
+            if (data) setContractors(data);
+        };
+        fetchContractors();
+    }, []);
+
     const handleSubmit = async () => {
         if (!selectedLot || items.length === 0) return;
 
@@ -95,9 +124,13 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 status: 'PENDING',
                 date: date,
                 time: time,
+                applicationStart: appStart,
+                applicationEnd: appEnd,
                 clientId,
                 farmId: selectedFarmId,
                 lotId: selectedLotId,
+                warehouseId: selectedOrderWarehouseId || undefined,
+                applicatorId: selectedApplicatorId,
                 treatedArea: selectedLot.hectares,
                 items,
                 createdAt: new Date().toISOString(),
@@ -147,6 +180,17 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         </div>
                     </div>
 
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 grid grid-cols-2 gap-4">
+                        <div className="w-full">
+                            <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">Inicio aplicación</label>
+                            <input type="date" className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm" value={appStart} onChange={e => setAppStart(e.target.value)} />
+                        </div>
+                        <div className="w-full">
+                            <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">Fin aplicación</label>
+                            <input type="date" className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm" value={appEnd} onChange={e => setAppEnd(e.target.value)} />
+                        </div>
+                    </div>
+
                     <div className="w-full">
                         <label className="block text-sm font-medium text-slate-700 mb-1">Campo</label>
                         <select className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4" value={selectedFarmId} onChange={e => setSelectedFarmId(e.target.value)}>
@@ -165,6 +209,29 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         >
                             <option value="">Seleccione Lote...</option>
                             {lots.map(l => <option key={l.id} value={l.id}>{l.name} ({l.hectares} ha)</option>)}
+                        </select>
+                    </div>
+
+                    <div className="w-full">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Origen (Galpón)</label>
+                        <select
+                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                            value={selectedOrderWarehouseId}
+                            onChange={e => setSelectedOrderWarehouseId(e.target.value)}
+                        >
+                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="w-full">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Aplicador (Contratista)</label>
+                        <select
+                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                            value={selectedApplicatorId}
+                            onChange={e => setSelectedApplicatorId(e.target.value)}
+                        >
+                            <option value="">Seleccione Aplicador...</option>
+                            {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
                         </select>
                     </div>
 
@@ -255,6 +322,11 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>
                             <div><span className="text-slate-500">Fecha:</span> <span className="font-medium">{date}</span></div>
                             <div><span className="text-slate-500">Hora:</span> <span className="font-medium">{time}</span></div>
+                            <div className="col-span-2 bg-emerald-50 px-3 py-1 rounded text-emerald-800 border border-emerald-100">
+                                <span className="font-bold opacity-60">Rango:</span> {appStart} • {appEnd}
+                            </div>
+                            <div><span className="text-slate-500">Galpón:</span> <span className="font-medium">{warehouses.find(w => w.id === selectedOrderWarehouseId)?.name || 'Cargando...'}</span></div>
+                            <div><span className="text-slate-500">Aplicador:</span> <span className="font-medium">{contractors.find(c => c.id === selectedApplicatorId)?.username || 'No asignado'}</span></div>
                         </div>
 
                         <table className="min-w-full text-sm">

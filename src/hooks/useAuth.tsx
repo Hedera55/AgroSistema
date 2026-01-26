@@ -11,6 +11,7 @@ interface AuthContextType {
     loading: boolean;
     role: UserRole | null;
     isAdmin: boolean;
+    isContratista: boolean;
     isMaster: boolean;
     isActive: boolean;
     assignedId: string | null;
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     role: null,
     isAdmin: false,
+    isContratista: false,
     isMaster: false,
     isActive: false,
     assignedId: null,
@@ -101,6 +103,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         loading,
         role: profile?.role || null,
         isAdmin: profile?.role === 'ADMIN' || profile?.role === 'MASTER_ADMIN',
+        isContratista: profile?.role === 'CONTRATISTA',
         isMaster: profile?.role === 'MASTER_ADMIN',
         isActive: !!user,
         assignedId: profile?.assigned_clients?.[0] || null,
