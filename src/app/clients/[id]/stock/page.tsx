@@ -149,14 +149,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     // Enrich stock data with product details (name, unit, type)
     const enrichedStock = useMemo(() => {
         const firstId = warehouses[0]?.id;
-        const filteredStock = stock.filter(item => {
+        const filteredStock = stock.filter((item: ClientStock) => {
             // Match current active warehouse
             // Also include null/undefined stock in the FIRST warehouse for transition
             const effectiveWId = item.warehouseId || firstId;
             return effectiveWId === activeWarehouseId;
         });
 
-        return filteredStock.map(item => {
+        return filteredStock.map((item: ClientStock) => {
             const product = products.find(p => p.id === item.productId);
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
             // If product is not found (e.g. deleted or from another client context if legacy), handle gracefully
@@ -222,7 +222,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         setIsSubmitting(true);
         try {
             const qtyNum = parseFloat(quantity);
-            const existingItem = stock.find(s => s.productId === selectedProductId && s.warehouseId === (selectedWarehouseId || undefined));
+            const existingItem = stock.find((s: ClientStock) => s.productId === selectedProductId && s.warehouseId === (selectedWarehouseId || undefined));
 
             const newItem = {
                 id: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId)) ? existingItem.id : generateId(),
@@ -236,7 +236,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             await updateStock(newItem);
 
             // Record Movement
-            const product = availableProducts.find(p => p.id === selectedProductId);
+            const product = availableProducts.find((p: Product) => p.id === selectedProductId);
             const now = new Date();
             const dateStr = now.toISOString().split('T')[0];
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

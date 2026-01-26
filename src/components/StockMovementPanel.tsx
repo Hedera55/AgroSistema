@@ -28,13 +28,13 @@ export function StockMovementPanel({
 
     // Filter active items
     const selectedItems = useMemo(() => {
-        return stockItems.filter(item => selectedIds.includes(item.id));
+        return stockItems.filter((item: any) => selectedIds.includes(item.id));
     }, [stockItems, selectedIds]);
 
     // Initialize quantities with max available on mount (or when items change)
     useMemo(() => {
         const initial: Record<string, number> = {};
-        selectedItems.forEach(item => {
+        selectedItems.forEach((item: any) => {
             initial[item.id] = item.quantity;
         });
         // Only set if empty (to avoid overwriting user edits on re-renders if any)
@@ -52,7 +52,7 @@ export function StockMovementPanel({
     // We'll manage state properly:
     if (Object.keys(quantities).length === 0 && selectedItems.length > 0) {
         const initial: Record<string, number> = {};
-        selectedItems.forEach(item => initial[item.id] = item.quantity);
+        selectedItems.forEach((item: any) => initial[item.id] = item.quantity);
         setQuantities(initial);
     }
 
@@ -76,7 +76,7 @@ export function StockMovementPanel({
         }
     };
 
-    const validWarehouses = warehouses.filter(w => w.id !== activeWarehouseId);
+    const validWarehouses = warehouses.filter((w: Warehouse) => w.id !== activeWarehouseId);
 
     return (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-indigo-100 animate-fadeIn mb-6 relative">
@@ -94,8 +94,8 @@ export function StockMovementPanel({
                 <button
                     onClick={() => setAction('WITHDRAW')}
                     className={`flex-1 py-3 rounded-lg border font-bold text-sm transition-all flex items-center justify-center gap-2 ${action === 'WITHDRAW'
-                            ? 'bg-orange-50 border-orange-200 text-orange-700 ring-2 ring-orange-100'
-                            : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                        ? 'bg-orange-50 border-orange-200 text-orange-700 ring-2 ring-orange-100'
+                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
                         }`}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -116,7 +116,7 @@ export function StockMovementPanel({
             </div>
 
             <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto pr-2">
-                {selectedItems.map(item => (
+                {selectedItems.map((item: any) => (
                     <div key={item.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
                         <div className="flex-1">
                             <div className="font-bold text-slate-700 text-sm">

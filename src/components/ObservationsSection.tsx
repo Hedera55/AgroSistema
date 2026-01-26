@@ -38,14 +38,14 @@ export function ObservationsSection({
         setLoading(true);
         try {
             const all = await db.getAll('observations');
-            const filtered = all.filter(o =>
+            const filtered = all.filter((o: Observation) =>
                 o.clientId === clientId &&
                 o.farmId === farmId &&
                 (lotId ? o.lotId === lotId : !o.lotId) &&
                 !o.deleted // Don't show deleted items
             );
             // Sort by date descending
-            setObservations(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setObservations(filtered.sort((a: Observation, b: Observation) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         } catch (err) {
             console.error('Error fetching observations:', err);
         } finally {
