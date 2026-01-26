@@ -7,7 +7,7 @@ import { useWarehouses } from '@/hooks/useWarehouses';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
-import { ProductType, Unit, InventoryMovement } from '@/types';
+import { ProductType, Unit, InventoryMovement, ClientStock, Product, Observation } from '@/types';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { syncService } from '@/services/sync';
