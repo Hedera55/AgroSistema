@@ -130,16 +130,7 @@ export function ObservationsSection({
         <div className="animate-fadeIn">
 
             {/* Header / Actions */}
-            {!isAdding && (
-                <div className="flex justify-between items-center mb-4 mt-4">
-                    <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-                        Historial de Observaciones
-                    </h4>
-                    <Button size="sm" onClick={() => setIsAdding(true)}>
-                        + Nueva Observación
-                    </Button>
-                </div>
-            )}
+
 
             {/* Form (Add / Edit) */}
             {isAdding && (
@@ -182,7 +173,7 @@ export function ObservationsSection({
             {loading ? (
                 <div className="text-center py-4 text-slate-400 text-sm">Cargando...</div>
             ) : observations.length === 0 && !isAdding ? (
-                <div className="text-center py-6 text-slate-400 text-sm italic bg-white rounded-lg border border-dashed border-slate-200">
+                <div className="text-center py-6 text-slate-400 text-sm italic bg-white rounded-lg border border-dashed border-slate-200 mt-2">
                     No hay observaciones registradas.
                 </div>
             ) : (
@@ -220,6 +211,14 @@ export function ObservationsSection({
                             </p>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {!isAdding && (
+                <div className="mt-2 flex justify-end">
+                    <Button size="sm" onClick={() => setIsAdding(true)}>
+                        + Nueva Observación
+                    </Button>
                 </div>
             )}
         </div>

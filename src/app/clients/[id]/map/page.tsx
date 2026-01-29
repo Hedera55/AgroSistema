@@ -12,7 +12,34 @@ interface MapLayer {
     name: string;
     type: 'farm' | 'lot';
     data: any;
+    kmlData?: string;
 }
+
+// Helper to combine multiple KML documents into one
+const combineKmlDocuments = (layers: MapLayer[]): string => {
+    const placemarks = layers
+        .filter(l => l.kmlData)
+        .map(l => {
+            // Extract content between <Document> tags if present, otherwise use the whole thing
+            const match = l.kmlData!.match(/<Document[^>]*>([\s\S]*?)<\/Document>/i);
+            if (match) {
+                return match[1];
+            }
+            // Try to extract just Placemark elements
+            const placemarkMatch = l.kmlData!.match(/<Placemark[\s\S]*?<\/Placemark>/gi);
+            return placemarkMatch ? placemarkMatch.join('\n') : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Capas Exportadas</name>
+${placemarks}
+  </Document>
+</kml>`;
+};
 
 export default function MapPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -43,8 +70,8 @@ export default function MapPage({ params }: { params: Promise<{ id: string }> })
                 });
 
                 const layers: MapLayer[] = [
-                    ...clientFarms.map((f: Farm) => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary })),
-                    ...clientLots.map((l: Lot) => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary }))
+                    ...clientFarms.map((f: Farm) => ({ id: f.id, name: `Campo ${f.name}`, type: 'farm' as const, data: f.boundary, kmlData: f.kmlData })),
+                    ...clientLots.map((l: Lot) => ({ id: l.id, name: `Lote ${l.name}`, type: 'lot' as const, data: l.boundary, kmlData: l.kmlData }))
                 ];
 
                 setAllLayers(layers);
@@ -79,6 +106,27 @@ export default function MapPage({ params }: { params: Promise<{ id: string }> })
         }
         setSelectedLayerIds(next);
     };
+
+    const handleDownloadKml = () => {
+        const selectedLayers = allLayers.filter(l => selectedLayerIds.has(l.id) && l.kmlData);
+        if (selectedLayers.length === 0) {
+            alert('No hay capas con KML disponible para descargar.');
+            return;
+        }
+
+        const combinedKml = combineKmlDocuments(selectedLayers);
+        const blob = new Blob([combinedKml], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `capas_${new Date().toISOString().split('T')[0]}.kml`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const hasDownloadableKml = allLayers.some(l => selectedLayerIds.has(l.id) && l.kmlData);
 
     if (loading) {
         return (
@@ -132,6 +180,17 @@ export default function MapPage({ params }: { params: Promise<{ id: string }> })
                     <Link href={`/clients/${id}/fields`} className="text-sm text-slate-500 hover:text-emerald-600 mb-1 inline-block">← Volver a Campos</Link>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mapa</h1>
                 </div>
+                <button
+                    onClick={handleDownloadKml}
+                    disabled={!hasDownloadableKml}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${hasDownloadableKml
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                    title={hasDownloadableKml ? 'Descargar KML de capas seleccionadas' : 'No hay KML disponible'}
+                >
+                    Descargar KML
+                </button>
             </div>
 
             <div className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative">

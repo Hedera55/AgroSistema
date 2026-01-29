@@ -41,6 +41,7 @@ export interface Farm { // Campo
     name: string;
     location?: { lat: number; lng: number }; // General centroid
     boundary?: GeoJSON.FeatureCollection | string;
+    kmlData?: string; // Original KML file content for download
     createdBy?: string;
     lastUpdatedBy?: string;
     createdAt?: string;
@@ -60,6 +61,7 @@ export interface Lot { // Lote
     observedYield?: number; // Actual yield after harvest
     status?: LotStatus;
     boundary?: GeoJSON.FeatureCollection | string; // KML content or GeoJSON
+    kmlData?: string; // Original KML file content for download
     createdBy?: string;
     lastUpdatedBy?: string;
     createdAt?: string;

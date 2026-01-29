@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useRef } from 'react';
+import { use, useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -59,6 +59,23 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const obsSectionRef = useRef<HTMLDivElement>(null);
 
+    // Auto-close panel when parent context is deselected
+    useEffect(() => {
+        if (!activePanel) return;
+
+        // If the farm associated with the panel is no longer selected, close it
+        if (activePanel.farmId && activePanel.farmId !== selectedFarmId) {
+            setActivePanel(null);
+            return;
+        }
+
+        // If the lot associated with the panel is no longer selected, close it
+        if (activePanel.lotId && activePanel.lotId !== selectedLotId) {
+            setActivePanel(null);
+            return;
+        }
+    }, [selectedFarmId, selectedLotId, activePanel]);
+
     const openPanel = (type: 'observations' | 'crop_assign' | 'history', id: string, farmId: string, lotId: string | undefined, name: string, subtitle?: string) => {
         // Toggle if already open with same type and ID
         if (activePanel?.type === type && activePanel?.id === id) {
@@ -97,9 +114,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 farmId: selectedFarmId,
                 name: lotName,
                 hectares: parseFloat(lotHectares),
-                cropSpecies: lotCropSpecies,
-                yield: parseFloat(lotYield) || 0,
-                status: lotCropSpecies ? 'NOT_SOWED' : 'EMPTY',
+                status: 'EMPTY',
                 createdBy: displayName || 'Sistema',
                 lastUpdatedBy: displayName || 'Sistema'
             });
@@ -107,8 +122,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
         setLotName('');
         setLotHectares('');
-        setLotCropSpecies('');
-        setLotYield('');
         setShowLotForm(false);
     };
 
@@ -188,8 +201,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const handleEditLot = (lot: Lot) => {
         setLotName(lot.name);
         setLotHectares(lot.hectares.toString());
-        setLotCropSpecies(lot.cropSpecies || '');
-        setLotYield(lot.yield?.toString() || '');
         setEditingLotId(lot.id);
         setShowLotForm(true);
         // Clear farm editing
@@ -217,6 +228,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 await updateLot({
                     ...lot,
                     boundary: geojson as any,
+                    kmlData: kmlText,
                     lastUpdatedBy: displayName || 'Sistema'
                 });
                 alert('KML cargado correctamente.');
@@ -242,6 +254,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 await updateFarm({
                     ...farm,
                     boundary: geojson as any,
+                    kmlData: kmlText,
                     lastUpdatedBy: displayName || 'Sistema'
                 });
                 alert('KML cargado correctamente.');
@@ -251,6 +264,58 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             }
         };
         reader.readAsText(file);
+    };
+
+    const handleRemoveFarmKml = async (farm: Farm) => {
+        if (!confirm('¿Está seguro de eliminar el KML de este campo?')) return;
+
+        try {
+            await updateFarm({
+                ...farm,
+                boundary: undefined,
+                kmlData: undefined,
+                lastUpdatedBy: displayName || 'Sistema'
+            });
+            alert('KML eliminado correctamente.');
+        } catch (error) {
+            console.error('Error removing KML:', error);
+            alert('Error al eliminar el KML.');
+        }
+    };
+
+    const handleRemoveLotKml = async (lot: Lot) => {
+        if (!confirm('¿Está seguro de eliminar el KML de este lote?')) return;
+
+        try {
+            await updateLot({
+                ...lot,
+                boundary: undefined,
+                kmlData: undefined,
+                lastUpdatedBy: displayName || 'Sistema'
+            });
+            alert('KML eliminado correctamente.');
+        } catch (error) {
+            console.error('Error removing KML:', error);
+            alert('Error al eliminar el KML.');
+        }
+    };
+
+    const handleClearCrop = async (lot: Lot) => {
+        if (!confirm('¿Está seguro de limpiar los datos del cultivo de este lote?')) return;
+
+        try {
+            await updateLot({
+                ...lot,
+                status: 'EMPTY',
+                cropSpecies: undefined,
+                yield: undefined,
+                observedYield: undefined,
+                lastUpdatedBy: displayName || 'Sistema'
+            });
+        } catch (error) {
+            console.error('Error clearing crop:', error);
+            alert('Error al limpiar el cultivo.');
+        }
     };
 
     const handleAddFarm = async (e: React.FormEvent) => {
@@ -334,7 +399,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             </div>
 
             {showFarmForm && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn relative">
+                    <button
+                        onClick={cancelEdit}
+                        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+                        title="Cancelar edición"
+                    >
+                        ✕
+                    </button>
                     <h2 className="text-lg font-semibold text-slate-800 mb-4">{editingFarmId ? 'Editar Campo' : 'Nuevo Campo'}</h2>
                     <form onSubmit={handleAddFarm} className="space-y-4">
                         <div className="flex gap-4 items-end">
@@ -349,8 +421,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         </div>
 
                         {editingFarmId && (
-                            <div className="pt-2 border-t border-slate-200">
-                                <label className="text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2 w-full">
+                            <div className="pt-2 border-t border-slate-200 flex gap-2">
+                                <label className="flex-1 text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2">
                                     {farms.find(f => f.id === editingFarmId)?.boundary ? 'Cambiar KML' : 'Cargar KML'}
                                     <input
                                         type="file"
@@ -362,6 +434,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         }}
                                     />
                                 </label>
+                                {farms.find(f => f.id === editingFarmId)?.boundary && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const farm = farms.find(f => f.id === editingFarmId);
+                                            if (farm) handleRemoveFarmKml(farm);
+                                        }}
+                                        className="px-3 py-2 text-xs font-semibold text-red-500 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+                                        title="Eliminar KML"
+                                    >
+                                        Eliminar KML
+                                    </button>
+                                )}
                             </div>
                         )}
                     </form>
@@ -468,7 +553,22 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     <form onSubmit={handleAddLot} className="space-y-4 bg-slate-50 p-4 rounded-lg animate-fadeIn relative">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-sm font-semibold text-slate-700">{editingLotId ? 'Editar Lote' : 'Nuevo Lote'}</span>
-                                            <Button type="submit" size="sm" className="!p-1 !h-8 !w-8 flex items-center justify-center rounded-full">➜</Button>
+                                            <div className="flex gap-2">
+                                                <Button type="submit" size="sm" className="!p-1 !h-8 !w-8 flex items-center justify-center rounded-full">➜</Button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowLotForm(false);
+                                                        setEditingLotId(null);
+                                                        setLotName('');
+                                                        setLotHectares('');
+                                                    }}
+                                                    className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
                                         </div>
                                         <Input
                                             label="Nombre del Lote"
@@ -486,25 +586,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             onChange={e => setLotHectares(e.target.value)}
                                             required
                                         />
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <Input
-                                                label="Especie / Cultivo"
-                                                placeholder="ej. Soja"
-                                                value={lotCropSpecies}
-                                                onChange={e => setLotCropSpecies(e.target.value)}
-                                            />
-                                            <Input
-                                                label="Rinde Esp. (kg/ha)"
-                                                type="number"
-                                                placeholder="0"
-                                                value={lotYield}
-                                                onChange={e => setLotYield(e.target.value)}
-                                            />
-                                        </div>
 
                                         {editingLotId && (
-                                            <div className="pt-2 border-t border-slate-200">
-                                                <label className="text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2 w-full">
+                                            <div className="pt-2 border-t border-slate-200 flex gap-2">
+                                                <label className="flex-1 text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2">
                                                     {lots.find(l => l.id === editingLotId)?.boundary ? 'Cambiar KML' : 'Cargar KML'}
                                                     <input
                                                         type="file"
@@ -516,6 +601,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                         }}
                                                     />
                                                 </label>
+                                                {lots.find(l => l.id === editingLotId)?.boundary && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const lot = lots.find(l => l.id === editingLotId);
+                                                            if (lot) handleRemoveLotKml(lot);
+                                                        }}
+                                                        className="px-3 py-2 text-xs font-semibold text-red-500 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+                                                        title="Eliminar KML"
+                                                    >
+                                                        Eliminar KML
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </form>
@@ -644,13 +742,26 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                 </div>
 
                                                                 {/* Line 3: Crop Info (Clean & Simple) */}
-                                                                {lot.cropSpecies && (
-                                                                    <div className="text-[11px] font-bold text-slate-500 px-0.5 flex items-center gap-1.5">
+                                                                {lot.cropSpecies && lot.status !== 'EMPTY' && (
+                                                                    <div className="text-[11px] font-bold text-slate-500 px-0.5 flex items-center gap-1.5 w-full">
                                                                         <span className="text-emerald-700 font-black uppercase tracking-widest">{lot.cropSpecies}</span>
-                                                                        {lot.yield ? <span className="text-slate-400 font-medium tracking-tight">({lot.yield} kg/ha)</span> : ''}
+                                                                        {lot.yield && lot.status !== 'HARVESTED' ? <span className="text-slate-400 font-medium tracking-tight">({lot.yield} kg/ha)</span> : ''}
                                                                         {lot.status === 'HARVESTED' && lot.observedYield ? (
-                                                                            <span className="text-blue-600 ml-auto font-black text-[10px] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-tighter">Rinde: {lot.observedYield} kg</span>
-                                                                        ) : ''}
+                                                                            <span className="text-blue-600 ml-auto font-black text-[10px] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-tighter mr-2">Rinde: {lot.observedYield} kg</span>
+                                                                        ) : <div className="ml-auto"></div>}
+
+                                                                        {lot.status === 'HARVESTED' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleClearCrop(lot);
+                                                                                }}
+                                                                                className="text-slate-400 hover:text-red-500 transition-colors px-1"
+                                                                                title="Limpiar cultivo (Resetear a Vacío)"
+                                                                            >
+                                                                                ✕
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -716,18 +827,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-6"
                     >
                         <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-800">
+                            <div className="flex items-center gap-4 flex-1 overflow-hidden">
+                                <h2 className="text-lg font-bold text-slate-800 flex-shrink-0">
                                     {activePanel.type === 'observations' ? 'Observaciones' :
                                         activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') : 'Historial del Lote'}
                                 </h2>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+                                <div className="hidden md:block w-px h-5 bg-slate-300"></div>
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
                                         {activePanel.name}
                                     </span>
                                     {activePanel.subtitle && (
-                                        <span className="text-xs text-slate-500">
-                                            &bull; {activePanel.subtitle}
+                                        <span className="text-xs text-slate-500 truncate">
+                                            {activePanel.subtitle}
                                         </span>
                                     )}
                                 </div>
