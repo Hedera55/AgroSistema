@@ -30,7 +30,7 @@ export default function ProfilePage() {
             const { error } = await supabase
                 .from('profiles')
                 .update({
-                    username: username.trim()
+                    username: username.trim() || null
                 })
                 .eq('id', user.id);
 
@@ -64,8 +64,8 @@ export default function ProfilePage() {
                             {(username || user?.email || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900">{profile?.username || 'Sin nombre de usuario'}</h2>
-                            <p className="text-slate-500 text-sm">{user?.email}</p>
+                            <h2 className="text-xl font-bold text-slate-900">{profile?.username || user?.email}</h2>
+                            <p className="text-slate-500 text-sm">{profile?.username ? user?.email : ''}</p>
                             <span className="inline-block mt-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-wider">
                                 {profile?.role}
                             </span>
@@ -80,7 +80,6 @@ export default function ProfilePage() {
                             placeholder="ej. JuanPerez"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            required
                         />
                         <p className="text-xs text-slate-400">
                             Este nombre aparecerá en los historiales de stock, órdenes y modificaciones de campos.
