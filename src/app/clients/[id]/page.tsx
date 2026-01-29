@@ -70,7 +70,7 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
             id: 'investors',
             title: 'Contaduría',
             description: 'Desglose financiero y valuación de stock por socio.',
-            icon: '🤝',
+            icon: '⚖️',
             href: `/clients/${id}/investors`,
             color: 'bg-emerald-50 text-emerald-700 hover:border-emerald-200'
         },

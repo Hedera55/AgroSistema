@@ -118,80 +118,38 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Balance Final</h3>
-                    </div>
-                    <table className="min-w-full">
-                        <tbody className="divide-y divide-slate-200 text-sm">
-                            <tr className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 text-slate-500 font-bold uppercase tracking-wider">Total Invertido (-)</td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className="text-base font-bold text-red-500">
-                                        -${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                            <tr className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 text-emerald-600 font-bold uppercase tracking-wider">Total Vendido (+)</td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className="text-base font-bold text-emerald-600">
-                                        +${stats.sold.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                            <tr className={`${stats.total >= 0 ? 'bg-emerald-50/50' : 'bg-red-50/50'}`}>
-                                <td className="px-6 py-5 font-black text-slate-800 uppercase tracking-widest">Balance Final</td>
-                                <td className="px-6 py-5 text-right">
-                                    <span className={`text-base font-black ${stats.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                                        ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl">
+                <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Balance Final</h3>
                 </div>
-
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose de inversiones</h3>
-                    </div>
-                    <table className="min-w-full">
-                        <tbody className="divide-y divide-slate-200">
-                            <tr className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 flex items-center gap-3">
-                                    <span className="text-sm font-bold text-slate-500 tracking-wider">Compras Insumos</span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className="text-base font-bold text-slate-700">
-                                        ${stats.investedMovements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                            <tr className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 flex items-center gap-3">
-                                    <span className="text-sm font-bold text-slate-500 tracking-wider">Servicios (Órdenes)</span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className="text-base font-bold text-slate-700">
-                                        ${stats.serviceCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                            <tr className="bg-slate-50/50">
-                                <td className="px-6 py-4 flex items-center gap-3">
-                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Inversión Total</span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className="text-base font-black text-slate-900">
-                                        ${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table className="min-w-full">
+                    <tbody className="divide-y divide-slate-200 text-sm">
+                        <tr className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 text-slate-500 font-bold uppercase tracking-wider">Total Invertido (-)</td>
+                            <td className="px-6 py-4 text-right">
+                                <span className="text-base font-bold text-red-500">
+                                    -${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 text-emerald-600 font-bold uppercase tracking-wider">Total Vendido (+)</td>
+                            <td className="px-6 py-4 text-right">
+                                <span className="text-base font-bold text-emerald-600">
+                                    +${stats.sold.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr className={`${stats.total >= 0 ? 'bg-emerald-50/50' : 'bg-red-50/50'}`}>
+                            <td className="px-6 py-5 font-black text-slate-800 uppercase tracking-widest">Balance Final</td>
+                            <td className="px-6 py-5 text-right">
+                                <span className={`text-base font-black ${stats.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                    ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             {/* Financial History */}
@@ -280,6 +238,47 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Investment Breakdown at the bottom */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl">
+                <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose de inversiones</h3>
+                </div>
+                <table className="min-w-full">
+                    <tbody className="divide-y divide-slate-200">
+                        <tr className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 flex items-center gap-3">
+                                <span className="text-sm font-bold text-slate-500 tracking-wider">Compras Insumos</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <span className="text-base font-bold text-slate-700">
+                                    ${stats.investedMovements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 flex items-center gap-3">
+                                <span className="text-sm font-bold text-slate-500 tracking-wider">Servicios (Órdenes)</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <span className="text-base font-bold text-slate-700">
+                                    ${stats.serviceCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr className="bg-slate-50/50">
+                            <td className="px-6 py-4 flex items-center gap-3">
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Inversión Total</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <span className="text-base font-black text-slate-900">
+                                    ${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     );
