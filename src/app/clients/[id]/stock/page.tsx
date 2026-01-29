@@ -20,6 +20,7 @@ interface EnrichedStockItem extends ClientStock {
     productType: ProductType;
     unit: Unit;
     price: number;
+    productBrand?: string;
     hasProduct: boolean;
 }
 
@@ -314,6 +315,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 productType: product?.type || 'OTHER',
                 unit: product?.unit || 'UNIT',
                 price: product?.price || 0,
+                productBrand: product?.brandName || '',
                 hasProduct: !!product
             };
         }).filter(item => item.hasProduct);
