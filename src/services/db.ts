@@ -53,7 +53,7 @@ interface AgronomicDB extends DBSchema {
 }
 
 const DB_NAME = 'agronomic-db';
-const DB_VERSION = 5; // Incrementing version to add observations store
+const DB_VERSION = 6; // Incrementing version to add pricing, investors, and crop fields
 
 export const dbPromise = typeof window !== 'undefined'
     ? openDB<AgronomicDB>(DB_NAME, DB_VERSION, {
@@ -126,11 +126,18 @@ export const dbPromise = typeof window !== 'undefined'
     }) : Promise.resolve(null as any);
 
 // Helper for data access
+const cache = new Map<string, any[]>();
+
 export const db = {
     async getAll<Name extends StoreNames<AgronomicDB>>(storeName: Name) {
+        if (cache.has(storeName)) {
+            return cache.get(storeName)!;
+        }
         const db = await dbPromise;
         if (!db) return [];
-        return db.getAll(storeName);
+        const result = await db.getAll(storeName);
+        cache.set(storeName, result);
+        return result;
     },
     async get<Name extends StoreNames<AgronomicDB>>(storeName: Name, key: string) {
         const db = await dbPromise;
@@ -138,11 +145,13 @@ export const db = {
         return db.get(storeName, key);
     },
     async put<Name extends StoreNames<AgronomicDB>>(storeName: Name, value: AgronomicDB[Name]['value']) {
+        cache.delete(storeName);
         const db = await dbPromise;
         if (!db) return;
         return db.put(storeName, value);
     },
     async delete<Name extends StoreNames<AgronomicDB>>(storeName: Name, key: string) {
+        cache.delete(storeName);
         const db = await dbPromise;
         if (!db) return;
         return db.delete(storeName, key);

@@ -66,6 +66,14 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
             href: `/clients/${id}/orders`,
             color: 'bg-blue-50 text-blue-700 hover:border-blue-200'
         },
+        {
+            id: 'investors',
+            title: 'Inversores',
+            description: 'Desglose financiero y valuación de stock por socio.',
+            icon: '🤝',
+            href: `/clients/${id}/investors`,
+            color: 'bg-emerald-50 text-emerald-700 hover:border-emerald-200'
+        },
     ];
 
     const cards = isContratista

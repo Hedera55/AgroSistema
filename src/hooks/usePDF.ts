@@ -28,14 +28,14 @@ export function usePDF() {
         doc.setFontSize(10);
         doc.setTextColor(60);
         doc.text(`Orden Nro ${order.orderNumber || '-'}`, 14, 28);
-        doc.text(`Fecha de creación: ${order.date} ${order.time || ''}`, 60, 28);
+        doc.text(`Fecha de emisión: ${order.date} ${order.time || ''}`, 60, 28);
 
         // Meta Data Box
         autoTable(doc, {
             body: [
                 [`Cliente: ${client.name} ${client.cuit ? `(CUIT: ${client.cuit})` : ''}`, `Lote: ${order.lotName || 'N/A'}`],
                 [`Campo: ${order.farmName || 'N/A'}`, `Superficie: ${order.treatedArea} Has`],
-                [`Rango de aplicación: ${order.applicationStart || '-'} al ${order.applicationEnd || '-'}`, '']
+                [`Ventana de aplicación: ${order.applicationStart || '-'} al ${order.applicationEnd || '-'}`, '']
             ],
             startY: 32,
             theme: 'grid',
@@ -54,14 +54,37 @@ export function usePDF() {
 
         const finalMetaY = (doc as any).lastAutoTable.finalY || 50;
 
+        // Planting Data Section
+        let lastY = finalMetaY;
+        if (order.plantingDensity) {
+            doc.setFontSize(10);
+            doc.setTextColor(40);
+            doc.setFont("helvetica", "bold");
+            doc.text("Datos de Siembra:", 14, lastY + 8);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Densidad: ${order.plantingDensity} ${order.plantingDensityUnit === 'PLANTS_HA' ? 'pl/ha' : 'kg/ha'}`, 14, lastY + 14);
+            doc.text(`Espaciamiento: ${order.plantingSpacing ? `${order.plantingSpacing} cm` : '-'}`, 80, lastY + 14);
+            lastY += 20;
+        } else {
+            lastY += 5;
+        }
+
         // Table
         const tableColumn = ["P.A.", "Marca", "Dosis/Ha", "Dosis Total"];
         const tableRows: (string | number)[][] = [];
 
         order.items.forEach((item) => {
+            let brandDetail = item.brandName || '-';
+            if (item.plantingDensity) {
+                brandDetail += `\nDensidad: ${item.plantingDensity} ${item.plantingDensityUnit === 'PLANTS_HA' ? 'pl/ha' : 'kg/ha'}`;
+            }
+            if (item.plantingSpacing) {
+                brandDetail += `\nEspac: ${item.plantingSpacing} cm`;
+            }
+
             const row = [
                 item.activeIngredient || item.productName,
-                item.brandName || '-',
+                brandDetail,
                 `${item.dosage} ${item.unit}/ha`,
                 `${item.totalQuantity.toFixed(2)} ${item.unit}`
             ];
@@ -71,7 +94,7 @@ export function usePDF() {
         autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
-            startY: finalMetaY + 5,
+            startY: lastY,
             theme: 'grid',
             headStyles: { fillColor: [16, 185, 129] }, // Emerald-500
             styles: { fontSize: 10 }

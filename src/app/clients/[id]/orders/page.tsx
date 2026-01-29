@@ -134,7 +134,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nro de orden</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Emisión</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ubicación</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                 <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Estado</th>
@@ -157,7 +157,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                         <div className="text-xs text-slate-400">{order.farmName}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">PULVERIZACIÓN</span>
+                                        {order.plantingDensity ? (
+                                            <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
+                                        ) : (
+                                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-center">
                                         <button

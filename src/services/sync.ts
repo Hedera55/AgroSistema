@@ -7,8 +7,12 @@ const mappers = {
     client: (c: Client) => ({
         id: c.id,
         name: c.name,
+        investors: c.investors || [],
         created_at: c.createdAt || new Date().toISOString(),
-        updated_at: c.updatedAt || new Date().toISOString()
+        updated_at: c.updatedAt || new Date().toISOString(),
+        deleted: c.deleted || false,
+        deleted_at: c.deletedAt,
+        deleted_by: c.deletedBy
     }),
     farm: (f: Farm) => ({
         id: f.id,
@@ -25,6 +29,10 @@ const mappers = {
         farm_id: l.farmId,
         name: l.name,
         hectares: l.hectares,
+        crop_species: l.cropSpecies,
+        yield: l.yield || 0,
+        observed_yield: l.observedYield || 0,
+        status: l.status || 'EMPTY',
         boundary: l.boundary,
         created_by: l.createdBy,
         last_updated_by: l.lastUpdatedBy,
@@ -38,13 +46,17 @@ const mappers = {
             name: p.name,
             type: p.type,
             unit: p.unit,
-            created_at: p.createdAt || new Date().toISOString()
+            price: p.price || 0,
+            created_at: p.createdAt || new Date().toISOString(),
+            deleted: p.deleted || false,
+            deleted_at: p.deletedAt,
+            deleted_by: p.deletedBy
         };
     },
     stock: (s: ClientStock) => ({
         id: s.id,
         client_id: s.clientId,
-        warehouse_id: s.warehouseId,
+        warehouse_id: s.warehouseId || null,
         product_id: s.productId,
         quantity: s.quantity,
         updated_at: s.updatedAt || s.lastUpdated || new Date().toISOString()
@@ -62,6 +74,9 @@ const mappers = {
         time: o.time,
         application_start: o.applicationStart,
         application_end: o.applicationEnd,
+        planting_density: o.plantingDensity,
+        planting_density_unit: o.plantingDensityUnit,
+        planting_spacing: o.plantingSpacing,
         treated_area: o.treatedArea,
         items: o.items,
         applicator_name: o.applicatorName,
@@ -83,8 +98,10 @@ const mappers = {
         unit: m.unit,
         date: m.date,
         time: m.time,
+        sale_price: m.salePrice || 0,
         reference_id: m.referenceId,
         notes: m.notes,
+        factura_image_url: m.facturaImageUrl,
         created_by: m.createdBy,
         created_at: m.createdAt || new Date(m.date).toISOString()
     }),
@@ -110,6 +127,13 @@ const mappers = {
         deleted: o.deleted || false,
         deleted_by: o.deletedBy,
         deleted_at: o.deletedAt
+    }),
+    warehouse: (w: any) => ({
+        id: w.id,
+        client_id: w.clientId,
+        name: w.name,
+        created_at: w.createdAt || new Date().toISOString(),
+        updated_at: w.updatedAt || new Date().toISOString()
     })
 };
 
@@ -118,8 +142,12 @@ const reverseMappers = {
     client: (c: any): Client => ({
         id: c.id,
         name: c.name,
+        investors: c.investors || [],
         createdAt: c.created_at,
         updatedAt: c.updated_at,
+        deleted: c.deleted,
+        deletedAt: c.deleted_at,
+        deletedBy: c.deleted_by,
         synced: true
     }),
     farm: (f: any): Farm => ({
@@ -138,6 +166,10 @@ const reverseMappers = {
         farmId: l.farm_id,
         name: l.name,
         hectares: l.hectares,
+        cropSpecies: l.crop_species,
+        yield: l.yield,
+        observedYield: l.observed_yield || 0,
+        status: l.status || 'EMPTY',
         boundary: l.boundary,
         createdBy: l.created_by,
         lastUpdatedBy: l.last_updated_by,
@@ -151,7 +183,11 @@ const reverseMappers = {
         name: p.name,
         type: p.type,
         unit: p.unit,
+        price: p.price,
         createdAt: p.created_at,
+        deleted: p.deleted,
+        deletedAt: p.deleted_at,
+        deletedBy: p.deleted_by,
         synced: true
     }),
     stock: (s: any): ClientStock => ({
@@ -177,6 +213,9 @@ const reverseMappers = {
         time: o.time,
         applicationStart: o.application_start,
         applicationEnd: o.application_end,
+        plantingDensity: o.planting_density,
+        plantingDensityUnit: o.planting_density_unit,
+        plantingSpacing: o.planting_spacing,
         treatedArea: o.treated_area,
         items: o.items,
         applicatorName: o.applicator_name,
@@ -198,8 +237,10 @@ const reverseMappers = {
         unit: m.unit || 'L',
         date: m.date,
         time: m.time,
+        salePrice: m.sale_price || 0,
         referenceId: m.reference_id || 'manual',
         notes: m.notes,
+        facturaImageUrl: m.factura_image_url,
         createdBy: m.created_by,
         createdAt: m.created_at,
         synced: true
@@ -227,6 +268,14 @@ const reverseMappers = {
         deleted: o.deleted,
         deletedBy: o.deleted_by,
         deletedAt: o.deleted_at,
+        synced: true
+    }),
+    warehouse: (w: any) => ({
+        id: w.id,
+        clientId: w.client_id,
+        name: w.name,
+        createdAt: w.created_at,
+        updatedAt: w.updated_at,
         synced: true
     })
 };
@@ -364,6 +413,7 @@ export class SyncService {
         await this.pushStore('products', 'products', mappers.product);
         await this.pushStore('farms', 'farms', mappers.farm);
         await this.pushStore('lots', 'lots', mappers.lot);
+        await this.pushStore('warehouses', 'warehouses', mappers.warehouse); // Changed from (w: any) => w
         await this.pushStore('stock', 'stock', mappers.stock);
         await this.pushStore('orders', 'orders', mappers.order);
         await this.pushStore('movements', 'inventory_movements', mappers.movement);
@@ -377,6 +427,7 @@ export class SyncService {
         await this.pullStore('products', 'products', reverseMappers.product);
         await this.pullStore('farms', 'farms', reverseMappers.farm);
         await this.pullStore('lots', 'lots', reverseMappers.lot);
+        await this.pullStore('warehouses', 'warehouses', reverseMappers.warehouse); // Changed from (w: any) => w
         await this.pullStore('stock', 'stock', reverseMappers.stock);
         await this.pullStore('orders', 'orders', reverseMappers.order);
         await this.pullStore('movements', 'inventory_movements', reverseMappers.movement);

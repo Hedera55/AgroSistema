@@ -80,7 +80,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // - For ADMIN/MASTER: URL takes precedence, then persisted selection.
     const effectiveId = (role === 'CLIENT')
         ? assignedId
-        : (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null) || assignedId);
+        : (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {
@@ -98,12 +98,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     const navigation = [
         // For Admin/Master: General Client list
-        { name: 'Clientes', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CONTRATISTA' },
+        { name: 'Empresas', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CONTRATISTA' },
         // For Master: User management
         { name: 'Usuarios', href: '/admin/users', show: isMaster },
         // For Client Context (available to all if viewing a client)
         { name: 'Galpón', href: `/clients/${effectiveId}/stock`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
+        { name: 'Inversores', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Órdenes', href: `/clients/${effectiveId}/orders`, show: showClientMenu },
     ].filter(item => item.show);
 
@@ -207,7 +208,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-w-0">
                 {/* Mobile Header */}
                 <header className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center">
                     <span className="font-bold text-emerald-600">AgroSistema</span>

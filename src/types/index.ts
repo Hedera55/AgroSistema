@@ -5,7 +5,6 @@ export interface UserProfile {
     email: string;
     username?: string;
     role: UserRole;
-    cuit?: string;
     assigned_clients?: string[]; // IDs of clients for ADMIN/CONTRATISTA role
 }
 
@@ -17,9 +16,14 @@ export interface Client {
     email?: string;
     phone?: string;
     cuit?: string; // Government ID
+    investors?: { name: string; percentage: number }[]; // Investor shares
     synced?: boolean;
+    enabledUnits?: string[];
     createdAt?: string;
     updatedAt?: string;
+    deleted?: boolean;
+    deletedBy?: string;
+    deletedAt?: string;
 }
 
 export interface Warehouse {
@@ -44,11 +48,17 @@ export interface Farm { // Campo
     synced?: boolean;
 }
 
+export type LotStatus = 'EMPTY' | 'NOT_SOWED' | 'SOWED' | 'HARVESTED';
+
 export interface Lot { // Lote
     id: string;
     farmId: string;
     name: string;
     hectares: number;
+    cropSpecies?: string; // e.g., "SOJA", "MAIZ"
+    yield?: number; // Expected yield
+    observedYield?: number; // Actual yield after harvest
+    status?: LotStatus;
     boundary?: GeoJSON.FeatureCollection | string; // KML content or GeoJSON
     createdBy?: string;
     lastUpdatedBy?: string;
@@ -67,7 +77,7 @@ export interface Environment { // Ambiente (within a lot)
 // --- Inventory ---
 
 export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'OTHER';
-export type Unit = 'L' | 'KG' | 'UNIT';
+export type Unit = string;
 
 export interface Product {
     id: string;
@@ -78,8 +88,12 @@ export interface Product {
     unit: Unit;
     activeIngredient?: string;
     concentration?: string; // e.g., "30%"
+    price?: number; // Price per unit (USD/KG or USD/L)
     synced?: boolean;
     createdAt?: string;
+    deleted?: boolean;
+    deletedBy?: string;
+    deletedAt?: string;
 }
 
 // "Galpón Virtual" (Stock)
@@ -109,6 +123,9 @@ export interface OrderItem {
     unit: Unit;
     totalQuantity: number; // dosage * area
     loadingOrder?: number; // Order of tank loading (caldo)
+    plantingDensity?: number;
+    plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
+    plantingSpacing?: number;
 }
 
 export interface InventoryMovement {
@@ -117,12 +134,13 @@ export interface InventoryMovement {
     warehouseId?: string; // Origin/Destination warehouse
     productId: string;
     productName: string;
-    type: 'IN' | 'OUT';
+    type: 'IN' | 'OUT' | 'SALE' | 'HARVEST';
     quantity: number;
     unit: Unit;
     date: string; // ISO date-time string
     time?: string;
-    referenceId: string; // ID of the Order or Purchase event
+    salePrice?: number; // Price at which it was sold (for SALE type)
+    referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image
     createdBy?: string; // User ID/Name
@@ -156,6 +174,9 @@ export interface Order {
     applicatorName?: string; // Legacy/Display name
     applicationStart?: string; // ISO Date for range
     applicationEnd?: string;   // ISO Date for range
+    plantingDensity?: number;
+    plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
+    plantingSpacing?: number;
     notes?: string;
     createdBy?: string;
 

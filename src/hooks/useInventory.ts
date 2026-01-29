@@ -16,8 +16,8 @@ export function useInventory() {
                 db.getAll('products'),
                 db.getAll('clients')
             ]);
-            setProducts(allProducts);
-            setClients(allClients);
+            setProducts(allProducts.filter((p: Product) => !p.deleted));
+            setClients(allClients.filter((c: Client) => !c.deleted));
         } catch (error) {
             console.error("Failed to fetch inventory data", error);
         } finally {
@@ -56,15 +56,31 @@ export function useInventory() {
     };
 
     const deleteClient = async (clientId: string) => {
-        await db.delete('clients', clientId);
-        await refresh();
-        syncService.pushChanges();
+        const client = await db.get('clients', clientId);
+        if (client) {
+            await db.put('clients', {
+                ...client,
+                deleted: true,
+                deletedAt: new Date().toISOString(),
+                synced: false
+            });
+            await refresh();
+            syncService.pushChanges();
+        }
     };
 
     const deleteProduct = async (productId: string) => {
-        await db.delete('products', productId);
-        await refresh();
-        syncService.pushChanges();
+        const product = await db.get('products', productId);
+        if (product) {
+            await db.put('products', {
+                ...product,
+                deleted: true,
+                deletedAt: new Date().toISOString(),
+                synced: false
+            });
+            await refresh();
+            syncService.pushChanges();
+        }
     };
 
     const updateProduct = async (product: Product) => {
@@ -74,7 +90,14 @@ export function useInventory() {
         syncService.pushChanges();
     };
 
-    return { products, clients, loading, addProduct, updateProduct, deleteProduct, addClient, deleteClient, refresh };
+    const updateClient = async (client: Client) => {
+        const updated = { ...client, synced: false, updatedAt: new Date().toISOString() };
+        await db.put('clients', updated);
+        await refresh();
+        syncService.pushChanges();
+    };
+
+    return { products, clients, loading, addProduct, updateProduct, deleteProduct, addClient, deleteClient, updateClient, refresh };
 }
 
 export function useClientStock(clientId: string) {

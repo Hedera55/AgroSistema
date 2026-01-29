@@ -135,6 +135,24 @@ export function useOrders(clientId: string) {
 
             await db.put('orders', updatedOrder);
 
+            // --- AUTOMATED LOT STATUS UPDATE ---
+            // If it's a SOWING order and it's being marked as DONE, update the Lot status
+            if (order.type === 'SOWING' && newStatus === 'DONE') {
+                const lot = await db.get('lots', order.lotId);
+                if (lot) {
+                    // We assume the first item in a SOWING order is the seed/crop
+                    const sowedCrop = order.items?.[0]?.productName || 'Desconocido';
+                    await db.put('lots', {
+                        ...lot,
+                        cropSpecies: sowedCrop,
+                        status: 'SOWED',
+                        updatedAt: new Date().toISOString(),
+                        synced: false
+                    });
+                }
+            }
+            // ------------------------------------
+
             await db.logOrderActivity({
                 orderId: order.id,
                 orderNumber: order.orderNumber,

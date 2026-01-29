@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo, useEffect } from 'react';
+import React, { use, useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useClientStock, useInventory } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -14,6 +14,15 @@ import { syncService } from '@/services/sync';
 import { supabase } from '@/lib/supabase';
 import { StockMovementPanel } from '@/components/StockMovementPanel';
 
+interface EnrichedStockItem extends ClientStock {
+    productName: string;
+    warehouseName: string;
+    productType: ProductType;
+    unit: Unit;
+    price: number;
+    hasProduct: boolean;
+}
+
 export default function ClientStockPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { role, isMaster, profile, displayName } = useAuth();
@@ -23,8 +32,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
-    const [showForm, setShowForm] = useState(false);
-    const [viewMode, setViewMode] = useState<'STOCK' | 'CATALOG' | 'WAREHOUSES'>('STOCK'); // Added WAREHOUSES
+    const [showStockForm, setShowStockForm] = useState(false);
+    const [showProductForm, setShowProductForm] = useState(false);
+    const [showCatalog, setShowCatalog] = useState(false);
+    const [showWarehouses, setShowWarehouses] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Active Warehouse context
@@ -38,7 +49,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showMovePanel, setShowMovePanel] = useState(false);
 
     // New entry state
-    const [isNewProduct, setIsNewProduct] = useState(false);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [newProductName, setNewProductName] = useState('');
@@ -46,13 +56,27 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [newProductPA, setNewProductPA] = useState('');
     const [newProductType, setNewProductType] = useState<ProductType>('HERBICIDE');
     const [newProductUnit, setNewProductUnit] = useState<Unit>('L');
+    const [availableUnits, setAvailableUnits] = useState<string[]>(['L', 'KG']);
+    const [unitsLoaded, setUnitsLoaded] = useState(false);
+    const [showUnitInput, setShowUnitInput] = useState(false);
+    const [showUnitDelete, setShowUnitDelete] = useState(false);
+    const [unitInputValue, setUnitInputValue] = useState('');
+    const [newProductPrice, setNewProductPrice] = useState(''); // Added Price
     const [quantity, setQuantity] = useState('');
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
+    const [isDuplicate, setIsDuplicate] = useState(false);
+    const [isEditingProduct, setIsEditingProduct] = useState(false);
+    const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
     // Factura upload state
+    const [sellingStockId, setSellingStockId] = useState<string | null>(null);
+    const [saleQuantity, setSaleQuantity] = useState('');
+    const [salePrice, setSalePrice] = useState('');
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
     const [facturaUploading, setFacturaUploading] = useState(false);
+
+    const unitInputRef = useRef<HTMLDivElement>(null);
 
     // Handle file selection
     const handleFacturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,12 +113,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         if (savedNote) setNote(savedNote);
         if (savedShowNote === 'true') setShowNote(true);
 
-        const savedShowForm = sessionStorage.getItem(`stock_showForm_${id}`);
-        const savedViewMode = sessionStorage.getItem(`stock_viewMode_${id}`);
+        if (savedProduct) setSelectedProductId(savedProduct);
+        if (savedQuantity) setQuantity(savedQuantity);
+        if (savedNote) setNote(savedNote);
+        if (savedShowNote === 'true') setShowNote(true);
+
+        const savedShowStockForm = sessionStorage.getItem(`stock_showStockForm_${id}`);
+        const savedShowProductForm = sessionStorage.getItem(`stock_showProductForm_${id}`);
+        const savedShowCatalog = sessionStorage.getItem(`stock_showCatalog_${id}`);
+        const savedShowWarehouses = sessionStorage.getItem(`stock_showWarehouses_${id}`);
         const savedActiveW = sessionStorage.getItem(`stock_activeW_${id}`);
 
-        if (savedShowForm === 'true') setShowForm(true);
-        if (savedViewMode) setViewMode(savedViewMode as 'STOCK' | 'CATALOG' | 'WAREHOUSES');
+        if (savedShowStockForm === 'true') setShowStockForm(true);
+        if (savedShowProductForm === 'true') setShowProductForm(true);
+        if (savedShowCatalog === 'true') setShowCatalog(true);
+        if (savedShowWarehouses === 'true') setShowWarehouses(true);
         if (savedActiveW) setActiveWarehouseId(savedActiveW === 'null' ? null : savedActiveW);
     }, [id]);
 
@@ -109,12 +142,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     }, [warehouses, activeWarehouseId]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showForm_${id}`, showForm.toString());
-    }, [showForm, id]);
+        sessionStorage.setItem(`stock_showStockForm_${id}`, showStockForm.toString());
+    }, [showStockForm, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_viewMode_${id}`, viewMode);
-    }, [viewMode, id]);
+        sessionStorage.setItem(`stock_showProductForm_${id}`, showProductForm.toString());
+    }, [showProductForm, id]);
+
+    useEffect(() => {
+        sessionStorage.setItem(`stock_showCatalog_${id}`, showCatalog.toString());
+    }, [showCatalog, id]);
+
+    useEffect(() => {
+        sessionStorage.setItem(`stock_showWarehouses_${id}`, showWarehouses.toString());
+    }, [showWarehouses, id]);
 
     useEffect(() => {
         sessionStorage.setItem(`stock_activeW_${id}`, activeWarehouseId || 'null');
@@ -141,13 +182,103 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         sessionStorage.setItem(`stock_showNote_${id}`, showNote.toString());
     }, [showNote, id]);
 
+    // Load available units from Client persistence
+    useEffect(() => {
+        const loadClientUnits = async () => {
+            try {
+                const client = await db.get('clients', id);
+                if (client?.enabledUnits) {
+                    setAvailableUnits(client.enabledUnits);
+                    // If current unit is not in the loaded list, reset it
+                    if (client.enabledUnits.length > 0) {
+                        if (!client.enabledUnits.includes(newProductUnit)) {
+                            setNewProductUnit(client.enabledUnits[0]);
+                        }
+                    } else {
+                        setNewProductUnit(''); // Select placeholder if empty
+                    }
+                }
+                setUnitsLoaded(true);
+            } catch (error) {
+                console.error('Error loading client units:', error);
+                setUnitsLoaded(true);
+            }
+        };
+        loadClientUnits();
+    }, [id]);
+
+    // Close unit input on click outside if empty
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                showUnitInput &&
+                !unitInputValue.trim() &&
+                unitInputRef.current &&
+                !unitInputRef.current.contains(event.target as Node)
+            ) {
+                setShowUnitInput(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showUnitInput, unitInputValue]);
+
+    // Save available units to Client persistence
+    const saveClientUnits = async (newUnits: string[]) => {
+        try {
+            const client = await db.get('clients', id);
+            if (client) {
+                await db.put('clients', {
+                    ...client,
+                    enabledUnits: newUnits,
+                    synced: false,
+                    updatedAt: new Date().toISOString()
+                });
+                syncService.pushChanges();
+            }
+        } catch (error) {
+            console.error('Error saving client units:', error);
+        }
+    };
+
+    const handleAddUnit = () => {
+        if (unitInputValue.trim()) {
+            const upper = unitInputValue.trim().toUpperCase();
+            if (!availableUnits.includes(upper)) {
+                const newUnits = [...availableUnits, upper];
+                setAvailableUnits(newUnits);
+                saveClientUnits(newUnits);
+                setNewProductUnit(upper);
+            }
+            setUnitInputValue('');
+            setShowUnitInput(false);
+        }
+    };
+
     // Filter products: show ONLY client-specific ones (Strict Per-Client Isolation)
     const availableProducts = useMemo(() => {
         return products.filter(p => p.clientId === id);
     }, [products, id]);
 
+    // Check for duplicates in real-time
+    useEffect(() => {
+        if (!showProductForm) {
+            setIsDuplicate(false);
+            return;
+        }
+
+        const duplicate = availableProducts.find(p =>
+            p.id !== editingProductId && // Don't count self when editing
+            p.activeIngredient?.toLowerCase().trim() === newProductPA.toLowerCase().trim() &&
+            p.brandName?.toLowerCase().trim() === newProductBrand.toLowerCase().trim()
+        );
+
+        setIsDuplicate(!!duplicate);
+    }, [newProductPA, newProductBrand, availableProducts, showProductForm, editingProductId]);
+
     // Enrich stock data with product details (name, unit, type)
-    const enrichedStock = useMemo(() => {
+    const enrichedStock = useMemo<EnrichedStockItem[]>(() => {
         const firstId = warehouses[0]?.id;
         const filteredStock = stock.filter((item: ClientStock) => {
             // Match current active warehouse
@@ -159,64 +290,64 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         return filteredStock.map((item: ClientStock) => {
             const product = products.find(p => p.id === item.productId);
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
-            // If product is not found (e.g. deleted or from another client context if legacy), handle gracefully
             return {
                 ...item,
-                productName: product?.name || 'Producto Desconocido (Eliminado o Ajeno)',
-                warehouseName: warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón (Desaparecido)'),
+                productName: product?.name || 'Producto Desconocido',
+                warehouseName: warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón'),
                 productType: product?.type || 'OTHER',
                 unit: product?.unit || 'UNIT',
+                price: product?.price || 0,
                 hasProduct: !!product
             };
-        });
+        }).filter(item => item.hasProduct);
     }, [stock, products, warehouses, activeWarehouseId]);
 
-    const handleAddStock = async (e: React.FormEvent) => {
+    const handleProductSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (isNewProduct) {
-            if (!newProductName) return;
-            setIsSubmitting(true);
-            try {
-                if (selectedProductId) {
-                    // Update existing
-                    await updateProduct({
-                        id: selectedProductId,
-                        name: newProductName,
-                        brandName: newProductBrand,
-                        activeIngredient: newProductPA,
-                        type: newProductType,
-                        unit: newProductUnit,
-                        clientId: id
-                    });
-                } else {
-                    // Create new
-                    await addProduct({
-                        name: newProductName,
-                        brandName: newProductBrand,
-                        activeIngredient: newProductPA,
-                        type: newProductType,
-                        unit: newProductUnit,
-                        clientId: id
-                    });
-                }
-
-                setIsNewProduct(false);
-                setNewProductName('');
-                setNewProductBrand('');
-                setNewProductPA('');
-                setSelectedProductId(''); // Clear selection after update
-                // If we are in catalog mode, we might want to stay there, or close form. 
-                // If form was opened from STOCK mode, close it.
-                if (viewMode === 'CATALOG') setShowForm(false);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setIsSubmitting(false);
+        if (!newProductName) return;
+        setIsSubmitting(true);
+        try {
+            if (editingProductId) {
+                // Update existing
+                await updateProduct({
+                    id: editingProductId,
+                    name: newProductName,
+                    brandName: newProductBrand,
+                    activeIngredient: newProductPA,
+                    type: newProductType,
+                    unit: newProductUnit,
+                    price: parseFloat(newProductPrice) || 0,
+                    clientId: id
+                });
+            } else {
+                // Create new
+                await addProduct({
+                    name: newProductName,
+                    brandName: newProductBrand,
+                    activeIngredient: newProductPA,
+                    type: newProductType,
+                    unit: newProductUnit,
+                    price: parseFloat(newProductPrice) || 0,
+                    clientId: id
+                });
             }
-            return;
-        }
 
+            setNewProductName('');
+            setNewProductBrand('');
+            setNewProductPA('');
+            setNewProductPrice('');
+            setEditingProductId(null);
+            setIsEditingProduct(false);
+            setShowProductForm(false);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleStockSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
         if (!selectedProductId || !quantity) return;
 
         setIsSubmitting(true);
@@ -277,6 +408,56 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setNote('');
             setShowNote(false);
             setFacturaFile(null);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleSaleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!sellingStockId || !saleQuantity || !salePrice) return;
+
+        setIsSubmitting(true);
+        try {
+            const stockItem = enrichedStock.find(s => s.id === sellingStockId);
+            if (!stockItem) return;
+
+            const qtyNum = parseFloat(saleQuantity);
+            const priceNum = parseFloat(salePrice);
+
+            // Update Stock
+            await updateStock({
+                ...stockItem,
+                quantity: stockItem.quantity - qtyNum,
+                lastUpdated: new Date().toISOString()
+            });
+
+            // Record Movement
+            await db.put('movements', {
+                id: generateId(),
+                clientId: id,
+                warehouseId: stockItem.warehouseId,
+                productId: stockItem.productId,
+                productName: stockItem.productName,
+                type: 'SALE',
+                quantity: qtyNum,
+                unit: stockItem.unit,
+                salePrice: priceNum,
+                date: new Date().toISOString().split('T')[0],
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                referenceId: `SALE-${generateId()}`,
+                notes: `${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
+                createdBy: displayName || 'Sistema',
+                createdAt: new Date().toISOString(),
+                synced: false
+            });
+
+            syncService.pushChanges();
+            setSellingStockId(null);
+            setSaleQuantity('');
+            setSalePrice('');
         } catch (error) {
             console.error(error);
         } finally {
@@ -350,13 +531,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 } else {
                     // Create new stock record at destination
                     await updateStock({
-                        // id will be generated by updateStock if missing
                         clientId: id,
                         warehouseId: destinationWarehouseId,
                         productId: item.productId,
                         quantity: qtyToMove,
                         lastUpdated: now.toISOString()
-                    } as any);
+                    });
                 }
 
                 // IN movement record
@@ -411,7 +591,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     };
 
     const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'OTHER'];
-    const units: Unit[] = ['L', 'KG', 'UNIT'];
 
     const typeLabels: Record<ProductType, string> = {
         HERBICIDE: 'Herbicida',
@@ -443,18 +622,38 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     </div>
                     {!isReadOnly && (
                         <div className="flex gap-2">
-                            {selectedStockIds.length > 0 && viewMode === 'STOCK' && (
-                                <Button
-                                    onClick={() => setShowMovePanel(true)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 animate-fadeIn"
-                                >
-                                    Mover Stock ({selectedStockIds.length})
-                                </Button>
+                            {selectedStockIds.length > 0 && (
+                                <>
+                                    <Button
+                                        onClick={() => setShowMovePanel(true)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 animate-fadeIn"
+                                    >
+                                        Mover Stock ({selectedStockIds.length})
+                                    </Button>
+
+                                    {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' && (
+                                        <Button
+                                            onClick={() => {
+                                                if (selectedStockIds.length === 1) {
+                                                    const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
+                                                    if (item) {
+                                                        setSellingStockId(item.id);
+                                                        setSaleQuantity(item.quantity.toString());
+                                                    }
+                                                } else {
+                                                    alert('Por favor selecciona un solo producto para vender.');
+                                                }
+                                            }}
+                                            className="bg-emerald-600 hover:bg-emerald-700 animate-fadeIn"
+                                        >
+                                            Vender
+                                        </Button>
+                                    )}
+                                </>
                             )}
                             <Button
                                 onClick={() => {
-                                    setIsNewProduct(false);
-                                    setShowForm(true);
+                                    setShowStockForm(true);
                                 }}
                             >
                                 Cargar Stock
@@ -467,204 +666,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
 
             {/* Input Form */}
-            {showForm && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-slate-800">
-                            {isNewProduct ? (selectedProductId ? 'Editar Producto' : 'Registrar Nuevo Producto') : 'Cargar Ingreso de Stock'}
-                        </h2>
-                        <button
-                            onClick={() => {
-                                setShowForm(false);
-                                setIsNewProduct(false);
-                                setSelectedProductId('');
-                                setNewProductName('');
-                                setNewProductBrand('');
-                                setNewProductPA('');
-                            }}
-                            className="text-emerald-500 hover:text-emerald-700 p-1 transition-colors"
-                            title="Cerrar"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleAddStock} className="space-y-4">
-                        {isNewProduct ? (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <Input
-                                        label="P.A. (Principio Activo)"
-                                        placeholder="ej. Glifosato 48%"
-                                        value={newProductPA}
-                                        onChange={e => {
-                                            setNewProductPA(e.target.value);
-                                            // Sync with name for internal identification
-                                            setNewProductName(e.target.value);
-                                        }}
-                                        className="h-[42px]"
-                                        required
-                                    />
-                                    <Input
-                                        label="Marca"
-                                        placeholder="ej. Bayer"
-                                        value={newProductBrand}
-                                        onChange={e => setNewProductBrand(e.target.value)}
-                                        className="h-[42px]"
-                                    />
-                                    {/* removed separate P.A. input as it is now primary */}
-                                    <div className="w-full">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                                        <select
-                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                            value={newProductType}
-                                            onChange={e => setNewProductType(e.target.value as ProductType)}
-                                        >
-                                            {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="w-full">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
-                                        <select
-                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                            value={newProductUnit}
-                                            onChange={e => setNewProductUnit(e.target.value as Unit)}
-                                        >
-                                            {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex justify-end items-center gap-4 mt-4">
-                                    {viewMode === 'STOCK' && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setIsNewProduct(false);
-                                                setNewProductName('');
-                                                setNewProductBrand('');
-                                                setNewProductPA('');
-                                                setSelectedProductId('');
-                                            }}
-                                            className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
-                                        >
-                                            Volver a Carga de Stock
-                                        </button>
-                                    )}
-                                    <Button type="submit" isLoading={isSubmitting}>
-                                        {selectedProductId ? 'Actualizar Producto' : 'Guardar en Catálogo'}
-                                    </Button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-2">
-                                    <div className="w-full">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Seleccionar Producto</label>
-                                        <select
-                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                            value={selectedProductId}
-                                            onChange={e => setSelectedProductId(e.target.value)}
-                                            required
-                                        >
-                                            <option value="">Seleccione un producto...</option>
-                                            {availableProducts.map(p => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({p.unit})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <Input
-                                        label="Cantidad a Ingresar"
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={quantity}
-                                        onChange={e => setQuantity(e.target.value)}
-                                        className="h-[42px]"
-                                        required
-                                    />
-
-                                    <div className="w-full">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Destino (Galpón)</label>
-                                        <select
-                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                            value={selectedWarehouseId}
-                                            onChange={e => setSelectedWarehouseId(e.target.value)}
-                                        >
-                                            {warehouses.map(w => (
-                                                <option key={w.id} value={w.id}>{w.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end pt-2">
-                                    <Button type="submit" isLoading={isSubmitting} className="w-full md:w-auto px-12">
-                                        Confirmar Ingreso
-                                    </Button>
-                                </div>
-
-                                {showNote && (
-                                    <div className="animate-fadeIn w-full mt-4">
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Nota (Opcional)</label>
-                                        <textarea
-                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
-                                            rows={2}
-                                            placeholder="ej. Factura #1234, Lote específico..."
-                                            value={note}
-                                            onChange={e => setNote(e.target.value)}
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="flex justify-end items-center gap-4 mt-4">
-                                    <div className="flex items-center gap-2 mr-auto">
-                                        <label className={`text-sm font-medium ${!showNote ? 'text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer' : 'text-slate-400'}`}>
-                                            <span onClick={() => !showNote && setShowNote(true)}>
-                                                {showNote ? '' : '+ Nota'}
-                                            </span>
-                                        </label>
-
-                                        <div className="flex items-center gap-2 border-l pl-2 border-slate-200">
-                                            <label htmlFor="factura-upload" className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
-
-                                                {facturaFile ? (
-                                                    <span className="text-emerald-700 font-bold truncate max-w-[150px]">{facturaFile.name}</span>
-                                                ) : (
-                                                    <span>+ Adjuntar Factura</span>
-                                                )}
-                                            </label>
-                                            <input
-                                                id="factura-upload"
-                                                type="file"
-                                                accept="image/*,application/pdf"
-                                                onChange={handleFacturaChange}
-                                                disabled={facturaUploading}
-                                                className="hidden"
-                                            />
-                                            {facturaFile && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFacturaFile(null)}
-                                                    className="text-red-400 hover:text-red-600 font-bold px-1"
-                                                    title="Quitar factura"
-                                                >
-                                                    ✕
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </form>
-                </div>
-            )}
 
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
@@ -686,45 +687,79 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A.</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Galpón</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
+                                    {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (pesos)</th>
+                                    )}
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Actual</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">
-                                {enrichedStock.map((item) => (
-                                    <tr
-                                        key={item.id}
-                                        onClick={(e) => toggleStockSelection(item.id, e)}
-                                        className={`transition-colors cursor-pointer ${selectedStockIds.includes(item.id) ? 'bg-emerald-50 border-emerald-200' : 'hover:bg-slate-50'}`}
-                                    >
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">
+                                {enrichedStock.map((item: EnrichedStockItem) => (
+                                    <React.Fragment key={item.id}>
+                                        <tr
+                                            key={item.id}
+                                            onClick={(e) => toggleStockSelection(item.id, e)}
+                                            className={`transition-colors cursor-pointer ${selectedStockIds.includes(item.id) ? 'bg-emerald-50 border-emerald-200' : 'hover:bg-slate-50'}`}
+                                        >
+                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">
 
-                                            {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
-                                            {products.find(p => p.id === item.productId)?.brandName || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-700 font-medium">
-                                            {item.warehouseName}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider
-                          ${item.productType === 'HERBICIDE' ? 'bg-orange-100 text-orange-800' :
-                                                    item.productType === 'FERTILIZER' ? 'bg-blue-100 text-blue-800' :
-                                                        item.productType === 'SEED' ? 'bg-green-100 text-green-800' :
-                                                            item.productType === 'FUNGICIDE' ? 'bg-purple-100 text-purple-800' :
-                                                                item.productType === 'INSECTICIDE' ? 'bg-red-100 text-red-800' :
-                                                                    'bg-gray-100 text-gray-800'}`}>
-                                                {typeLabels[item.productType as ProductType] || item.productType}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-emerald-600">
-                                            {item.quantity} <span className="text-slate-400 text-xs ml-1 font-normal group-hover:text-emerald-300 transition-colors uppercase tracking-tight">{item.unit}</span>
-                                        </td>
-                                    </tr>
+                                                {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
+                                                {products.find(p => p.id === item.productId)?.brandName || '-'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-700 font-medium">
+                                                {item.warehouseName}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                                {typeLabels[item.productType] || item.productType}
+                                            </td>
+                                            {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
+                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
+                                                    ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            )}
+                                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-emerald-600">
+                                                {item.quantity} <span className="text-slate-400 text-xs ml-1 font-normal group-hover:text-emerald-300 transition-colors uppercase tracking-tight">{item.unit}</span>
+                                            </td>
+                                        </tr>
+                                        {sellingStockId === item.id && (
+                                            <tr className="bg-emerald-50/50 animate-fadeIn">
+                                                <td colSpan={6} className="px-6 py-4">
+                                                    <form onSubmit={handleSaleSubmit} className="flex flex-wrap items-end gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
+                                                        <div className="flex-1 min-w-[120px]">
+                                                            <Input
+                                                                label="Cantidad a Vender"
+                                                                type="number"
+                                                                step="0.01"
+                                                                value={saleQuantity}
+                                                                onChange={e => setSaleQuantity(e.target.value)}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="flex-1 min-w-[120px]">
+                                                            <Input
+                                                                label={`Precio de Venta ($/${item.unit})`}
+                                                                type="number"
+                                                                step="0.01"
+                                                                value={salePrice}
+                                                                onChange={e => setSalePrice(e.target.value)}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <Button type="button" variant="secondary" size="sm" onClick={() => setSellingStockId(null)}>Cancelar</Button>
+                                                            <Button type="submit" size="sm" disabled={isSubmitting}>Confirmar Venta</Button>
+                                                        </div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
@@ -748,17 +783,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             <div className="flex justify-end pr-2 pb-4 gap-2 flex-wrap">
                 {!isReadOnly && (
                     <button
-                        onClick={() => setViewMode(viewMode === 'WAREHOUSES' ? 'STOCK' : 'WAREHOUSES')}
-                        className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${viewMode === 'WAREHOUSES' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
+                        onClick={() => setShowWarehouses(!showWarehouses)}
+                        className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showWarehouses ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                     >
-                        {viewMode === 'WAREHOUSES' ? 'Cerrar gestión de galpones' : 'Gestionar Galpones'}
+                        {showWarehouses ? 'Cerrar gestión de granos' : 'Gestionar Galpones'}
                     </button>
                 )}
                 <button
-                    onClick={() => setViewMode(viewMode === 'CATALOG' ? 'STOCK' : 'CATALOG')}
-                    className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${viewMode === 'CATALOG' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
+                    onClick={() => setShowCatalog(!showCatalog)}
+                    className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showCatalog ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                 >
-                    {viewMode === 'CATALOG' ? 'Cerrar catálogo de productos' : 'Catálogo de productos'}
+                    {showCatalog ? 'Cerrar catálogo' : 'Catálogo de productos'}
                 </button>
                 <Link
                     href={`/clients/${id}/stock/history`}
@@ -769,24 +804,26 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             </div>
 
             {/* Warehouse Management View */}
-            {viewMode === 'WAREHOUSES' && !isReadOnly && (
+            {showWarehouses && !isReadOnly && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-6">
                     <h3 className="text-lg font-semibold text-slate-800 mb-4">Galpones Disponibles</h3>
-                    <div className="flex gap-2 mb-4">
-                        <Input
-                            placeholder="Nombre del nuevo galpón..."
-                            id="new-warehouse-name"
-                            className="flex-1"
-                            onKeyDown={async (e) => {
-                                if (e.key === 'Enter') {
-                                    const input = e.currentTarget as HTMLInputElement;
-                                    if (input.value) {
-                                        await addWarehouse(input.value);
-                                        input.value = '';
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="flex-1">
+                            <Input
+                                placeholder="Nombre del nuevo galpón..."
+                                id="new-warehouse-name"
+                                className="h-[38px] text-sm"
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                        const input = e.currentTarget as HTMLInputElement;
+                                        if (input.value) {
+                                            await addWarehouse(input.value);
+                                            input.value = '';
+                                        }
                                     }
-                                }
-                            }}
-                        />
+                                }}
+                            />
+                        </div>
                         <Button
                             onClick={async () => {
                                 const input = document.getElementById('new-warehouse-name') as HTMLInputElement;
@@ -795,8 +832,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     input.value = '';
                                 }
                             }}
+                            size="sm"
+                            className="h-[38px] px-6"
                         >
-                            + Agregar
+                            Agregar
                         </Button>
                     </div>
                     <div className="space-y-3">
@@ -804,8 +843,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         {warehouses.map(w => (
                             <div
                                 key={w.id}
-                                onClick={() => setSelectedInManagerId(w.id)}
-                                className={`p-4 rounded-xl border transition-all cursor-pointer ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
+                                onClick={() => {
+                                    if (selectedInManagerId === w.id) {
+                                        setActiveWarehouseId(w.id);
+                                    } else {
+                                        setSelectedInManagerId(w.id);
+                                    }
+                                }}
+                                className={`p-4 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3 flex-1">
@@ -853,29 +898,37 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         )}
                                         {selectedInManagerId === w.id && activeWarehouseId !== w.id && (
                                             <div className="flex gap-2 animate-fadeIn">
+                                                {editingWarehouseId !== w.id && (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setActiveWarehouseId(w.id);
+                                                            }}
+                                                            className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
+                                                        >
+                                                            Abrir
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setEditingWarehouseId(w.id);
+                                                                setEditName(w.name);
+                                                            }}
+                                                            className="text-xs font-bold text-slate-500 hover:text-emerald-600 px-2 transition-colors"
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                    </>
+                                                )}
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        setActiveWarehouseId(w.id);
-                                                    }}
-                                                    className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
-                                                >
-                                                    Abrir
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setEditingWarehouseId(w.id);
-                                                        setEditName(w.name);
-                                                    }}
-                                                    className="text-xs font-bold text-slate-500 hover:text-emerald-600 px-2 transition-colors"
-                                                >
-                                                    Editar
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (confirm('¿Eliminar galpón?')) deleteWarehouse(w.id);
+                                                        if (editingWarehouseId === w.id) {
+                                                            setEditingWarehouseId(null);
+                                                        } else {
+                                                            if (confirm('¿Eliminar galpón?')) deleteWarehouse(w.id);
+                                                        }
                                                     }}
                                                     className="text-slate-400 hover:text-red-500 p-2"
                                                 >
@@ -891,20 +944,23 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 </div>
             )}
 
-            {viewMode === 'CATALOG' && (
+            {showCatalog && (
                 <div className="bg-white rounded-xl shadow-sm border border-emerald-200 overflow-hidden mb-8 animate-fadeIn">
                     <div className="bg-emerald-50 px-6 py-3 border-b border-emerald-100 flex justify-between items-center">
                         <h3 className="font-bold text-emerald-900 text-sm uppercase tracking-wider">Catálogo de Productos</h3>
                         {!isReadOnly && (
                             <button
                                 onClick={() => {
-                                    setIsNewProduct(true);
+                                    setIsEditingProduct(false);
+                                    setEditingProductId(null);
                                     setNewProductName('');
                                     setNewProductBrand('');
                                     setNewProductPA('');
-                                    setSelectedProductId('');
-                                    setShowForm(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    setNewProductPrice('');
+                                    setShowProductForm(true);
+                                    setTimeout(() => {
+                                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                    }, 100);
                                 }}
                                 className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
                             >
@@ -924,10 +980,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             <table className="min-w-full divide-y divide-slate-200">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A.</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Unidad</th>
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio (pesos/unidad)</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
@@ -938,19 +995,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.brandName || '-'}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{typeLabels[p.type] || p.type}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.unit}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">${(p.price || 0).toFixed(2)}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                 {!isReadOnly && (
                                                     <div className="flex justify-end gap-2">
                                                         <button
                                                             onClick={() => {
+                                                                setIsEditingProduct(true);
+                                                                setEditingProductId(p.id);
                                                                 setNewProductName(p.name);
                                                                 setNewProductBrand(p.brandName || '');
                                                                 setNewProductPA(p.activeIngredient || '');
                                                                 setNewProductType(p.type);
                                                                 setNewProductUnit(p.unit);
-                                                                setSelectedProductId(p.id);
-                                                                setIsNewProduct(true);
-                                                                setShowForm(true);
+                                                                setNewProductPrice(p.price?.toString() || '');
+                                                                setShowProductForm(true);
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                                             }}
                                                             className="text-slate-400 hover:text-emerald-600 px-2 py-1 transition-colors text-[10px] font-bold uppercase tracking-widest"
@@ -976,6 +1035,322 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             </table>
                         </div>
                     )}
+                </div>
+            )}
+            {/* Product Registration/Edition Form */}
+            {showProductForm && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-8">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-emerald-800">
+                            {editingProductId ? 'Editar Producto' : 'Registrar Nuevo Producto'}
+                        </h2>
+                        <button
+                            onClick={() => {
+                                setShowProductForm(false);
+                                setIsEditingProduct(false);
+                                setEditingProductId(null);
+                            }}
+                            className="text-emerald-500 hover:text-emerald-700 p-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleProductSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Input
+                                label={newProductType === 'SEED' ? 'Cultivo' : 'P.A. (Principio Activo)'}
+                                placeholder={newProductType === 'SEED' ? 'ej. Soja, Maíz...' : 'ej. Glifosato 48%'}
+                                value={newProductPA}
+                                onChange={e => {
+                                    setNewProductPA(e.target.value);
+                                    setNewProductName(e.target.value);
+                                }}
+                                className="h-[42px]"
+                                required
+                            />
+                            <Input
+                                label="Marca"
+                                placeholder="ej. Bayer"
+                                value={newProductBrand}
+                                onChange={e => setNewProductBrand(e.target.value)}
+                                className="h-[42px]"
+                            />
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    value={newProductType}
+                                    onChange={e => setNewProductType(e.target.value as ProductType)}
+                                >
+                                    {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+                                </select>
+                            </div>
+                            <div className="w-full relative">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    value={newProductUnit}
+                                    onChange={e => {
+                                        if (e.target.value === 'ADD_NEW') {
+                                            setShowUnitInput(true);
+                                            // Reset to whatever it was (or placeholder) so it doesn't stay on ADD_NEW
+                                            // This allows clicking it again if they close the input without adding
+                                        } else if (e.target.value === 'DELETE_UNIT') {
+                                            setShowUnitDelete(true);
+                                        } else {
+                                            setNewProductUnit(e.target.value);
+                                        }
+                                    }}
+                                >
+                                    {(!newProductUnit || !availableUnits.includes(newProductUnit)) && (
+                                        <option value="">Seleccionar...</option>
+                                    )}
+                                    {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                                    <option value="ADD_NEW">+ unidad</option>
+                                    {availableUnits.length > 0 && (
+                                        <option value="DELETE_UNIT">- unidad</option>
+                                    )}
+                                </select>
+
+                                {showUnitInput && (
+                                    <div
+                                        ref={unitInputRef}
+                                        className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2"
+                                    >
+                                        <input
+                                            type="text"
+                                            className="flex-1 rounded border-slate-300 text-xs focus:ring-emerald-500 focus:border-emerald-500"
+                                            placeholder="NUEVA UNIDAD..."
+                                            value={unitInputValue}
+                                            onChange={e => setUnitInputValue(e.target.value.toUpperCase())}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddUnit();
+                                                }
+                                            }}
+                                            autoFocus
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleAddUnit}
+                                            className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
+                                        >
+                                            +
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowUnitInput(false);
+                                                setUnitInputValue('');
+                                            }}
+                                            className="text-slate-400 p-1 hover:text-slate-600"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                )}
+
+                                {showUnitDelete && (
+                                    <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowUnitDelete(false)}
+                                            className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
+                                        >
+                                            ✕
+                                        </button>
+                                        <p className="text-xs text-slate-500 mb-2 font-medium">Eliminar unidad:</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {availableUnits.map(u => (
+                                                <button
+                                                    key={u}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newUnits = availableUnits.filter(unit => unit !== u);
+                                                        setAvailableUnits(newUnits);
+                                                        saveClientUnits(newUnits);
+                                                        if (newProductUnit === u) {
+                                                            setNewProductUnit(newUnits[0] || '');
+                                                        }
+                                                        // Keep box open as requested
+                                                    }}
+                                                    className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
+                                                >
+                                                    {u} ✕
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <Input
+                                label="Precio (pesos/unidad)"
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={newProductPrice}
+                                onChange={e => setNewProductPrice(e.target.value)}
+                                className="h-[42px]"
+                            />
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
+                            {isDuplicate && (
+                                <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg animate-fadeIn flex-1 sm:flex-initial">
+                                    <p className="text-xs font-bold text-red-600 uppercase tracking-tight">
+                                        ⚠️ Este producto ya existe en el catálogo
+                                    </p>
+                                </div>
+                            )}
+                            <div className="flex gap-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowProductForm(false);
+                                        setIsEditingProduct(false);
+                                        setEditingProductId(null);
+                                    }}
+                                >
+                                    Cerrar
+                                </Button>
+                                <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
+                                    {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* Stock Entry Form */}
+            {showStockForm && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-slate-800">Cargar Ingreso de Stock</h2>
+                        <button
+                            onClick={() => setShowStockForm(false)}
+                            className="text-slate-400 hover:text-slate-600 p-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleStockSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-2">
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Seleccionar Producto</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    value={selectedProductId}
+                                    onChange={e => setSelectedProductId(e.target.value)}
+                                    required
+                                >
+                                    <option value="">Seleccione un producto...</option>
+                                    {availableProducts
+                                        .filter(p => {
+                                            const targetW = warehouses.find(w => w.id === selectedWarehouseId);
+                                            if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
+                                            return true;
+                                        })
+                                        .map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({p.unit})
+                                            </option>
+                                        ))}
+                                </select>
+                            </div>
+
+                            <Input
+                                label="Cantidad a Ingresar"
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={quantity}
+                                onChange={e => setQuantity(e.target.value)}
+                                className="h-[42px]"
+                                required
+                            />
+
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Destino (Galpón)</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    value={selectedWarehouseId}
+                                    onChange={e => setSelectedWarehouseId(e.target.value)}
+                                >
+                                    {warehouses.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {showNote && (
+                            <div className="animate-fadeIn w-full mt-2">
+                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota (Opcional)</label>
+                                <textarea
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
+                                    rows={2}
+                                    placeholder="ej. Factura #1234, Lote específico..."
+                                    value={note}
+                                    onChange={e => setNote(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 border-t pt-4">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNote(!showNote)}
+                                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                                >
+                                    {showNote ? 'Quitar Nota' : '+ Agregar Nota'}
+                                </button>
+
+                                <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+                                    <label htmlFor="factura-upload-stock" className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
+                                        {facturaFile ? (
+                                            <span className="text-emerald-700 font-bold truncate max-w-[120px]">{facturaFile.name}</span>
+                                        ) : (
+                                            <span>+ Adjuntar Factura</span>
+                                        )}
+                                    </label>
+                                    <input
+                                        id="factura-upload-stock"
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        onChange={handleFacturaChange}
+                                        disabled={facturaUploading}
+                                        className="hidden"
+                                    />
+                                    {facturaFile && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setFacturaFile(null)}
+                                            className="text-red-400 hover:text-red-600 font-bold px-1"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3">
+                                <Button type="submit" isLoading={isSubmitting}>
+                                    Confirmar Ingreso
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             )}
         </div>

@@ -16,7 +16,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         const allMovements = await db.getAll('movements');
         const clientMovements = allMovements
             .filter((m: InventoryMovement) => m.clientId === clientId)
-            .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.date + 'T' + (b.time || '00:00')).getTime() - new Date(a.date + 'T' + (a.time || '00:00')).getTime());
+            .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         setMovements(clientMovements);
         setLoading(false);
     }
