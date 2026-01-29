@@ -53,6 +53,8 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - **Clarification asking**: If you have questions on my instructions, my intentions, you don't need to circle around a question a lot, it's better sometimes to just ask me clarifying questions, ask as many as you like.
 
+- **English**: Please speak in english, I believe agents code better in that language
+
 + . + . + . + . + . + . +
 
 

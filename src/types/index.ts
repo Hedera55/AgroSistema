@@ -139,6 +139,7 @@ export interface InventoryMovement {
     warehouseId?: string; // Origin/Destination warehouse
     productId: string;
     productName: string;
+    productBrand?: string;
     type: 'IN' | 'OUT' | 'SALE' | 'HARVEST';
     quantity: number;
     unit: Unit;

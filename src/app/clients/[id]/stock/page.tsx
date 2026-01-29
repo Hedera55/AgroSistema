@@ -65,6 +65,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [quantity, setQuantity] = useState('');
     const [transactionPrice, setTransactionPrice] = useState(''); // PRICE PAID
     const [note, setNote] = useState('');
+    const [noteConfirmed, setNoteConfirmed] = useState(false);
+    const [tempBrand, setTempBrand] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [isDuplicate, setIsDuplicate] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
@@ -168,9 +170,19 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     }, [activeWarehouseId, id]);
 
     useEffect(() => {
-        if (selectedProductId) sessionStorage.setItem(`stock_productId_${id}`, selectedProductId);
-        else sessionStorage.removeItem(`stock_productId_${id}`);
-    }, [selectedProductId, id]);
+        if (selectedProductId) {
+            sessionStorage.setItem(`stock_productId_${id}`, selectedProductId);
+            // Default tempBrand to product's brandName
+            const product = products.find(p => p.id === selectedProductId);
+            if (product && !tempBrand) {
+                setTempBrand(product.brandName || '');
+            }
+        }
+        else {
+            sessionStorage.removeItem(`stock_productId_${id}`);
+            setTempBrand('');
+        }
+    }, [selectedProductId, id, products]);
 
     useEffect(() => {
         if (quantity) sessionStorage.setItem(`stock_quantity_${id}`, quantity);
@@ -405,6 +417,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 clientId: id,
                 productId: selectedProductId,
                 productName: product?.name || 'Unknown',
+                productBrand: tempBrand || product?.brandName || '-',
                 type: 'IN',
                 quantity: qtyNum,
                 unit: product?.unit || 'L',
@@ -425,6 +438,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setSelectedWarehouseId('');
             setQuantity('');
             setNote('');
+            setNoteConfirmed(false);
+            setTempBrand('');
             setShowNote(false);
             setFacturaFile(null);
         } catch (error) {
@@ -480,6 +495,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 warehouseId: stockItem.warehouseId,
                 productId: stockItem.productId,
                 productName: stockItem.productName,
+                productBrand: stockItem.productBrand || '-',
                 type: 'SALE',
                 quantity: qtyNum,
                 unit: stockItem.unit,
@@ -532,6 +548,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 warehouseId: item.warehouseId,
                 productId: item.productId,
                 productName: item.productName,
+                productBrand: item.productBrand || '-',
                 type: 'OUT',
                 quantity: qtyToMove,
                 unit: item.unit,
@@ -589,6 +606,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     warehouseId: destinationWarehouseId,
                     productId: item.productId,
                     productName: item.productName,
+                    productBrand: item.productBrand || '-',
                     type: 'IN',
                     quantity: qtyToMove,
                     unit: item.unit,
@@ -1389,7 +1407,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         })
                                         .map(p => (
                                             <option key={p.id} value={p.id}>
-                                                {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({p.unit})
+                                                {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({typeLabels[p.type]}) ({p.unit})
                                             </option>
                                         ))}
                                 </select>
@@ -1408,7 +1426,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 />
                                 <div>
                                     <Input
-                                        label="Precio Unitario (USD)"
+                                        label={`Precio ($/${availableProducts.find(p => p.id === selectedProductId)?.unit || 'u.'})`}
                                         type="number"
                                         step="0.01"
                                         placeholder={availableProducts.find(p => p.id === selectedProductId)?.price ? String(availableProducts.find(p => p.id === selectedProductId)?.price) : "0.00"}
@@ -1426,6 +1444,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             </div>
 
                             <div className="w-full">
+                                <Input
+                                    label="Marca de referencia"
+                                    placeholder="ej. Bayer"
+                                    value={tempBrand}
+                                    onChange={e => setTempBrand(e.target.value)}
+                                    className="h-[42px]"
+                                />
+                            </div>
+
+                            <div className="w-full">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Destino (Galpón)</label>
                                 <select
                                     className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
@@ -1440,15 +1468,45 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
 
                         {showNote && (
-                            <div className="animate-fadeIn w-full mt-2">
+                            <div className="animate-fadeIn w-full mt-2 relative">
                                 <label className="block text-xs font-medium text-slate-500 mb-1">Nota (Opcional)</label>
-                                <textarea
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
-                                    rows={2}
-                                    placeholder="ej. Factura #1234, Lote específico..."
-                                    value={note}
-                                    onChange={e => setNote(e.target.value)}
-                                />
+                                <div className="flex gap-2">
+                                    <textarea
+                                        className={`block w-full rounded-lg shadow-sm focus:ring-emerald-500 text-sm py-2 px-3 transition-colors ${noteConfirmed ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 focus:border-emerald-500'}`}
+                                        rows={2}
+                                        placeholder="ej. Factura #1234, Lote específico..."
+                                        value={note}
+                                        onChange={e => {
+                                            setNote(e.target.value);
+                                            setNoteConfirmed(false);
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (note.trim()) {
+                                                setNoteConfirmed(true);
+                                                setTimeout(() => setNoteConfirmed(false), 2000);
+                                            }
+                                        }}
+                                        className={`flex-none w-10 h-10 self-end rounded-lg flex items-center justify-center transition-all ${note.trim() ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md transform active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                                        title="Confirmar nota"
+                                    >
+                                        {noteConfirmed ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                <polyline points="12 5 19 12 12 19"></polyline>
+                                            </svg>
+                                        )}
+                                    </button>
+                                </div>
+                                {noteConfirmed && (
+                                    <span className="absolute -bottom-5 right-12 text-[10px] font-bold text-emerald-600 uppercase tracking-widest animate-fadeIn">Guardada</span>
+                                )}
                             </div>
                         )}
 
