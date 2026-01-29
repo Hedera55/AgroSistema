@@ -1437,17 +1437,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         className="h-[42px]"
                                         prefix="$"
                                     />
-                                    {selectedProductId && availableProducts.find(p => p.id === selectedProductId)?.price && (
-                                        <div className="text-[10px] text-slate-400 mt-1">
-                                            Ref: ${availableProducts.find(p => p.id === selectedProductId)?.price}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
                             <div className="w-full">
                                 <Input
-                                    label="Marca de referencia"
+                                    label="Marca"
                                     placeholder="ej. Bayer"
                                     value={tempBrand}
                                     onChange={e => setTempBrand(e.target.value)}
@@ -1488,7 +1483,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         onClick={() => {
                                             if (note.trim()) {
                                                 setNoteConfirmed(true);
-                                                setTimeout(() => setNoteConfirmed(false), 2000);
+                                                // Small delay to show the checkmark before closing
+                                                setTimeout(() => {
+                                                    setNoteConfirmed(false);
+                                                    setShowNote(false);
+                                                }, 800);
                                             }
                                         }}
                                         className={`flex-none w-10 h-10 self-end rounded-lg flex items-center justify-center transition-all ${note.trim() ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md transform active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
@@ -1517,9 +1516,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 <button
                                     type="button"
                                     onClick={() => setShowNote(!showNote)}
-                                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-2"
                                 >
-                                    {showNote ? 'Quitar Nota' : '+ Agregar Nota'}
+                                    {showNote ? 'Quitar Nota' : note ? 'Editar Nota' : '+ Agregar Nota'}
+                                    {(!showNote && note) && (
+                                        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    )}
                                 </button>
 
                                 <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
