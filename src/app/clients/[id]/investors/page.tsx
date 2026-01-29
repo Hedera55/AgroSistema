@@ -118,7 +118,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Balance Final</h3>
                 </div>
@@ -241,7 +241,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {/* Investment Breakdown at the bottom */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose de inversiones</h3>
                 </div>
