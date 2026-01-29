@@ -1,3 +1,4 @@
+This txt is not to be read, it's just some idea I was thinking about a while back
 Ok, we need to change some things. 
 
 The client needs to be able to do some more things...

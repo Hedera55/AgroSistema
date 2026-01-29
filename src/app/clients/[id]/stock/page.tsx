@@ -676,6 +676,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' && (
                                         <Button
                                             onClick={() => {
+                                                if (sellingStockId) {
+                                                    setSellingStockId(null);
+                                                    return;
+                                                }
+
                                                 if (selectedStockIds.length === 1) {
                                                     const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
                                                     if (item) {
@@ -686,19 +691,22 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                     alert('Por favor selecciona un solo producto para vender.');
                                                 }
                                             }}
-                                            className="bg-emerald-600 hover:bg-emerald-700 animate-fadeIn"
+                                            variant={sellingStockId ? "secondary" : "primary"}
+                                            className={`${sellingStockId ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"} animate-fadeIn`}
                                         >
-                                            Vender
+                                            {sellingStockId ? 'Cancelar' : 'Vender'}
                                         </Button>
                                     )}
                                 </>
                             )}
                             <Button
                                 onClick={() => {
-                                    setShowStockForm(true);
+                                    setShowStockForm(!showStockForm);
                                 }}
+                                variant={showStockForm ? "secondary" : "primary"}
+                                className={showStockForm ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : ""}
                             >
-                                Cargar Stock
+                                {showStockForm ? 'Cancelar' : 'Cargar Stock'}
                             </Button>
                         </div>
                     )}
@@ -795,50 +803,62 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                                 />
                                                             </div>
                                                             <div className="flex gap-2 mb-1">
-                                                                <div className="relative group">
-                                                                    <input
-                                                                        type="file"
-                                                                        accept="image/*,application/pdf"
-                                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                                        onChange={(e) => {
-                                                                            if (e.target.files && e.target.files[0]) {
-                                                                                setSaleFacturaFile(e.target.files[0]);
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                    <div className={`p-2 px-3 rounded-lg border flex items-center gap-2 transition-all cursor-pointer ${saleFacturaFile ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-300'}`}>
-                                                                        <span className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-black border ${saleFacturaFile ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-red-500 border-red-200'}`}>
-                                                                            F
-                                                                        </span>
-                                                                        <span className="text-xs font-bold uppercase tracking-tight">+ Adjuntar Factura</span>
-                                                                    </div>
-                                                                </div>
-
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setShowSaleNote(!showSaleNote)}
-                                                                    className={`p-2 px-3 rounded-lg border flex items-center gap-2 transition-all ${showSaleNote ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-300'}`}
-                                                                >
-                                                                    <span className="text-xs font-bold uppercase tracking-tight">+ Agregar nota</span>
-                                                                </button>
-                                                            </div>
-                                                            <div className="flex gap-2 mb-1">
-                                                                <Button type="button" variant="secondary" size="sm" onClick={() => setSellingStockId(null)}>Cancelar</Button>
                                                                 <Button type="submit" size="sm" disabled={isSubmitting || facturaUploading}>Confirmar Venta</Button>
                                                             </div>
                                                         </div>
 
                                                         {showSaleNote && (
-                                                            <div className="animate-fadeIn">
-                                                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider pl-1">Nota de Venta</label>
+                                                            <div className="animate-fadeIn w-full mt-2">
+                                                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota de Venta</label>
                                                                 <textarea
-                                                                    className="w-full p-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all text-sm min-h-[80px]"
+                                                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
+                                                                    rows={2}
                                                                     placeholder="Escribe una nota para este movimiento..."
                                                                     value={saleNote}
                                                                     onChange={(e) => setSaleNote(e.target.value)}
                                                                 />
                                                             </div>
                                                         )}
+
+                                                        <div className="flex flex-col sm:flex-row items-center justify-start gap-4 mt-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowSaleNote(!showSaleNote)}
+                                                                className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                                                            >
+                                                                {showSaleNote ? 'Quitar Nota' : '+ Agregar Nota'}
+                                                            </button>
+
+                                                            <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+                                                                <label htmlFor={`factura-upload-sale-${item.id}`} className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
+                                                                    {saleFacturaFile ? (
+                                                                        <span className="text-emerald-700 font-bold truncate max-w-[120px]">{saleFacturaFile.name}</span>
+                                                                    ) : (
+                                                                        <span>+ Adjuntar Factura</span>
+                                                                    )}
+                                                                </label>
+                                                                <input
+                                                                    id={`factura-upload-sale-${item.id}`}
+                                                                    type="file"
+                                                                    accept="image/*,application/pdf"
+                                                                    onChange={(e) => {
+                                                                        if (e.target.files && e.target.files[0]) {
+                                                                            setSaleFacturaFile(e.target.files[0]);
+                                                                        }
+                                                                    }}
+                                                                    className="hidden"
+                                                                />
+                                                                {saleFacturaFile && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setSaleFacturaFile(null)}
+                                                                        className="text-red-400 hover:text-red-600 font-bold px-1"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </form>
                                                 </td>
                                             </tr>
@@ -930,11 +950,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 onClick={() => {
                                     if (selectedInManagerId === w.id) {
                                         setActiveWarehouseId(w.id);
+                                        setSelectedStockIds([]);
+                                        setSellingStockId(null);
+                                        setShowMovePanel(false);
                                     } else {
                                         setSelectedInManagerId(w.id);
                                     }
                                 }}
-                                className={`p-4 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
+                                className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3 flex-1">
@@ -988,6 +1011,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setActiveWarehouseId(w.id);
+                                                                setSelectedStockIds([]);
+                                                                setSellingStockId(null);
+                                                                setShowMovePanel(false);
                                                             }}
                                                             className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
                                                         >
@@ -1390,7 +1416,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             </div>
                         )}
 
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 border-t pt-4">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
                             <div className="flex items-center gap-4">
                                 <button
                                     type="button"
