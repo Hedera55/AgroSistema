@@ -1,0 +1,133 @@
+3ms.
+(base) PS C:\Windows\System32\WindowsPowerShell\v1.0> grep -n "const \[quantity, setQuantity\]" "c:\Docs\Uni\Pasantía\App antigravity\agronomic-app\src\app\clients\[id]\stock\page.tsx"
+grep : El término 'grep' no se reconoce como nombre de un cmdlet, función, archivo de script o programa ejecutable.
+Compruebe si escribió correctamente el nombre o, si incluyó una ruta de acceso, compruebe que dicha ruta es correcta e
+inténtelo de nuevo.
+En línea: 1 Carácter: 1
++ grep -n "const \[quantity, setQuantity\]" "c:\Docs\Uni\Pasantía\App a ...
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (grep:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+(base) PS C:\Windows\System32\WindowsPowerShell\v1.0> findstr /n "const handleStockSubmit" "c:\Docs\Uni\Pasantía\App antigravity\agronomic-app\src\app\clients\[id]\stock\page.tsx"
+27:    const { id } = use(params);
+28:    const { role, isMaster, profile, displayName } = useAuth();
+29:    const { stock, updateStock, loading: stockLoading } = useClientStock(id);
+30:    const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse, loading: warehousesLoading } = useWarehouses(id);
+31:    const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
+33:    const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
+35:    const [showStockForm, setShowStockForm] = useState(false);
+36:    const [showProductForm, setShowProductForm] = useState(false);
+37:    const [showCatalog, setShowCatalog] = useState(false);
+38:    const [showWarehouses, setShowWarehouses] = useState(false);
+39:    const [isSubmitting, setIsSubmitting] = useState(false);
+42:    const [activeWarehouseId, setActiveWarehouseId] = useState<string | null>(null);
+43:    const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
+44:    const [selectedInManagerId, setSelectedInManagerId] = useState<string | null>(null); // For click interaction
+45:    const [editName, setEditName] = useState('');
+48:    const [selectedStockIds, setSelectedStockIds] = useState<string[]>([]);
+49:    const [showMovePanel, setShowMovePanel] = useState(false);
+52:    const [selectedProductId, setSelectedProductId] = useState('');
+53:    const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+54:    const [newProductName, setNewProductName] = useState('');
+55:    const [newProductBrand, setNewProductBrand] = useState('');
+56:    const [newProductPA, setNewProductPA] = useState('');
+57:    const [newProductType, setNewProductType] = useState<ProductType>('HERBICIDE');
+58:    const [newProductUnit, setNewProductUnit] = useState<Unit>('L');
+59:    const [availableUnits, setAvailableUnits] = useState<string[]>(['L', 'KG']);
+60:    const [unitsLoaded, setUnitsLoaded] = useState(false);
+61:    const [showUnitInput, setShowUnitInput] = useState(false);
+62:    const [showUnitDelete, setShowUnitDelete] = useState(false);
+63:    const [unitInputValue, setUnitInputValue] = useState('');
+64:    const [newProductPrice, setNewProductPrice] = useState(''); // Added Price
+65:    const [quantity, setQuantity] = useState('');
+66:    const [note, setNote] = useState('');
+67:    const [showNote, setShowNote] = useState(false);
+68:    const [isDuplicate, setIsDuplicate] = useState(false);
+69:    const [isEditingProduct, setIsEditingProduct] = useState(false);
+70:    const [editingProductId, setEditingProductId] = useState<string | null>(null);
+73:    const [sellingStockId, setSellingStockId] = useState<string | null>(null);
+74:    const [saleQuantity, setSaleQuantity] = useState('');
+75:    const [salePrice, setSalePrice] = useState('');
+76:    const [saleNote, setSaleNote] = useState('');
+77:    const [showSaleNote, setShowSaleNote] = useState(false);
+78:    const [saleFacturaFile, setSaleFacturaFile] = useState<File | null>(null);
+79:    const [facturaFile, setFacturaFile] = useState<File | null>(null);
+80:    const [facturaUploading, setFacturaUploading] = useState(false);
+82:    const unitInputRef = useRef<HTMLDivElement>(null);
+85:    const handleFacturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+92:    const uploadFactura = async (movementId: string) => {
+94:        const fileExt = facturaFile.name.split('.').pop();
+95:        const filePath = `${id}/facturas/${movementId}.${fileExt}`;
+96:        const { data, error } = await supabase.storage
+103:        const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
+109:        const savedProduct = sessionStorage.getItem(`stock_productId_${id}`);
+110:        const savedQuantity = sessionStorage.getItem(`stock_quantity_${id}`);
+111:        const savedNote = sessionStorage.getItem(`stock_note_${id}`);
+112:        const savedShowNote = sessionStorage.getItem(`stock_showNote_${id}`);
+124:        const savedShowStockForm = sessionStorage.getItem(`stock_showStockForm_${id}`);
+125:        const savedShowProductForm = sessionStorage.getItem(`stock_showProductForm_${id}`);
+126:        const savedShowCatalog = sessionStorage.getItem(`stock_showCatalog_${id}`);
+127:        const savedShowWarehouses = sessionStorage.getItem(`stock_showWarehouses_${id}`);
+128:        const savedActiveW = sessionStorage.getItem(`stock_activeW_${id}`);
+191:        const loadClientUnits = async () => {
+193:                const client = await db.get('clients', id);
+216:        const handleClickOutside = (event: MouseEvent) => {
+232:    const saveClientUnits = async (newUnits: string[]) => {
+234:            const client = await db.get('clients', id);
+249:    const handleAddUnit = () => {
+251:            const upper = unitInputValue.trim().toUpperCase();
+253:                const newUnits = [...availableUnits, upper];
+264:    const availableProducts = useMemo(() => {
+275:        const duplicate = availableProducts.find(p =>
+285:    const enrichedStock = useMemo<EnrichedStockItem[]>(() => {
+286:        const firstId = warehouses[0]?.id;
+287:        const filteredStock = stock.filter((item: ClientStock) => {
+290:            const effectiveWId = item.warehouseId || firstId;
+295:            const product = products.find(p => p.id === item.productId);
+296:            const warehouse = warehouses.find(w => w.id === item.warehouseId);
+312:            const stockItem = enrichedStock.find(s => s.id === sellingStockId);
+314:                const qtyNum = parseFloat(saleQuantity);
+315:                const priceNum = parseFloat(salePrice);
+323:    const handleProductSubmit = async (e: React.FormEvent) => {
+367:    const handleStockSubmit = async (e: React.FormEvent) => {
+373:            const qtyNum = parseFloat(quantity);
+374:            const existingItem = stock.find((s: ClientStock) => s.productId === selectedProductId && s.warehouseId === (selectedWarehouseId || undefined));
+376:            const newItem = {
+388:            const product = availableProducts.find((p: Product) => p.id === selectedProductId);
+389:            const now = new Date();
+390:            const dateStr = now.toISOString().split('T')[0];
+391:            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+393:            const movementId = generateId();
+436:    const handleSaleSubmit = async (e: React.FormEvent) => {
+442:            const stockItem = enrichedStock.find(s => s.id === sellingStockId);
+445:            const qtyNum = parseFloat(saleQuantity);
+446:            const priceNum = parseFloat(salePrice);
+449:            const movementId = generateId();
+456:                const fileExt = saleFacturaFile.name.split('.').pop();
+457:                const filePath = `${id}/facturas/${movementId}.${fileExt}`;
+458:                const { error: uploadError } = await supabase.storage
+463:                    const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
+510:    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string) => {
+514:        const now = new Date();
+515:        const dateStr = now.toISOString().split('T')[0];
+516:        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+518:        for (const itemId of selectedStockIds) {
+519:            const item = enrichedStock.find(i => i.id === itemId);
+522:            const qtyToMove = quantities[itemId] || 0;
+525:            const product = products.find(p => p.id === item.productId);
+553:            const currentStockItem = stock.find(s => s.id === item.id);
+555:                const newQty = currentStockItem.quantity - qtyToMove;
+566:                const existingDestItem = stock.find(s => s.productId === item.productId && s.warehouseId === destinationWarehouseId);
+609:    const toggleStockSelection = (id: string, e: React.MouseEvent) => {
+620:    const handleClearSelection = () => {
+625:    const handleDeleteProduct = async (productId: string) => {
+635:    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'OTHER'];
+637:    const typeLabels: Record<ProductType, string> = {
+685:                                                    const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
+922:                                        const input = e.currentTarget as HTMLInputElement;
+933:                                const input = document.getElementById('new-warehouse-name') as HTMLInputElement;
+1299:                                                        const newUnits = availableUnits.filter(unit => unit !== u);
+1371:                    <form onSubmit={handleStockSubmit} className="space-y-4">
+1384:                                            const targetW = warehouses.find(w => w.id === selectedWarehouseId);
+(base) PS C:\Windows\System32\WindowsPowerShell\v1.0>

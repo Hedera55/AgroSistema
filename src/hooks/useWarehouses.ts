@@ -12,7 +12,7 @@ export function useWarehouses(clientId: string) {
         if (!clientId) return;
         try {
             const all = await db.getAll('warehouses');
-            const filtered = all.filter((w: Warehouse) => w.clientId === clientId);
+            const filtered = all.filter((w: Warehouse) => w.clientId === clientId && !w.deleted);
 
             // Check for required default warehouses
             const hasNewAcopio = filtered.some((w: Warehouse) => w.name === 'Acopio de Granos');
@@ -56,7 +56,8 @@ export function useWarehouses(clientId: string) {
             name,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            synced: false
+            synced: false,
+            deleted: false
         };
         await db.put('warehouses', item);
         await syncService.pushChanges();
@@ -78,7 +79,18 @@ export function useWarehouses(clientId: string) {
     };
 
     const deleteWarehouse = async (id: string) => {
-        await db.delete('warehouses', id);
+        const item = warehouses.find(w => w.id === id);
+        if (!item) return;
+
+        const deletedItem = {
+            ...item,
+            deleted: true,
+            deletedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            synced: false
+        };
+
+        await db.put('warehouses', deletedItem);
         await syncService.pushChanges();
         await refresh();
     };

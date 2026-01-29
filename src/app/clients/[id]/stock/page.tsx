@@ -63,6 +63,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [unitInputValue, setUnitInputValue] = useState('');
     const [newProductPrice, setNewProductPrice] = useState(''); // Added Price
     const [quantity, setQuantity] = useState('');
+    const [transactionPrice, setTransactionPrice] = useState(''); // PRICE PAID
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [isDuplicate, setIsDuplicate] = useState(false);
@@ -136,12 +137,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     // Handle default selection if none set
     useEffect(() => {
-        if (!activeWarehouseId && warehouses.length > 0) {
-            setActiveWarehouseId(warehouses[0].id);
-        } else if (activeWarehouseId && warehouses.length > 0 && !warehouses.find(w => w.id === activeWarehouseId)) {
+        // Only force selection if ID is invalid (deleted), but allow NULL (user deselected)
+        if (activeWarehouseId && warehouses.length > 0 && !warehouses.find(w => w.id === activeWarehouseId)) {
             // Safety: if active warehouse was deleted, move to first
             setActiveWarehouseId(warehouses[0].id);
         }
+        // Removed logic that forced warehouses[0] if activeWarehouseId was null
     }, [warehouses, activeWarehouseId]);
 
     useEffect(() => {
@@ -949,7 +950,19 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 key={w.id}
                                 onClick={() => {
                                     if (selectedInManagerId === w.id) {
-                                        setActiveWarehouseId(w.id);
+                                        // Toggle: if clicking the active one, deactivate it (show all)
+                                        if (activeWarehouseId === w.id) {
+                                            setActiveWarehouseId(null);
+                                            // Reset to default if needed, or null to show all? 
+                                            // User request: "make it inactive" -> implies showing all or no filter.
+                                            // Logic at line 289 handles null/undefined as "first warehouse" OR if we want "ALL", we need to adjust filtering.
+                                            // However, line 140 forces a default if none selected. We might need to relax that or handle "null" explicitly in the filter.
+                                            // Let's assume for now "inactive" means clear selection -> effectively null.
+                                            // But the effect at line 138 might re-select the first one immediately.
+                                            // We should check that effect.
+                                        } else {
+                                            setActiveWarehouseId(w.id);
+                                        }
                                         setSelectedStockIds([]);
                                         setSellingStockId(null);
                                         setShowMovePanel(false);
@@ -1000,25 +1013,28 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     </div>
 
                                     <div className="flex gap-2 items-center">
-                                        {activeWarehouseId === w.id && (
+                                        {activeWarehouseId === w.id && editingWarehouseId !== w.id && (
                                             <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-2 py-1 bg-emerald-100 rounded border border-emerald-200">Activo</span>
                                         )}
-                                        {selectedInManagerId === w.id && activeWarehouseId !== w.id && (
+                                        {/* Show controls if selected in manager OR if it is the active warehouse */}
+                                        {(selectedInManagerId === w.id || activeWarehouseId === w.id) && (
                                             <div className="flex gap-2 animate-fadeIn">
                                                 {editingWarehouseId !== w.id && (
                                                     <>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setActiveWarehouseId(w.id);
-                                                                setSelectedStockIds([]);
-                                                                setSellingStockId(null);
-                                                                setShowMovePanel(false);
-                                                            }}
-                                                            className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
-                                                        >
-                                                            Abrir
-                                                        </button>
+                                                        {activeWarehouseId !== w.id && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setActiveWarehouseId(w.id);
+                                                                    setSelectedStockIds([]);
+                                                                    setSellingStockId(null);
+                                                                    setShowMovePanel(false);
+                                                                }}
+                                                                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
+                                                            >
+                                                                Abrir
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -1094,7 +1110,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Unidad</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio (pesos/unidad)</th>
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio de Referencia (pesos/unidad)</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
@@ -1299,13 +1315,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 )}
                             </div>
                             <Input
-                                label="Precio (pesos/unidad)"
+                                label="Precio de Referencia (pesos/unidad)"
                                 type="number"
                                 step="0.01"
                                 placeholder="0.00"
                                 value={newProductPrice}
                                 onChange={e => setNewProductPrice(e.target.value)}
                                 className="h-[42px]"
+                                prefix="$"
                             />
                         </div>
                         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
@@ -1378,16 +1395,35 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 </select>
                             </div>
 
-                            <Input
-                                label="Cantidad a Ingresar"
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={quantity}
-                                onChange={e => setQuantity(e.target.value)}
-                                className="h-[42px]"
-                                required
-                            />
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Cantidad a Ingresar"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={quantity}
+                                    onChange={e => setQuantity(e.target.value)}
+                                    className="h-[42px]"
+                                    required
+                                />
+                                <div>
+                                    <Input
+                                        label="Precio Unitario (USD)"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder={availableProducts.find(p => p.id === selectedProductId)?.price ? String(availableProducts.find(p => p.id === selectedProductId)?.price) : "0.00"}
+                                        value={transactionPrice}
+                                        onChange={e => setTransactionPrice(e.target.value)}
+                                        className="h-[42px]"
+                                        prefix="$"
+                                    />
+                                    {selectedProductId && availableProducts.find(p => p.id === selectedProductId)?.price && (
+                                        <div className="text-[10px] text-slate-400 mt-1">
+                                            Ref: ${availableProducts.find(p => p.id === selectedProductId)?.price}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
 
                             <div className="w-full">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Destino (Galpón)</label>

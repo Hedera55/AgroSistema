@@ -33,6 +33,9 @@ export interface Warehouse {
     createdAt?: string;
     updatedAt?: string;
     synced?: boolean;
+    deleted?: boolean;
+    deletedBy?: string;
+    deletedAt?: string;
 }
 
 export interface Farm { // Campo
@@ -142,6 +145,7 @@ export interface InventoryMovement {
     date: string; // ISO date-time string
     time?: string;
     salePrice?: number; // Price at which it was sold (for SALE type)
+    purchasePrice?: number; // Price paid at which it was bought (for IN type)
     referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image
@@ -179,6 +183,7 @@ export interface Order {
     plantingDensity?: number;
     plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
     plantingSpacing?: number;
+    servicePrice?: number;
     notes?: string;
     createdBy?: string;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useMemo } from 'react';
+import { use, useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { Button } from '@/components/ui/Button';
@@ -69,6 +69,12 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         const nextStatus = order.status === 'DONE' ? 'PENDING' : 'DONE';
 
         try {
+            if (nextStatus === 'DONE' && (!order.servicePrice || order.servicePrice === 0)) {
+                if (!confirm('No se ha registrado el costo todavía. ¿Desea continuar?')) {
+                    return;
+                }
+            }
+
             const auditData = nextStatus === 'DONE' ? {
                 appliedBy: displayName || 'Sistema',
                 appliedAt: new Date().toISOString()
@@ -100,6 +106,15 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         return orderDate < today;
     };
 
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    const handleWheel = (e: React.WheelEvent) => {
+        if (scrollContainerRef.current) {
+            // Translate vertical scroll into horizontal scroll
+            scrollContainerRef.current.scrollLeft += e.deltaY;
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -120,7 +135,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 )}
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div
+                ref={scrollContainerRef}
+                onWheel={handleWheel}
+                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto"
+            >
                 {loading ? (
                     <div className="p-8 text-center text-slate-500">Cargando órdenes...</div>
                 ) : orders.length === 0 ? (
@@ -137,7 +156,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Emisión</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ubicación</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Tipo</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Estado</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Estado</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Autor</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
                             </tr>
@@ -177,6 +197,17 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                 (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
                                                     order.status === 'PENDING' ? 'PENDIENTE' : order.status}
                                         </button>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono">
+                                        {order.servicePrice && order.servicePrice > 0 ? (
+                                            <span className="text-slate-900 font-bold text-sm">
+                                                ${order.servicePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                        ) : order.status === 'DONE' ? (
+                                            <span className="text-red-500 italic text-[10px] font-bold">Falta el costo</span>
+                                        ) : (
+                                            <span className="text-slate-300">---</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
                                         {order.createdBy || 'Sistema'}

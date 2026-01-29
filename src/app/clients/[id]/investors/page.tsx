@@ -3,16 +3,18 @@
 import { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { Client, InventoryMovement } from '@/types';
+import { Client, InventoryMovement, Order } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useInventory, useClientMovements } from '@/hooks/useInventory';
+import { useOrders } from '@/hooks/useOrders';
 
-export default function InvestorsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const { } = useAuth(); // Keeping hook if needed for auth splash, but empty deconstruction
+    const { } = useAuth();
     const [client, setClient] = useState<Client | null>(null);
     const { movements, loading: movementsLoading } = useClientMovements(id);
     const { products, loading: productsLoading } = useInventory();
+    const { orders, loading: ordersLoading } = useOrders(id);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -23,24 +25,74 @@ export default function InvestorsPage({ params }: { params: Promise<{ id: string
     }, [id]);
 
     const stats = useMemo(() => {
-        let invested = 0;
+        let investedMovements = 0;
+        let serviceCosts = 0;
         let sold = 0;
 
         movements.forEach((m: InventoryMovement) => {
             const product = products.find(p => p.id === m.productId);
             if (m.type === 'IN') {
-                invested += (m.quantity * (product?.price || 0));
+                investedMovements += (m.quantity * (m.purchasePrice || product?.price || 0));
             } else if (m.type === 'SALE') {
                 sold += (m.quantity * (m.salePrice || 0));
             }
         });
 
+        orders.forEach((o: Order) => {
+            if (o.servicePrice) {
+                serviceCosts += o.servicePrice;
+            }
+        });
+
+        const totalInvested = investedMovements + serviceCosts;
+
         return {
-            invested,
+            investedMovements,
+            serviceCosts,
+            totalInvested,
             sold,
-            total: sold - invested
+            total: sold - totalInvested
         };
-    }, [movements, products]);
+    }, [movements, products, orders]);
+
+    const financialHistory = useMemo(() => {
+        const history: { id: string, date: string, type: 'PURCHASE' | 'SALE' | 'SERVICE', description: string, amount: number }[] = [];
+
+        movements.forEach(m => {
+            const product = products.find(p => p.id === m.productId);
+            if (m.type === 'IN') {
+                history.push({
+                    id: m.id,
+                    date: m.date,
+                    type: 'PURCHASE',
+                    description: `Compra: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
+                    amount: m.quantity * (m.purchasePrice || product?.price || 0)
+                });
+            } else if (m.type === 'SALE') {
+                history.push({
+                    id: m.id,
+                    date: m.date,
+                    type: 'SALE',
+                    description: `Venta: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
+                    amount: m.quantity * (m.salePrice || 0)
+                });
+            }
+        });
+
+        orders.forEach(o => {
+            if (o.servicePrice && o.servicePrice > 0) {
+                history.push({
+                    id: o.id,
+                    date: o.date,
+                    type: 'SERVICE',
+                    description: `Servicio: Orden Nro ${o.orderNumber || '---'}`,
+                    amount: o.servicePrice
+                });
+            }
+        });
+
+        return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [movements, products, orders]);
 
     const investorBreakdown = useMemo(() => {
         if (!client?.investors) return [];
@@ -50,68 +102,151 @@ export default function InvestorsPage({ params }: { params: Promise<{ id: string
         })).sort((a, b) => b.percentage - a.percentage);
     }, [client, stats]);
 
-    if (loading || movementsLoading || productsLoading) {
+    if (loading || movementsLoading || productsLoading || ordersLoading) {
         return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
     }
 
     if (!client) return <div className="p-8 text-center text-red-500">Empresa no encontrada</div>;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <div className="flex flex-col gap-4">
                 <div>
                     <Link href={`/clients/${id}`} className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block">← Volver al Dashboard</Link>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Estado de Inversores</h1>
-                    <p className="text-slate-500">Resumen de inversión y ventas para para <strong>{client.name}</strong></p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Contaduría</h1>
+                    <p className="text-slate-500">Resumen de inversión y ventas para <strong>{client.name}</strong></p>
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Resumen Financiero</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Balance Final</h3>
+                    </div>
+                    <table className="min-w-full">
+                        <tbody className="divide-y divide-slate-200 text-sm">
+                            <tr className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 text-slate-500 font-bold uppercase tracking-wider">Total Invertido (-)</td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-base font-bold text-red-500">
+                                        -${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 text-emerald-600 font-bold uppercase tracking-wider">Total Vendido (+)</td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-base font-bold text-emerald-600">
+                                        +${stats.sold.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr className={`${stats.total >= 0 ? 'bg-emerald-50/50' : 'bg-red-50/50'}`}>
+                                <td className="px-6 py-5 font-black text-slate-800 uppercase tracking-widest">Balance Final</td>
+                                <td className="px-6 py-5 text-right">
+                                    <span className={`text-base font-black ${stats.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                        ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <table className="min-w-full">
-                    <tbody className="divide-y divide-slate-200">
-                        <tr className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 flex items-center gap-3">
-                                <span className="text-xl">📉</span>
-                                <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Monto Invertido</span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                <span className="text-xl font-black text-slate-700">
-                                    ${stats.invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 flex items-center gap-3">
-                                <span className="text-xl">📈</span>
-                                <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider">Monto Vendido</span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                <span className="text-xl font-black text-emerald-600">
-                                    ${stats.sold.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr className={`hover:bg-slate-50 transition-colors ${stats.total >= 0 ? 'bg-emerald-50/30' : 'bg-red-50/30'}`}>
-                            <td className="px-6 py-4 flex items-center gap-3">
-                                <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">Total (Balance)</span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                <span className={`text-xl font-black ${stats.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                                    ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose de inversiones</h3>
+                    </div>
+                    <table className="min-w-full">
+                        <tbody className="divide-y divide-slate-200">
+                            <tr className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 flex items-center gap-3">
+                                    <span className="text-sm font-bold text-slate-500 tracking-wider">Compras Insumos</span>
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-base font-bold text-slate-700">
+                                        ${stats.investedMovements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 flex items-center gap-3">
+                                    <span className="text-sm font-bold text-slate-500 tracking-wider">Servicios (Órdenes)</span>
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-base font-bold text-slate-700">
+                                        ${stats.serviceCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr className="bg-slate-50/50">
+                                <td className="px-6 py-4 flex items-center gap-3">
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Inversión Total</span>
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-base font-black text-slate-900">
+                                        ${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Financial History */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Historial de Movimientos de Dinero</h3>
+                </div>
+                <div className="overflow-x-auto overflow-y-auto max-h-[400px]">
+                    <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Fecha</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Descripción</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                            {financialHistory.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados.</td>
+                                </tr>
+                            ) : (
+                                financialHistory.map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                                            {item.date}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' :
+                                                item.type === 'PURCHASE' ? 'bg-orange-100 text-orange-700' :
+                                                    'bg-blue-100 text-blue-700'
+                                                }`}>
+                                                {item.type === 'SALE' ? 'Ingreso' : 'Egreso'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                                            {item.description}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.type === 'SALE' ? 'text-emerald-600' : 'text-red-500'
+                                            }`}>
+                                            {item.type === 'SALE' ? '+' : '-'}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Investors Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Socio</h3>
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Inversor</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-200">

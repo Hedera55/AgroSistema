@@ -104,7 +104,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         // For Client Context (available to all if viewing a client)
         { name: 'Galpón', href: `/clients/${effectiveId}/stock`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
-        { name: 'Inversores', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
+        { name: 'Contaduría', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Órdenes', href: `/clients/${effectiveId}/orders`, show: showClientMenu },
     ].filter(item => item.show);
 

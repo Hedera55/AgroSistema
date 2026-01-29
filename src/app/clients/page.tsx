@@ -162,7 +162,21 @@ export default function ClientsPage() {
             </div>
 
             {showForm && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn relative">
+                    <button
+                        onClick={() => {
+                            setIsEditing(false);
+                            setEditingClientId(null);
+                            setNewClient({ name: '', cuit: '' });
+                            setInvestors([]);
+                            setShowForm(false);
+                        }}
+                        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+                        title="Cancelar"
+                    >
+                        ✕
+                    </button>
+                    
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-slate-800">
                             {isEditing ? 'Editar Empresa' : 'Nueva Empresa'}
@@ -180,7 +194,7 @@ export default function ClientsPage() {
                                         setInvestors([]);
                                     }
                                 }}
-                                className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors"
+                                className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors mr-6"
                             >
                                 🗑️ Eliminar Empresa
                             </button>

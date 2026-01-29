@@ -57,6 +57,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [plantingDensity, setPlantingDensity] = useState('');
     const [plantingDensityUnit, setPlantingDensityUnit] = useState<'PLANTS_HA' | 'KG_HA'>('PLANTS_HA');
     const [plantingSpacing, setPlantingSpacing] = useState('');
+    const [servicePrice, setServicePrice] = useState('');
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
     // Derived Data
     const { lots } = useLots(selectedFarmId);
@@ -89,7 +91,31 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             plantingSpacing: product.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
         };
 
-        setItems([...items, item]);
+        if (editingItemId) {
+            // Update existing item
+            setItems(items.map(i => i.id === editingItemId ? { ...item, id: editingItemId } : i));
+            setEditingItemId(null);
+        } else {
+            // Add new item
+            setItems([...items, item]);
+        }
+
+        setCurrProdId('');
+        setCurrDosage('');
+        setPlantingDensity('');
+        setPlantingSpacing('');
+    };
+
+    const handleEditItem = (item: OrderItem) => {
+        setEditingItemId(item.id);
+        setCurrProdId(item.productId);
+        setCurrDosage(String(item.dosage));
+        setPlantingDensity(item.plantingDensity ? String(item.plantingDensity) : '');
+        setPlantingSpacing(item.plantingSpacing ? String(item.plantingSpacing) : '');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingItemId(null);
         setCurrProdId('');
         setCurrDosage('');
         setPlantingDensity('');
@@ -98,6 +124,13 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
     const handleRemoveItem = (id: string) => {
         setItems(items.filter(i => i.id !== id));
+        if (editingItemId === id) {
+            setEditingItemId(null);
+            setCurrProdId('');
+            setCurrDosage('');
+            setPlantingDensity('');
+            setPlantingSpacing('');
+        }
     };
 
     // Stock Validation
@@ -148,6 +181,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 lotId: selectedLotId,
                 warehouseId: selectedOrderWarehouseId || undefined,
                 applicatorId: selectedApplicatorId,
+                servicePrice: servicePrice ? parseFloat(servicePrice) : 0,
                 treatedArea: selectedLot.hectares,
                 items,
                 // Order level summary fields if needed (optional since items have them)
@@ -280,6 +314,18 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         </select>
                     </div>
 
+                    <div className="w-full">
+                        <Input
+                            label="Precio de Servicio (Opcional)"
+                            type="number"
+                            step="0.01"
+                            placeholder="Puede dejarse vacío y completarse después"
+                            value={servicePrice}
+                            onChange={e => setServicePrice(e.target.value)}
+                            prefix="$"
+                        />
+                    </div>
+
                     <div className="flex justify-end pt-4">
                         <Button onClick={() => setStep(2)} disabled={!selectedLotId || !date}>Agregar productos</Button>
                     </div>
@@ -310,7 +356,16 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                 <input type="number" step="0.01" className="block w-full rounded-md border-slate-300 shadow-sm text-sm" placeholder="0.0" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
                             </div>
                             {products.find(p => p.id === currProdId)?.type !== 'SEED' && (
-                                <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>Agregar</Button>
+                                <div className="flex gap-2">
+                                    <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>
+                                        {editingItemId ? 'Actualizar' : 'Agregar'}
+                                    </Button>
+                                    {editingItemId && (
+                                        <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
+                                            ✕
+                                        </Button>
+                                    )}
+                                </div>
                             )}
                         </div>
 
@@ -337,7 +392,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Espaciamiento (cm)</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Espaciamiento entre hileras (cm)</label>
                                     <input
                                         type="number"
                                         className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
@@ -346,7 +401,16 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                         onChange={e => setPlantingSpacing(e.target.value)}
                                     />
                                 </div>
-                                <Button onClick={handleAddItem} disabled={!currProdId || !currDosage} className="w-full">Agregar</Button>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <Button onClick={handleAddItem} disabled={!currProdId || !currDosage} className="flex-1 sm:flex-initial">
+                                        {editingItemId ? 'Actualizar' : 'Agregar'}
+                                    </Button>
+                                    {editingItemId && (
+                                        <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
+                                            ✕
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -354,7 +418,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
                     {/* Items List */}
                     <div className="space-y-2">
-                        {items.map((item) => (
+                        {items.filter(i => i.id !== editingItemId).map((item) => (
                             <div key={item.id} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
                                 <div>
                                     <div className="font-bold text-slate-800">{item.productName}</div>
@@ -373,13 +437,22 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                         <div className="font-mono text-emerald-600 font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</div>
                                         <div className="text-xs text-slate-400">Total Requerido</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleRemoveItem(item.id)}
-                                        className="text-slate-400 hover:text-black transition-colors p-1"
-                                        title="Eliminar producto"
-                                    >
-                                        ✕
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleEditItem(item)}
+                                            className="text-slate-400 hover:text-blue-600 transition-colors p-1"
+                                            title="Editar producto"
+                                        >
+                                            ✎
+                                        </button>
+                                        <button
+                                            onClick={() => handleRemoveItem(item.id)}
+                                            className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                                            title="Eliminar producto"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -419,7 +492,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             <div><span className="text-slate-500">Fecha de emisión:</span> <span className="font-medium">{date}</span></div>
                             <div><span className="text-slate-500">Hora:</span> <span className="font-medium">{time}</span></div>
                             <div className="col-span-2 bg-emerald-50 px-3 py-1 rounded text-emerald-800 border border-emerald-100">
-                                <span className="font-bold opacity-60">Ventana:</span> {appStart} • {appEnd}
+                                <span className="font-bold opacity-60">Ventana de aplicación:</span> {appStart} • {appEnd}
                             </div>
                             {containsSeeds && plantingDensity && (
                                 <>
@@ -429,7 +502,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                             <span className="font-medium">{plantingDensity} {plantingDensityUnit === 'PLANTS_HA' ? 'plant/ha' : 'kg/ha'}</span>
                                         </div>
                                         <div>
-                                            <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Espaciamiento</span>
+                                            <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Espaciamiento entre hileras</span>
                                             <span className="font-medium">{plantingSpacing ? `${plantingSpacing} cm` : '-'}</span>
                                         </div>
                                     </div>

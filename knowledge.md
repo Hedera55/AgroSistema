@@ -18,7 +18,9 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - **Code execution**: All commands will be ran by me, because running powershell commands usually crash the agent.
   If you need me to run the code in another program that isn't powershell, I can also do that, just specify it for me
+	For example, *powershell doesn't have grep*, which you've asked me to run a couple times
   For supabase, I prefer you give me the code and I'll run it in the sql editor in supabase's website
+
 
 - **Automatic tests adding**: The agent is authorized to add automated tests whenever deemed reasonable. The USER does not have knowledge on how many it's reasonable to add, but likes not wasting resources for little benefit.
 
@@ -47,6 +49,9 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
   Thank you for pointing that out. The changes are all in place now and verified, but I'll be more mindful of that boundary in the future.
   
   Whenever you're ready, you can push the final results!
+
+
+- **Clarification asking**: If you have questions on my instructions, my intentions, you don't need to circle around a question a lot, it's better sometimes to just ask me clarifying questions, ask as many as you like.
 
 + . + . + . + . + . + . +
 

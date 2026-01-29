@@ -9,20 +9,43 @@ import { supabase } from '@/lib/supabase';
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
     const [movements, setMovements] = useState<InventoryMovement[]>([]);
+    const [productsKey, setProductsKey] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
 
-    async function loadMovements() {
-        const allMovements = await db.getAll('movements');
+    async function loadData() {
+        const [allMovements, allProducts, allOrders] = await Promise.all([
+            db.getAll('movements'),
+            db.getAll('products'),
+            db.getAll('orders')
+        ]);
+
         const clientMovements = allMovements
             .filter((m: InventoryMovement) => m.clientId === clientId)
             .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+        // Map product prices for easier lookup
+        const priceMap: Record<string, number> = {};
+        allProducts.forEach((p: any) => {
+            if (p.price) priceMap[p.id] = p.price;
+        });
+
+        // Map orders to identify Sowing types
+        const orderTypeMap: Record<string, string> = {};
+        allOrders.forEach((o: any) => {
+            orderTypeMap[o.id] = o.type;
+        });
+
         setMovements(clientMovements);
+        setProductsKey(priceMap);
+        setOrdersKey(orderTypeMap);
         setLoading(false);
     }
 
+    const [ordersKey, setOrdersKey] = useState<Record<string, string>>({});
+
     useEffect(() => {
-        loadMovements();
+        loadData();
     }, [clientId]);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, movementId: string) => {
@@ -52,7 +75,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     synced: false,
                     updatedAt: new Date().toISOString()
                 });
-                await loadMovements(); // Refresh UI
+                await loadData(); // Refresh UI
             }
         } catch (error) {
             console.error('Error uploading factura:', error);
@@ -103,6 +126,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase"></th>
@@ -111,6 +135,55 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             <tbody className="bg-white divide-y divide-slate-200 text-sm">
                                 {movements.map((m) => {
                                     const { date, time } = formatDate(m.date);
+
+                                    // Determine Label and Tooltip
+                                    let label = 'EGRESO-T';
+                                    let labelClass = 'bg-orange-100 text-orange-800';
+                                    let tooltip = 'Transferencia';
+
+                                    if (m.type === 'IN') {
+                                        label = 'INGRESO-C';
+                                        labelClass = 'bg-green-100 text-green-800';
+                                        tooltip = 'Compra';
+                                    } else if (m.type === 'HARVEST') {
+                                        label = 'INGRESO-CC';
+                                        labelClass = 'bg-lime-100 text-lime-800';
+                                        tooltip = 'Cosecha';
+                                    } else if (m.type === 'SALE') {
+                                        label = 'EGRESO-V';
+                                        labelClass = 'bg-blue-100 text-blue-800';
+                                        tooltip = 'Venta';
+                                    } else if (m.type === 'OUT') {
+                                        // Check if it's Sowing
+                                        const orderType = ordersKey[m.referenceId];
+                                        if (orderType === 'SOWING') {
+                                            label = 'EGRESO-S';
+                                            labelClass = 'bg-emerald-100 text-emerald-800';
+                                            tooltip = 'Siembra';
+                                        }
+                                    }
+
+                                    // Calculate value - ONLY for SALES and IN
+                                    let totalValue = 0;
+                                    let isEstimate = false;
+                                    let showValue = false;
+
+                                    if (m.type === 'SALE' && m.salePrice) {
+                                        totalValue = m.salePrice * m.quantity;
+                                        showValue = true;
+                                    } else if (m.type === 'IN') {
+                                        if (m.purchasePrice) {
+                                            totalValue = m.purchasePrice * m.quantity;
+                                        } else {
+                                            const currentPrice = productsKey[m.productId];
+                                            if (currentPrice) {
+                                                totalValue = currentPrice * m.quantity;
+                                                isEstimate = true;
+                                            }
+                                        }
+                                        showValue = true;
+                                    }
+
                                     return (
                                         <tr key={m.id} className="hover:bg-slate-50">
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -121,12 +194,25 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 {m.productName}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${m.type === 'IN' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                                                    {m.type === 'IN' ? 'INGRESO' : 'EGRESO'}
+                                                <span
+                                                    title={tooltip}
+                                                    className={`px-2 py-1 rounded-full text-xs font-bold ${labelClass}`}
+                                                >
+                                                    {label}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
                                                 {m.type === 'IN' ? '+' : '-'}{m.quantity} {m.unit}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
+                                                {showValue && totalValue > 0 ? (
+                                                    <span title={isEstimate ? "Valor estimado según precio actual" : "Valor reportado"}>
+                                                        ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-300">-</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
                                                 {m.notes}

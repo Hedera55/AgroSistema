@@ -82,6 +82,7 @@ const mappers = {
         treated_area: o.treatedArea,
         items: o.items,
         applicator_name: o.applicatorName,
+        service_price: o.servicePrice || 0,
         notes: o.notes,
         created_by: o.createdBy,
         updated_by: o.updatedBy,
@@ -101,6 +102,7 @@ const mappers = {
         date: m.date,
         time: m.time,
         sale_price: m.salePrice || 0,
+        purchase_price: m.purchasePrice || 0,
         reference_id: m.referenceId,
         notes: m.notes,
         factura_image_url: m.facturaImageUrl,
@@ -135,7 +137,10 @@ const mappers = {
         client_id: w.clientId,
         name: w.name,
         created_at: w.createdAt || new Date().toISOString(),
-        updated_at: w.updatedAt || new Date().toISOString()
+        updated_at: w.updatedAt || new Date().toISOString(),
+        deleted: w.deleted || false,
+        deleted_at: w.deletedAt,
+        deleted_by: w.deletedBy
     })
 };
 
@@ -223,6 +228,7 @@ const reverseMappers = {
         treatedArea: o.treated_area,
         items: o.items,
         applicatorName: o.applicator_name,
+        servicePrice: o.service_price || 0,
         notes: o.notes,
         createdBy: o.created_by,
         updatedBy: o.updated_by,
@@ -242,6 +248,7 @@ const reverseMappers = {
         date: m.date,
         time: m.time,
         salePrice: m.sale_price || 0,
+        purchasePrice: m.purchase_price || 0,
         referenceId: m.reference_id || 'manual',
         notes: m.notes,
         facturaImageUrl: m.factura_image_url,
@@ -280,7 +287,10 @@ const reverseMappers = {
         name: w.name,
         createdAt: w.created_at,
         updatedAt: w.updated_at,
-        synced: true
+        synced: true,
+        deleted: w.deleted,
+        deletedAt: w.deleted_at,
+        deletedBy: w.deleted_by
     })
 };
 
