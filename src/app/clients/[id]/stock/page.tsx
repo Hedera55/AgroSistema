@@ -73,6 +73,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [sellingStockId, setSellingStockId] = useState<string | null>(null);
     const [saleQuantity, setSaleQuantity] = useState('');
     const [salePrice, setSalePrice] = useState('');
+    const [saleNote, setSaleNote] = useState('');
+    const [showSaleNote, setShowSaleNote] = useState(false);
+    const [saleFacturaFile, setSaleFacturaFile] = useState<File | null>(null);
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
     const [facturaUploading, setFacturaUploading] = useState(false);
 
@@ -181,6 +184,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         sessionStorage.setItem(`stock_showNote_${id}`, showNote.toString());
     }, [showNote, id]);
+
 
     // Load available units from Client persistence
     useEffect(() => {
@@ -301,6 +305,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             };
         }).filter(item => item.hasProduct);
     }, [stock, products, warehouses, activeWarehouseId]);
+
+    // Auto-update Sale Note with pricing details
+    useEffect(() => {
+        if (sellingStockId && saleQuantity && salePrice) {
+            const stockItem = enrichedStock.find(s => s.id === sellingStockId);
+            if (stockItem) {
+                const qtyNum = parseFloat(saleQuantity);
+                const priceNum = parseFloat(salePrice);
+                if (!isNaN(qtyNum) && !isNaN(priceNum)) {
+                    setSaleNote(`${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
+                }
+            }
+        }
+    }, [sellingStockId, saleQuantity, salePrice, enrichedStock]);
 
     const handleProductSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -427,6 +445,27 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const qtyNum = parseFloat(saleQuantity);
             const priceNum = parseFloat(salePrice);
 
+            // Record Movement
+            const movementId = generateId();
+            let facturaUrl = '';
+
+            if (saleFacturaFile) {
+                setFacturaUploading(true);
+                // Temporarily use the existing facturaFile state for the upload helper if needed, 
+                // but let's just use the saleFacturaFile directly in the helper logic or inline it.
+                const fileExt = saleFacturaFile.name.split('.').pop();
+                const filePath = `${id}/facturas/${movementId}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('facturas')
+                    .upload(filePath, saleFacturaFile, { upsert: true });
+
+                if (!uploadError) {
+                    const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
+                    facturaUrl = publicUrlData.publicUrl;
+                }
+                setFacturaUploading(false);
+            }
+
             // Update Stock
             await updateStock({
                 ...stockItem,
@@ -434,9 +473,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 lastUpdated: new Date().toISOString()
             });
 
-            // Record Movement
             await db.put('movements', {
-                id: generateId(),
+                id: movementId,
                 clientId: id,
                 warehouseId: stockItem.warehouseId,
                 productId: stockItem.productId,
@@ -448,7 +486,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 date: new Date().toISOString().split('T')[0],
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 referenceId: `SALE-${generateId()}`,
-                notes: `${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
+                notes: saleNote || `${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
+                facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false
@@ -458,6 +497,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setSellingStockId(null);
             setSaleQuantity('');
             setSalePrice('');
+            setSaleNote('');
+            setShowSaleNote(false);
+            setSaleFacturaFile(null);
         } catch (error) {
             console.error(error);
         } finally {
@@ -730,31 +772,73 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         {sellingStockId === item.id && (
                                             <tr className="bg-emerald-50/50 animate-fadeIn">
                                                 <td colSpan={6} className="px-6 py-4">
-                                                    <form onSubmit={handleSaleSubmit} className="flex flex-wrap items-end gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
-                                                        <div className="flex-1 min-w-[120px]">
-                                                            <Input
-                                                                label="Cantidad a Vender"
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={saleQuantity}
-                                                                onChange={e => setSaleQuantity(e.target.value)}
-                                                                required
-                                                            />
+                                                    <form onSubmit={handleSaleSubmit} className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
+                                                        <div className="flex flex-wrap items-end gap-4">
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <Input
+                                                                    label="Cantidad a Vender"
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    value={saleQuantity}
+                                                                    onChange={e => setSaleQuantity(e.target.value)}
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <Input
+                                                                    label={`Precio de Venta ($/${item.unit})`}
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    value={salePrice}
+                                                                    onChange={e => setSalePrice(e.target.value)}
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <div className="flex gap-2 mb-1">
+                                                                <div className="relative group">
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="image/*,application/pdf"
+                                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                                        onChange={(e) => {
+                                                                            if (e.target.files && e.target.files[0]) {
+                                                                                setSaleFacturaFile(e.target.files[0]);
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <div className={`p-2 px-3 rounded-lg border flex items-center gap-2 transition-all cursor-pointer ${saleFacturaFile ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-300'}`}>
+                                                                        <span className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-black border ${saleFacturaFile ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-red-500 border-red-200'}`}>
+                                                                            F
+                                                                        </span>
+                                                                        <span className="text-xs font-bold uppercase tracking-tight">+ Adjuntar Factura</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setShowSaleNote(!showSaleNote)}
+                                                                    className={`p-2 px-3 rounded-lg border flex items-center gap-2 transition-all ${showSaleNote ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-300'}`}
+                                                                >
+                                                                    <span className="text-xs font-bold uppercase tracking-tight">+ Agregar nota</span>
+                                                                </button>
+                                                            </div>
+                                                            <div className="flex gap-2 mb-1">
+                                                                <Button type="button" variant="secondary" size="sm" onClick={() => setSellingStockId(null)}>Cancelar</Button>
+                                                                <Button type="submit" size="sm" disabled={isSubmitting || facturaUploading}>Confirmar Venta</Button>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex-1 min-w-[120px]">
-                                                            <Input
-                                                                label={`Precio de Venta ($/${item.unit})`}
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={salePrice}
-                                                                onChange={e => setSalePrice(e.target.value)}
-                                                                required
-                                                            />
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <Button type="button" variant="secondary" size="sm" onClick={() => setSellingStockId(null)}>Cancelar</Button>
-                                                            <Button type="submit" size="sm" disabled={isSubmitting}>Confirmar Venta</Button>
-                                                        </div>
+
+                                                        {showSaleNote && (
+                                                            <div className="animate-fadeIn">
+                                                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider pl-1">Nota de Venta</label>
+                                                                <textarea
+                                                                    className="w-full p-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all text-sm min-h-[80px]"
+                                                                    placeholder="Escribe una nota para este movimiento..."
+                                                                    value={saleNote}
+                                                                    onChange={(e) => setSaleNote(e.target.value)}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </form>
                                                 </td>
                                             </tr>
