@@ -1518,7 +1518,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     onClick={() => setShowNote(!showNote)}
                                     className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-2"
                                 >
-                                    {showNote ? 'Quitar Nota' : note ? 'Editar Nota' : '+ Agregar Nota'}
+                                    {showNote ? 'Quitar Nota' : note ? '+ Editar Nota' : '+ Agregar Nota'}
                                     {(!showNote && note) && (
                                         <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                                     )}
