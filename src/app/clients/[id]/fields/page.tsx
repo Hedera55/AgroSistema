@@ -321,7 +321,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const fetchSowingDetails = async (lotId: string) => {
         try {
-            const allOrders = await db.getAll('orders');
+            const allOrders = await db.getAll('orders') as Order[];
             const sowingOrders = allOrders
                 .filter(o => o.clientId === id && o.lotId === lotId && o.type === 'SOWING' && (o.status === 'CONFIRMED' || o.status === 'DONE'))
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
