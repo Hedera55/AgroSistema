@@ -185,7 +185,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             const order: Order = {
                 id: generateId(),
                 orderNumber: nextOrderNumber,
-                type: containsSeeds ? 'SOWING' : 'SPRAYING',
+                type: containsSeeds ? 'SOWING' : 'APPLICATION',
                 status: 'PENDING',
                 date: date,
                 time: '00:00',
