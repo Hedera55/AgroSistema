@@ -20,35 +20,38 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                 // 1. Fetch all orders for this lot
                 const allOrders = await db.getAll('orders');
                 const lotOrders = allOrders
-                    .filter((o: Order) => o.lotId === lotId && o.status === 'DONE')
+                    .filter((o: Order) => o.lotId === lotId && (o.status === 'DONE' || o.status === 'CONFIRMED') && o.type !== 'HARVEST')
                     .map((o: Order) => ({
                         id: o.id,
                         date: o.date,
                         time: o.time,
                         type: o.type,
+                        status: o.status,
                         description: o.plantingDensity ? 'Siembra' : 'Pulverización',
                         items: o.items,
                         author: o.createdBy || 'Sistema',
                         timestamp: new Date(`${o.date}T${o.time || '00:00'}`).getTime()
                     }));
 
-                // 2. Fetch lot data to check for harvest
-                const lot = await db.get('lots', lotId);
-                const events = [...lotOrders];
-
-                if (lot?.status === 'HARVESTED' && lot.observedYield) {
-                    events.push({
-                        id: 'harvest-' + lot.id,
-                        date: lot.updatedAt?.split('T')[0] || '',
-                        time: lot.updatedAt?.split('T')[1]?.substring(0, 5) || '',
+                // 2. Fetch Harvest Movements
+                const allMovements = await db.getAll('movements');
+                const harvestMovements = allMovements
+                    .filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST')
+                    .map((m: any) => ({
+                        id: m.id,
+                        date: m.date,
+                        time: m.time,
                         type: 'HARVEST',
                         description: 'Cosecha',
-                        observedYield: lot.observedYield,
-                        crop: lot.cropSpecies,
-                        author: lot.lastUpdatedBy || 'Sistema',
-                        timestamp: new Date(lot.updatedAt || 0).getTime()
-                    });
-                }
+                        observedYield: m.quantity,
+                        crop: m.productName,
+                        contractorName: m.contractorName,
+                        harvestLaborCost: m.harvestLaborCost,
+                        author: m.createdBy || 'Sistema',
+                        timestamp: new Date(`${m.date}T${m.time || '00:00'}`).getTime()
+                    }));
+
+                const events = [...lotOrders, ...harvestMovements];
 
                 // Sort by timestamp descending
                 setHistory(events.sort((a, b) => b.timestamp - a.timestamp));
@@ -74,50 +77,88 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
     }
 
     return (
-        <div className="relative">
-            {/* Vertical Line */}
-            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-100"></div>
-
-            <div className="space-y-6 relative">
-                {history.map((event, idx) => (
-                    <div key={event.id} className="flex gap-4 pl-2">
-                        <div className={`z-10 w-4 h-4 rounded-full mt-1.5 border-4 border-white shadow-sm
-                            ${event.type === 'SOWING' ? 'bg-emerald-500' :
-                                event.type === 'HARVEST' ? 'bg-blue-500' : 'bg-red-500'}`}>
-                        </div>
-                        <div className="flex-1 pb-4 border-b border-slate-50 last:border-0">
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                                    {event.description}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-400">
-                                    {event.date} {event.time && `| ${event.time}`}
-                                </span>
-                            </div>
-
-                            {event.type === 'HARVEST' ? (
-                                <div className="text-sm text-slate-600 bg-blue-50/50 p-2 rounded-lg border border-blue-50 mt-2">
-                                    Cosecha de <span className="font-bold text-blue-700">{event.crop}</span>:
-                                    <span className="font-black ml-1 text-slate-800">{event.observedYield.toLocaleString()} kg</span>
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-3 font-bold text-slate-700 w-24">Fecha</th>
+                        <th className="px-4 py-3 font-bold text-slate-700 w-24">Tipo</th>
+                        <th className="px-4 py-3 font-bold text-slate-700">Descripción</th>
+                        <th className="px-4 py-3 font-bold text-slate-700 text-right">Rinde / Costo</th>
+                        <th className="px-4 py-3 font-bold text-slate-700 w-10"></th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {history.map((event) => (
+                        <tr key={event.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3 align-top">
+                                <div className="font-mono text-slate-600 font-bold">{new Date(event.timestamp).toLocaleDateString()}</div>
+                                <div className="text-[10px] text-slate-400">{event.time}</div>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                                <div className="flex flex-col gap-1 items-start">
+                                    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                                        ${event.type === 'SOWING' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                            event.type === 'HARVEST' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                        {event.type === 'SOWING' ? 'Siembra' :
+                                            event.type === 'HARVEST' ? 'Cosecha' : 'Aplic.'}
+                                    </span>
+                                    {event.status && (
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border
+                                            ${event.status === 'CONFIRMED' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                                                'bg-slate-50 text-slate-400 border-slate-100' // Realizado defaults to subtle
+                                            }`}>
+                                            {event.status === 'CONFIRMED' ? 'Asignado' : 'Realizado'}
+                                        </span>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="mt-2 space-y-1">
-                                    {event.items?.map((item: any, i: number) => (
-                                        <div key={i} className="text-xs text-slate-500 flex justify-between">
-                                            <span>• {item.productName}</span>
-                                            <span className="font-mono text-[10px]">{item.totalQuantity} {item.unit}</span>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                                {event.type === 'HARVEST' ? (
+                                    <div>
+                                        <div className="font-bold text-slate-800">Cosecha de {event.crop}</div>
+                                        {event.contractorName && (
+                                            <div className="text-xs text-slate-500 mt-0.5">Contratista: {event.contractorName}</div>
+                                        )}
+                                        <div className="text-[10px] text-slate-400 mt-1">
+                                            Por: {event.author}
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="mt-2 text-[10px] text-slate-400 font-medium">
-                                Por: <span className="text-slate-500">{event.author}</span>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        {event.items?.map((item: any, i: number) => (
+                                            <div key={i} className="text-slate-600">
+                                                <span className="font-semibold">{item.productName}</span>
+                                                <span className="text-slate-400 text-xs ml-2">
+                                                    ({item.plantingDensity ? `${item.plantingDensity} ${item.plantingDensityUnit}` : `${item.totalQuantity} ${item.unit}`})
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </td>
+                            <td className="px-4 py-3 align-top text-right">
+                                {event.type === 'HARVEST' ? (
+                                    <div>
+                                        <div className="font-mono font-bold text-blue-700">{event.observedYield?.toLocaleString()} kg</div>
+                                        {event.harvestLaborCost && (
+                                            <div className="text-xs font-mono text-slate-500 mt-0.5">
+                                                Lab: ${event.harvestLaborCost.toLocaleString()}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-slate-400 text-xs">-</div>
+                                )}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                                {/* Actions placeholder */}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }

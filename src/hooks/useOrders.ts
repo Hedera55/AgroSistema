@@ -14,7 +14,7 @@ export function useOrders(clientId: string) {
             const allOrders = await db.getAll('orders');
             const clientOrders = allOrders
                 .filter((o: Order) => o.clientId === clientId)
-                .sort((a: Order, b: Order) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                .sort((a: Order, b: Order) => (b.orderNumber || 0) - (a.orderNumber || 0));
             setOrders(clientOrders);
         } catch (error) {
             console.error('Error fetching orders:', error);

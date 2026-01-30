@@ -3,6 +3,7 @@
 import { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { Client, InventoryMovement, Order, Product } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useInventory, useClientMovements } from '@/hooks/useInventory';
@@ -18,11 +19,13 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const { movements, loading: movementsLoading } = useClientMovements(id);
     const { products, loading: productsLoading } = useInventory();
     const { orders, loading: ordersLoading } = useOrders(id);
+    const scrollRef = useHorizontalScroll();
     const [loading, setLoading] = useState(true);
 
     const [showEditInvestors, setShowEditInvestors] = useState(false);
     const [investors, setInvestors] = useState<{ name: string, percentage: number }[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [historyLimit, setHistoryLimit] = useState(10);
 
     useEffect(() => {
         db.get('clients', id).then(c => {
@@ -87,7 +90,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         movements.forEach((m: InventoryMovement) => {
             const product = products.find(p => p.id === m.productId);
-            if (m.type === 'IN') {
+            // Exclude Transfers from "Invested" (INGRESOS)
+            const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+
+            if (m.type === 'IN' && !isTransfer) {
                 investedMovements += (m.quantity * (m.purchasePrice || product?.price || 0));
             } else if (m.type === 'SALE') {
                 sold += (m.quantity * (m.salePrice || 0));
@@ -116,7 +122,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         movements.forEach(m => {
             const product = products.find(p => p.id === m.productId);
-            if (m.type === 'IN') {
+            const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+
+            if (m.type === 'IN' && !isTransfer) {
                 history.push({
                     id: m.id,
                     date: m.date,
@@ -211,17 +219,12 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
             {/* Financial History */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Historial de Movimientos de Dinero</h3>
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Historial de Movimientos</h3>
                 </div>
                 <div
-                    className="overflow-x-auto overflow-y-auto max-h-[400px]"
-                    onWheel={(e) => {
-                        if (e.deltaY !== 0) {
-                            e.preventDefault();
-                            e.currentTarget.scrollLeft += e.deltaY;
-                        }
-                    }}
+                    className="overflow-x-auto"
+                    ref={scrollRef}
                 >
                     <table className="min-w-full divide-y divide-slate-200">
                         <thead className="bg-slate-50 sticky top-0 z-10">
@@ -235,10 +238,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         <tbody className="bg-white divide-y divide-slate-200">
                             {financialHistory.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados.</td>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos financieros registrados.</td>
                                 </tr>
                             ) : (
-                                financialHistory.map((item) => (
+                                financialHistory.slice(0, historyLimit).map((item) => (
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
                                             {item.date}
@@ -264,6 +267,26 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </tbody>
                     </table>
                 </div>
+                {(financialHistory.length > historyLimit || historyLimit > 10) && (
+                    <div className="p-2 bg-slate-50 border-t border-slate-100 text-center flex justify-center gap-4">
+                        {financialHistory.length > historyLimit && (
+                            <button
+                                onClick={() => setHistoryLimit(prev => prev + 10)}
+                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
+                            >
+                                Cargar 10 más
+                            </button>
+                        )}
+                        {historyLimit > 10 && (
+                            <button
+                                onClick={() => setHistoryLimit(prev => Math.max(10, prev - 10))}
+                                className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+                            >
+                                Cargar 10 menos
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Investors Table */}
@@ -347,8 +370,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inversor</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Parte de la inversión</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Parte del balance</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación en la inversión</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación saldo de la empresa</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">

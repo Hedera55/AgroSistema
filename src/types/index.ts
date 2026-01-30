@@ -116,7 +116,7 @@ export interface ClientStock {
 
 // --- Orders ---
 
-export type OrderType = 'SPRAYING' | 'SOWING';
+export type OrderType = 'SOWING' | 'APPLICATION' | 'HARVEST';
 export type OrderStatus = 'DRAFT' | 'PENDING' | 'CONFIRMED' | 'DONE';
 
 export interface OrderItem {
@@ -156,6 +156,13 @@ export interface InventoryMovement {
     createdAt?: string;
     updatedAt?: string;
     synced?: boolean;
+    harvestLaborCost?: number; // Total cost of harvest labor
+    harvestLaborPricePerHa?: number; // Price per hectare
+    contractorName?: string; // Name of the contractor
+    truckDriver?: string; // Name of the truck driver (for Carta de Porte)
+    plateNumber?: string; // Truck plate number
+    deliveryLocation?: string; // Destination location (for Sales)
+    receiverName?: string; // Name of person receiving/withdrawing (for Remito)
 }
 
 export interface Order {
@@ -175,6 +182,7 @@ export interface Order {
     // Details
     treatedArea: number; // Hectares
     items: OrderItem[];
+    contractorName?: string; // For Harvest Orders made as Orders
 
     // Execution
     applicatorId?: string; // Link to profile id

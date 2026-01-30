@@ -8,7 +8,7 @@ interface StockMovementPanelProps {
     stockItems: any[]; // enriched items
     warehouses: Warehouse[]; // for transfer destination
     activeWarehouseId: string | null;
-    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string) => Promise<void>;
+    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => Promise<void>;
     onCancel: () => void;
 }
 
@@ -22,6 +22,7 @@ export function StockMovementPanel({
 }: StockMovementPanelProps) {
     const [action, setAction] = useState<'WITHDRAW' | 'TRANSFER'>('WITHDRAW');
     const [destinationId, setDestinationId] = useState('');
+    const [receiverName, setReceiverName] = useState('');
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -51,6 +52,10 @@ export function StockMovementPanel({
     });
 
     // We'll manage state properly:
+    // Check for items with invalid stock
+    const itemsWithNegativeStock = selectedItems.filter((item: any) => item.quantity <= 0);
+    const hasNegativeStock = itemsWithNegativeStock.length > 0;
+
     if (Object.keys(quantities).length === 0 && selectedItems.length > 0) {
         const initial: Record<string, number> = {};
         selectedItems.forEach((item: any) => initial[item.id] = item.quantity);
@@ -76,10 +81,8 @@ export function StockMovementPanel({
                 return;
             }
 
-            if (item.quantity <= 0) {
-                alert(`No es posible mover ${item.productName} porque no hay existencias positivas en este galpón.`);
-                return;
-            }
+            // item.quantity check is now handled via UI disable
+
 
             if (qty > item.quantity) {
                 alert(`No puede mover más de la cantidad disponible para ${item.productName}.`);
@@ -89,7 +92,7 @@ export function StockMovementPanel({
 
         setLoading(true);
         try {
-            await onConfirm(action, quantities, destinationId || undefined, note);
+            await onConfirm(action, quantities, destinationId || undefined, note, receiverName);
         } catch (e) {
             console.error(e);
             alert('Error al procesar movimiento');
@@ -116,10 +119,11 @@ export function StockMovementPanel({
                 <button
                     type="button"
                     onClick={() => setAction('WITHDRAW')}
+                    disabled={hasNegativeStock}
                     className={`flex-1 py-2 rounded-lg border font-bold text-sm transition-all flex items-center justify-center gap-2 ${action === 'WITHDRAW'
                         ? '!bg-orange-50 !border-orange-200 !text-orange-700 !ring-2 !ring-orange-100'
                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                        }`}
+                        } ${hasNegativeStock ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="12" y1="19" x2="12" y2="5"></line>
@@ -130,15 +134,32 @@ export function StockMovementPanel({
                 <button
                     type="button"
                     onClick={() => setAction('TRANSFER')}
+                    disabled={hasNegativeStock}
                     className={`flex-1 py-2 rounded-lg border font-bold text-sm transition-all ${action === 'TRANSFER'
                         ? 'text-orange-700 ring-2 ring-orange-100'
                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                        }`}
-                    style={action === 'TRANSFER' ? { backgroundColor: '#fff7ed', borderColor: '#fed7aa', color: '#c2410c' } : {}}
+                        } ${hasNegativeStock ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    style={!hasNegativeStock && action === 'TRANSFER' ? { backgroundColor: '#fff7ed', borderColor: '#fed7aa', color: '#c2410c' } : {}}
                 >
                     ⇆ Transferir a otro Galpón
                 </button>
             </div>
+
+            {hasNegativeStock && (
+                <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-lg text-sm border border-red-200 flex items-start gap-2">
+                    <span className="mt-0.5 font-bold">⚠️</span>
+                    <div>
+                        <p className="font-bold">No se puede mover stock negativo o cero.</p>
+                        <ul className="list-disc pl-4 mt-1 text-xs text-red-600">
+                            {itemsWithNegativeStock.map((item: any) => (
+                                <li key={item.id}>
+                                    {item.productName}: {item.quantity} {item.unit}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
 
             <div className="space-y-2 mb-4 max-h-[200px] overflow-y-auto pr-2">
                 {selectedItems.map((item: any) => (
@@ -182,6 +203,18 @@ export function StockMovementPanel({
                 </div>
             )}
 
+            {action === 'WITHDRAW' && (
+                <div className="mb-4 bg-orange-50 p-4 rounded-lg border border-orange-100 animate-fadeIn">
+                    <label className="block text-xs font-bold text-orange-800 uppercase mb-2">¿Quién retira?</label>
+                    <Input
+                        placeholder="Nombre y Apellido / Empresa"
+                        value={receiverName}
+                        onChange={e => setReceiverName(e.target.value)}
+                        className="bg-white"
+                    />
+                </div>
+            )}
+
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
                 <div className="flex items-center gap-2">
                     {!showNote ? (
@@ -218,7 +251,8 @@ export function StockMovementPanel({
                     <Button
                         onClick={handleSubmit}
                         isLoading={loading}
-                        className="bg-orange-600 hover:bg-orange-700"
+                        disabled={hasNegativeStock}
+                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
                     >
                         {action === 'WITHDRAW' ? 'Confirmar Retiro' : 'Confirmar Traslado'}
                     </Button>

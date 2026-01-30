@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { Order, OrderItem, Client } from '@/types';
+import { Order, OrderItem, Client, InventoryMovement } from '@/types';
 
 // Augment jsPDF type for autoTable
 interface AutoTableUserOptions {
@@ -134,5 +134,148 @@ export function usePDF() {
         doc.save(`Orden_${client.name}_Nro${order.orderNumber || order.id.substring(0, 5)}_${order.date}.pdf`);
     };
 
-    return { generateOrderPDF };
+    const generateRemitoPDF = async (movement: InventoryMovement, client: Client, warehouseName: string) => {
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(40);
+        doc.text("REMITO DE MERCADERÍA", pageWidth / 2, 20, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setTextColor(60);
+        doc.text(`Fecha: ${movement.date} ${movement.time || ''}`, pageWidth - 20, 30, { align: 'right' });
+        doc.text(`Comprobante Nro: ${movement.id.substring(0, 8).toUpperCase()}`, pageWidth - 20, 35, { align: 'right' });
+
+        // Origin/Destination Info
+        autoTable(doc, {
+            body: [
+                [`TITULAR: ${client.name}`, `CUIT: ${client.cuit || '-'}`],
+                [`ORIGEN: ${warehouseName}`, `DESTINO: ${movement.deliveryLocation || movement.receiverName || 'Retiro en Galpón'}`],
+                [`REFERENCIA: ${movement.referenceId}`, `TIPO: ${movement.type === 'SALE' ? 'VENTA' : 'RETIRO DE STOCK'}`]
+            ],
+            startY: 40,
+            theme: 'plain',
+            styles: { fontSize: 11, cellPadding: 2, textColor: 60 }
+        });
+
+        // Detail Table
+        autoTable(doc, {
+            head: [['Producto', 'Marca', 'Cantidad', 'Unidad']],
+            body: [
+                [
+                    movement.productName,
+                    movement.productBrand || '-',
+                    movement.quantity.toString(),
+                    movement.unit
+                ]
+            ],
+            startY: 70,
+            theme: 'grid',
+            headStyles: { fillColor: [70, 70, 70] }, // Dark Gray
+            styles: { fontSize: 12, cellPadding: 4 }
+        });
+
+        // Signatures
+        doc.setDrawColor(150);
+        const sigY = 150;
+
+        doc.line(20, sigY, 90, sigY);
+        doc.setFontSize(8);
+        doc.text("Entregué Conforme (Firma y Aclaración)", 20, sigY + 5);
+
+        doc.line(120, sigY, 190, sigY);
+        doc.text("Recibí Conforme (Firma y Aclaración)", 120, sigY + 5);
+
+        if (movement.receiverName) {
+            doc.setFontSize(10);
+            doc.text(`Recibe: ${movement.receiverName}`, 120, sigY + 12);
+        }
+
+        // Save
+        doc.save(`Remito_${movement.productName}_${movement.date}.pdf`);
+    };
+
+    const generateCartaDePortePDF = async (movement: InventoryMovement, client: Client, warehouseName: string) => {
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+
+        // Header
+        doc.setFillColor(200, 200, 200);
+        doc.rect(0, 0, pageWidth, 30, 'F');
+        doc.setFontSize(24);
+        doc.setTextColor(40);
+        doc.text("CARTA DE PORTE", pageWidth / 2, 20, { align: 'center' });
+
+        // Transport Info Box
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+
+        let currentY = 40;
+
+        autoTable(doc, {
+            body: [
+                ['FECHA DE CARGA', `${movement.date} ${movement.time || ''}`],
+                ['TITULAR DE LA CARTA', client.name],
+                ['CUIT', client.cuit || '-'],
+                ['ORIGEN (PROCEDENCIA)', warehouseName],
+                ['DESTINO', movement.deliveryLocation || '-']
+            ],
+            startY: currentY,
+            theme: 'grid',
+            headStyles: { fillColor: [200, 200, 200], textColor: 0, fontStyle: 'bold' },
+            bodyStyles: { lineColor: [0, 0, 0] }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+
+        // Cargo Info
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("DETALLE DE LA CARGA", 14, currentY);
+
+        autoTable(doc, {
+            head: [['Producto', 'Unidad', 'Cantidad (Kg/L)']],
+            body: [
+                [movement.productName, movement.unit, movement.quantity.toString()]
+            ],
+            startY: currentY + 5,
+            theme: 'grid',
+            headStyles: { fillColor: [0, 0, 0], textColor: 255 }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 15;
+
+        // Transportista Info
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("TRANSPORTISTA", 14, currentY);
+
+        autoTable(doc, {
+            body: [
+                ['NOMBRE / CHOFER', movement.truckDriver || '-'],
+                ['PATENTE CAMIÓN', movement.plateNumber || '-'],
+                ['PATENTE ACOPLADO', '-']
+            ],
+            startY: currentY + 5,
+            theme: 'grid'
+        });
+
+        // Signatures
+        const sigY = 240;
+        doc.setDrawColor(0);
+
+        doc.line(20, sigY, 90, sigY);
+        doc.setFontSize(8);
+        doc.text("Firma Cargador (Ingeniero)", 20, sigY + 5);
+
+        doc.line(120, sigY, 190, sigY);
+        doc.text("Firma Chofer", 120, sigY + 5);
+
+        // Save
+        doc.save(`CP_${movement.productName}_${movement.date}.pdf`);
+    };
+
+    return { generateOrderPDF, generateRemitoPDF, generateCartaDePortePDF };
 }

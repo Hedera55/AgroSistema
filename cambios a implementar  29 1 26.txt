@@ -41,3 +41,5 @@ Basically: Notas should dissapear, once I close the cargar stock box.
 17- When I erase an empresa, I still see it in the "empresas asignadas" in the usuarios page
 
 18- When a user changes from admin to client, if it had more than one empresa assigned, it mantains them. It should deselect all assigned empresas.
+
+

@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { syncService } from '@/services/sync';
 import { supabase } from '@/lib/supabase';
 import { StockMovementPanel } from '@/components/StockMovementPanel';
+import { usePDF } from '@/hooks/usePDF';
 
 interface EnrichedStockItem extends ClientStock {
     productName: string;
@@ -81,9 +82,23 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showSaleNote, setShowSaleNote] = useState(false);
     const [saleFacturaFile, setSaleFacturaFile] = useState<File | null>(null);
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
+
     const [facturaUploading, setFacturaUploading] = useState(false);
 
+    // New Sale Fields
+    const [saleTruckDriver, setSaleTruckDriver] = useState('');
+    const [salePlateNumber, setSalePlateNumber] = useState('');
+    const [saleDestination, setSaleDestination] = useState('');
+
+    // Success Ribbon State
+    const [lastMovement, setLastMovement] = useState<InventoryMovement | null>(null);
+    const [lastAction, setLastAction] = useState<'IN' | 'WITHDRAW' | 'TRANSFER' | 'SALE' | null>(null);
+    const [lastTransferOrigin, setLastTransferOrigin] = useState<string>('');
+
+    const { generateRemitoPDF, generateCartaDePortePDF } = usePDF();
+
     const unitInputRef = useRef<HTMLDivElement>(null);
+    const warehouseContainerRef = useRef<HTMLDivElement>(null);
 
     // Handle file selection
     const handleFacturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,6 +199,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setTempBrand('');
         }
     }, [selectedProductId, id, products]);
+
+    // Handle click outside to clear warehouse selection
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (warehouseContainerRef.current && !warehouseContainerRef.current.contains(event.target as Node)) {
+                setSelectedInManagerId(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     useEffect(() => {
         if (quantity) sessionStorage.setItem(`stock_quantity_${id}`, quantity);
@@ -415,7 +444,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setFacturaUploading(false);
             }
 
-            await db.put('movements', {
+            const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
                 productId: selectedProductId,
@@ -431,8 +460,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
-                synced: false
-            });
+                synced: false,
+                warehouseId: selectedWarehouseId,
+                purchasePrice: parseFloat(transactionPrice) || (product?.price && product.price > 0 ? product.price : undefined)
+            };
+
+            await db.put('movements', movementData);
+
+            setLastMovement(movementData);
+            setLastAction('IN');
 
             syncService.pushChanges();
 
@@ -445,6 +481,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setTempBrand('');
             setShowNote(false);
             setFacturaFile(null);
+            setTransactionPrice('');
         } catch (error) {
             console.error(error);
         } finally {
@@ -470,8 +507,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             if (saleFacturaFile) {
                 setFacturaUploading(true);
-                // Temporarily use the existing facturaFile state for the upload helper if needed, 
-                // but let's just use the saleFacturaFile directly in the helper logic or inline it.
                 const fileExt = saleFacturaFile.name.split('.').pop();
                 const filePath = `${id}/facturas/${movementId}.${fileExt}`;
                 const { error: uploadError } = await supabase.storage
@@ -492,7 +527,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 lastUpdated: new Date().toISOString()
             });
 
-            await db.put('movements', {
+            const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
                 warehouseId: stockItem.warehouseId,
@@ -510,8 +545,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
-                synced: false
-            });
+                synced: false,
+                truckDriver: saleTruckDriver || undefined,
+                plateNumber: salePlateNumber || undefined,
+                deliveryLocation: saleDestination || undefined
+            };
+
+            await db.put('movements', movementData);
+
+            setLastMovement(movementData);
+            setLastMovement(movementData);
+            setLastAction('SALE');
+            setLastTransferOrigin(stockItem.warehouseName);
 
             syncService.pushChanges();
             setSellingStockId(null);
@@ -520,6 +565,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setSaleNote('');
             setShowSaleNote(false);
             setSaleFacturaFile(null);
+            setSaleTruckDriver('');
+            setSalePlateNumber('');
+            setSaleDestination('');
         } catch (error) {
             console.error(error);
         } finally {
@@ -527,13 +575,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     };
 
-    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string) => {
+    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => {
         // Iterate over selected IDs
         // For each, create movement(s) and update stock
 
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Track the last movement created for the ribbon (usually just one in batch, but we take the last one)
+        let createdMovement: InventoryMovement | null = null;
 
         for (const itemId of selectedStockIds) {
             const item = enrichedStock.find(i => i.id === itemId);
@@ -545,7 +596,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const product = products.find(p => p.id === item.productId);
 
             // 1. Create OUT Movement (Origin)
-            await db.put('movements', {
+            const movementData: InventoryMovement = {
                 id: generateId(),
                 clientId: id,
                 warehouseId: item.warehouseId,
@@ -561,8 +612,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 notes: `${action === 'WITHDRAW' ? 'Retiro de stock' : 'Traslado a ' + (warehouses.find(w => w.id === destinationWarehouseId)?.name || 'galpón')} - ${note || ''}`,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
-                synced: false
-            });
+                synced: false,
+                receiverName: action === 'WITHDRAW' ? (receiverName || undefined) : undefined
+            };
+
+            await db.put('movements', movementData);
+
+            if (action === 'WITHDRAW') {
+                createdMovement = movementData;
+                setLastTransferOrigin(item.warehouseName);
+            }
 
             // 2. Update Origin Stock
             // We use updateStock logic manually or helper
@@ -602,7 +661,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 }
 
                 // IN movement record
-                await db.put('movements', {
+                const transferInMovement: InventoryMovement = {
                     id: generateId(),
                     clientId: id,
                     warehouseId: destinationWarehouseId,
@@ -619,12 +678,23 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     createdBy: displayName || 'Sistema',
                     createdAt: now.toISOString(),
                     synced: false
-                });
+                };
+                await db.put('movements', transferInMovement);
+                createdMovement = transferInMovement;
             }
         }
 
         syncService.pushChanges();
         handleClearSelection();
+
+        if (createdMovement) {
+            setLastMovement(createdMovement);
+            setLastAction(action);
+            if (action === 'TRANSFER') {
+                const item = enrichedStock.find(i => i.id === selectedStockIds[0]); // Use first item for origin
+                if (item) setLastTransferOrigin(item.warehouseName);
+            }
+        }
     };
 
     const toggleStockSelection = (id: string, e: React.MouseEvent) => {
@@ -772,6 +842,68 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
 
 
+            {/* Success Ribbon for PDF Download */}
+            {lastMovement && lastAction && (
+                <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 mb-4 rounded-r-lg shadow-sm animate-fadeIn flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        </div>
+                        <div>
+                            <p className="font-bold text-emerald-800">
+                                {lastAction === 'SALE' ? `Venta registrada exitosamente (Origen: ${lastTransferOrigin})` :
+                                    lastAction === 'TRANSFER' ? `Traslado registrado exitosamente (${lastTransferOrigin} ➝ ${warehouses.find(w => w.id === lastMovement.warehouseId)?.name})` :
+                                        lastAction === 'WITHDRAW' ? `Retiro registrado exitosamente (Origen: ${lastTransferOrigin})` :
+                                            'Ingreso registrado exitosamente'}
+                            </p>
+                            <p className="text-sm text-emerald-600">
+                                {lastMovement.productName} ({lastMovement.productBrand}) - {lastMovement.quantity} {lastMovement.unit}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        {(lastAction === 'IN' || lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
+                            <Button
+                                onClick={async () => {
+                                    const client = await db.get('clients', id) as any;
+                                    const warehouse = warehouses.find(w => w.id === lastMovement.warehouseId);
+                                    if (client && warehouse) {
+                                        generateRemitoPDF(lastMovement, client, warehouse.name);
+                                    }
+                                }}
+                                variant="outline"
+                                className="border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                            >
+                                📄 {lastAction === 'IN' ? 'Descargar Comprobante' : 'Descargar Remito'}
+                            </Button>
+                        )}
+                        {lastAction === 'SALE' && (
+                            <Button
+                                onClick={async () => {
+                                    const client = await db.get('clients', id) as any;
+                                    const warehouse = warehouses.find(w => w.id === lastMovement.warehouseId);
+                                    if (client && warehouse) {
+                                        generateCartaDePortePDF(lastMovement, client, warehouse.name);
+                                    }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                🚛 Descargar Carta de Porte
+                            </Button>
+                        )}
+                        <button
+                            onClick={() => {
+                                setLastMovement(null);
+                                setLastAction(null);
+                            }}
+                            className="text-slate-400 hover:text-slate-600 px-2"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Input Form */}
 
 
@@ -877,6 +1009,31 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                             <div className="flex gap-2 mb-1">
                                                                 <Button type="submit" size="sm" disabled={isSubmitting || facturaUploading}>Confirmar Venta</Button>
                                                             </div>
+                                                        </div>
+
+                                                        {/* Transport Info */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                            <Input
+                                                                label="Chofer (Transportista)"
+                                                                value={saleTruckDriver}
+                                                                onChange={e => setSaleTruckDriver(e.target.value)}
+                                                                placeholder="Nombre Completo"
+                                                                className="bg-white h-9"
+                                                            />
+                                                            <Input
+                                                                label="Patente Camión"
+                                                                value={salePlateNumber}
+                                                                onChange={e => setSalePlateNumber(e.target.value)}
+                                                                placeholder="AAA 123"
+                                                                className="bg-white h-9"
+                                                            />
+                                                            <Input
+                                                                label="Destino / Entrega"
+                                                                value={saleDestination}
+                                                                onChange={e => setSaleDestination(e.target.value)}
+                                                                placeholder="Localidad / Acopio"
+                                                                className="bg-white h-9"
+                                                            />
                                                         </div>
 
                                                         {showSaleNote && (
@@ -1014,7 +1171,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             Agregar
                         </Button>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-3" ref={warehouseContainerRef}>
 
                         {warehouses.map(w => (
                             <div
@@ -1050,7 +1207,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         </div>
                                         <div className="flex-1">
                                             {editingWarehouseId === w.id ? (
-                                                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                                <div className="flex gap-2">
                                                     <input
                                                         autoFocus
                                                         className="flex-1 text-sm border-2 border-emerald-500 rounded px-2 py-1 outline-none"
@@ -1095,7 +1252,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                         {activeWarehouseId !== w.id && (
                                                             <button
                                                                 onClick={(e) => {
-                                                                    e.stopPropagation();
                                                                     setActiveWarehouseId(w.id);
                                                                     setSelectedStockIds([]);
                                                                     setSellingStockId(null);
@@ -1108,7 +1264,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                         )}
                                                         <button
                                                             onClick={(e) => {
-                                                                e.stopPropagation();
                                                                 setEditingWarehouseId(w.id);
                                                                 setEditName(w.name);
                                                             }}
@@ -1120,7 +1275,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                 )}
                                                 <button
                                                     onClick={(e) => {
-                                                        e.stopPropagation();
                                                         if (editingWarehouseId === w.id) {
                                                             setEditingWarehouseId(null);
                                                         } else {

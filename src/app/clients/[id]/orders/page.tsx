@@ -3,6 +3,7 @@
 import { use, useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { Button } from '@/components/ui/Button';
 import { Order, Farm, Lot, Client } from '@/types';
 import { usePDF } from '@/hooks/usePDF';
@@ -20,8 +21,10 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
     // Local state for lots (since useLots is farm-specific)
     const [lots, setLots] = useState<Lot[]>([]);
-    const [lotsLoading, setLotsLoading] = useState(true);
+    const [dataLoading, setDataLoading] = useState(true);
+    const scrollRef = useHorizontalScroll();
     const [client, setClient] = useState<Client | null>(null);
+    const [ordersLimit, setOrdersLimit] = useState(16);
 
     // Load lots and client separately
     useEffect(() => {
@@ -32,19 +35,51 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             ]);
             setLots(allLots);
             setClient(clientData || null);
-            setLotsLoading(false);
+            setDataLoading(false);
         }
         loadExtras();
     }, [id]);
 
-    const loading = ordersLoading || farmsLoading || lotsLoading;
+    const loading = ordersLoading || farmsLoading || dataLoading;
 
     // Enrich orders with Farm/Lot names
     const orders = useMemo(() => {
         if (loading) return [];
-        let filtered = rawOrders;
-        // Previously we filtered by applicatorId, but now we'll show all orders 
-        // for assigned clients to simplify the workflow.
+        let filtered = rawOrders.filter(o => o.type !== 'HARVEST');
+        if (role === 'CONTRATISTA') {
+            // Contractors only need to see their assigned orders (filtered above by type? No, wait)
+            // If contractors NEED to see Harvest orders, we shouldn't filter them out globally here 
+            // if the goal was "Orders of 'cosecha' should not appear in the órdenes table" for the client/admin.
+            // But contractors *do* need to see them as per previous request.
+            // So: 
+            // If Client/Admin -> Exclude Harvest (filtered).
+            // If Contractor -> Include Harvest (don't filter) BUT filter by applicatorId.
+
+            // Re-evaluating:
+            // The previous request was "Ensure Harvest Order visibility for Contractors".
+            // The NEW request is "Orders of 'cosecha' should not appear in the órdenes table".
+            // Usually "Orders Table" implies the Client's view.
+            // Contractors have their own filtered view.
+
+            // Let's filter HARVEST out for everyone *except* contractors? 
+            // Or maybe the user implies the "Ordenes" page is for "Sowing/Application" planning.
+            // Let's assume for now keeping Harvest visible for contractors is correct, 
+            // but hiding it for everyone else.
+        }
+
+        // Actually, cleaner logic:
+        // 1. Start with filtered by harvest exclusion (default preference)
+        // 2. BUT if contractor, they MIGHT need it? 
+        // Let's look at the logic.
+
+        filtered = rawOrders;
+
+        if (role === 'CONTRATISTA') {
+            filtered = filtered.filter(o => o.applicatorId === profile?.id);
+        } else {
+            // For Admin/Client, hide HARVEST orders as requested
+            filtered = filtered.filter(o => o.type !== 'HARVEST');
+        }
         return filtered.map(o => ({
             ...o,
             farmName: farms.find(f => f.id === o.farmId)?.name || 'Unknown Farm',
@@ -66,6 +101,22 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     const handleToggleStatus = async (orderId: string) => {
         const order = orders.find(o => o.id === orderId);
         if (!order) return;
+        if (order.status === 'DONE' && order.type === 'SOWING') {
+            // Check based on Order History rather than mutable Lot status.
+            // We cannot revert a Sowing if there is a subsequent Harvest order.
+            const hasSubsequentHarvest = rawOrders.some(o =>
+                o.type === 'HARVEST' &&
+                o.lotId === order.lotId &&
+                // Only consider valid harvest orders (not cancelled if that status exists, though usually deleted are filtered)
+                o.date >= order.date // String comparison works for YYYY-MM-DD
+            );
+
+            if (hasSubsequentHarvest) {
+                alert('Ya ha sido cosechada');
+                return;
+            }
+        }
+
         const nextStatus = order.status === 'DONE' ? 'PENDING' : 'DONE';
 
         try {
@@ -89,6 +140,23 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             };
 
             await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema', auditData, finalPrice);
+
+            // AUTO-UPDATE-LOT: If unapplying a Sowing order, revert lot to EMPTY
+            if (nextStatus === 'PENDING' && order.type === 'SOWING') {
+                const lot = lots.find(l => l.id === order.lotId);
+                if (lot) {
+                    await db.put('lots', {
+                        ...lot,
+                        status: 'EMPTY',
+                        cropSpecies: '',     // Clear crop
+                        yield: 0,            // Clear yield
+                        observedYield: 0,    // Clear observed
+                        updatedAt: new Date().toISOString()
+                    });
+                    // Refresh local state to reflect change immediately (optional but good)
+                    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: 'EMPTY', cropSpecies: '', yield: 0, observedYield: 0 } : l));
+                }
+            }
         } catch (e) {
             alert('Error al actualizar el estado');
         }
@@ -109,16 +177,6 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return orderDate < today;
-    };
-
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-    const handleWheel = (e: React.WheelEvent) => {
-        if (scrollContainerRef.current) {
-            e.preventDefault();
-            // Translate vertical scroll into horizontal scroll
-            scrollContainerRef.current.scrollLeft += e.deltaY;
-        }
     };
 
     const handleEditPrice = async (orderId: string, currentPrice?: number) => {
@@ -158,8 +216,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             </div>
 
             <div
-                ref={scrollContainerRef}
-                onWheel={handleWheel}
+                ref={scrollRef}
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto"
             >
                 {loading ? (
@@ -185,7 +242,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
-                            {orders.map(order => (
+                            {orders.slice(0, ordersLimit).map(order => (
                                 <tr key={order.id} className="hover:bg-slate-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
                                         {order.orderNumber || '---'}
@@ -199,8 +256,10 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                         <div className="text-xs text-slate-400">{order.farmName}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        {order.plantingDensity ? (
+                                        {order.type === 'SOWING' ? (
                                             <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
+                                        ) : order.type === 'HARVEST' ? (
+                                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Cosecha</span>
                                         ) : (
                                             <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
                                         )}
@@ -215,9 +274,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                             'bg-gray-100 text-gray-800'}`}
                                             title={isReadOnly ? '' : "Click para cambiar estado"}
                                         >
-                                            {order.status === 'DONE' ? 'APLICADA' :
+                                            {order.status === 'DONE' ? (order.type === 'HARVEST' ? 'COSECHADA' : 'APLICADA') :
                                                 (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
-                                                    order.status === 'PENDING' ? 'PENDIENTE' : order.status}
+                                                    order.status === 'PENDING' ? 'PENDIENTE' :
+                                                        order.status === 'CONFIRMED' ? 'PLANIFICADA' :
+                                                            order.status}
                                         </button>
                                     </td>
                                     <td
@@ -269,6 +330,26 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         </tbody>
                     </table>
                 )}
+                {(orders.length > ordersLimit || ordersLimit > 16) && (
+                    <div className="p-2 bg-slate-50 border-t border-slate-100 text-center flex justify-center gap-4">
+                        {orders.length > ordersLimit && (
+                            <button
+                                onClick={() => setOrdersLimit(prev => prev + 10)}
+                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
+                            >
+                                Cargar 10 más
+                            </button>
+                        )}
+                        {ordersLimit > 16 && (
+                            <button
+                                onClick={() => setOrdersLimit(prev => Math.max(16, prev - 10))}
+                                className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+                            >
+                                Cargar 10 menos
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {!loading && (
@@ -277,7 +358,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         <button
                             className="bg-slate-50 text-slate-500 text-xs px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-emerald-600 hover:bg-white transition-all font-medium"
                         >
-                            Historial de Órdenes
+                            Historial de Cambios
                         </button>
                     </Link>
                 </div>

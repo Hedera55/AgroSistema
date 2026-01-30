@@ -212,21 +212,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
             await addOrder(order, items, displayName || 'Sistema');
 
-            // Update Lot crop if seeds were added
-            if (containsSeeds && selectedLot) {
-                const seedNames = items
-                    .filter(item => products.find(p => p.id === item.productId)?.type === 'SEED')
-                    .map(item => item.productName)
-                    .join(' + ');
-
-                await db.put('lots', {
-                    ...selectedLot,
-                    cropSpecies: seedNames,
-                    status: 'SOWED',
-                    updatedAt: new Date().toISOString(),
-                    synced: false
-                });
-            }
+            // Lot update is now handled by the order status toggle (Pending -> Done).
+            // We do NOT update the lot to SOWED immediately upon creation (Pending).
 
             router.push(`/clients/${clientId}/orders`);
         } catch (e) {
@@ -238,7 +225,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     return (
         <div className="max-w-3xl mx-auto space-y-8">
             <div>
-                <h1 className="text-3xl font-bold text-slate-900">Nueva Orden de Pulverización</h1>
+                <h1 className="text-3xl font-bold text-slate-900">Nueva Orden</h1>
                 <p className="text-slate-500">Crear una prescripción para aplicación de insumos.</p>
             </div>
 
@@ -300,16 +287,6 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         </select>
                     </div>
 
-                    <div className="w-full">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Origen (Galpón)</label>
-                        <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
-                            value={selectedOrderWarehouseId}
-                            onChange={e => setSelectedOrderWarehouseId(e.target.value)}
-                        >
-                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                        </select>
-                    </div>
 
                     <div className="w-full">
                         <label className="block text-sm font-medium text-slate-700 mb-1">Aplicador (Contratista)</label>
@@ -359,6 +336,17 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     </div>
 
                     <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm space-y-4">
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Origen (Galpón)</label>
+                            <select
+                                className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                                value={selectedOrderWarehouseId}
+                                onChange={e => setSelectedOrderWarehouseId(e.target.value)}
+                            >
+                                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                            </select>
+                        </div>
+
                         <div className="flex gap-4 items-end">
                             <div className="flex-1">
                                 <label className="block text-xs font-medium text-slate-500 mb-1">Producto</label>
@@ -453,6 +441,9 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                         {item.plantingSpacing && (
                                             <span className="font-medium text-blue-600">Espaciamiento: {item.plantingSpacing} cm</span>
                                         )}
+                                        {item.expectedYield && (
+                                            <span className="font-medium text-emerald-600">Rinde Esperado: {item.expectedYield} kg/ha</span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-6">
@@ -516,20 +507,27 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             <div className="col-span-2 bg-emerald-50 px-3 py-1 rounded text-emerald-800 border border-emerald-100">
                                 <span className="font-bold opacity-60">Ventana de aplicación:</span> {appStart} • {appEnd}
                             </div>
-                            {containsSeeds && plantingDensity && (
-                                <>
+                            {containsSeeds && (() => {
+                                const seedItem = items.find(i => availableProducts.find(p => p.id === i.productId)?.type === 'SEED');
+                                return seedItem && (
                                     <div className="col-span-2 grid grid-cols-2 gap-4 py-2 border-t border-b border-slate-100 mt-2">
                                         <div>
                                             <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Densidad</span>
-                                            <span className="font-medium">{plantingDensity} {plantingDensityUnit === 'PLANTS_HA' ? 'plant/ha' : 'kg/ha'}</span>
+                                            <span className="font-medium">
+                                                {seedItem.plantingDensity || '-'} {seedItem.plantingDensityUnit === 'PLANTS_HA' ? 'plant/ha' : 'kg/ha'}
+                                            </span>
                                         </div>
                                         <div>
                                             <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Espaciamiento entre hileras</span>
-                                            <span className="font-medium">{plantingSpacing ? `${plantingSpacing} cm` : '-'}</span>
+                                            <span className="font-medium">{seedItem.plantingSpacing ? `${seedItem.plantingSpacing} cm` : '-'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Rinde Esperado</span>
+                                            <span className="font-medium">{seedItem.expectedYield ? `${seedItem.expectedYield} kg/ha` : '-'}</span>
                                         </div>
                                     </div>
-                                </>
-                            )}
+                                );
+                            })()}
                             <div><span className="text-slate-500">Galpón:</span> <span className="font-medium">{warehouses.find(w => w.id === selectedOrderWarehouseId)?.name || 'Cargando...'}</span></div>
                             <div><span className="text-slate-500">Aplicador:</span> <span className="font-medium">{contractors.find(c => c.id === selectedApplicatorId)?.username || 'No asignado'}</span></div>
                         </div>

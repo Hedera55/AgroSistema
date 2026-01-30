@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { db } from '@/services/db';
 import { InventoryMovement } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -12,6 +13,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [productsKey, setProductsKey] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
+    const scrollRef = useHorizontalScroll();
     const [ordersKey, setOrdersKey] = useState<Record<string, string>>({});
     const [warehousesKey, setWarehousesKey] = useState<Record<string, string>>({});
 
@@ -143,24 +145,19 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 ) : (
                     <div
                         className="overflow-x-auto"
-                        onWheel={(e) => {
-                            if (e.deltaY !== 0) {
-                                e.preventDefault();
-                                e.currentTarget.scrollLeft += e.deltaY;
-                            }
-                        }}
+                        ref={scrollRef}
                     >
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase"></th>
                                 </tr>
                             </thead>
@@ -205,12 +202,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         const { date, time } = formatDate(m.date);
 
                                         // Determine Label and Tooltip
-                                        let label = 'EGRESO-T';
+                                        let label = 'EGRESO-R';
                                         let labelClass = 'bg-orange-100 text-orange-800';
-                                        let tooltip = 'Transferencia';
+                                        let tooltip = 'Retiro de stock';
 
                                         if (m.isTransfer) {
-                                            label = 'TRASLADO';
+                                            label = 'TRANSFERENCIA';
                                             labelClass = 'bg-indigo-100 text-indigo-800';
                                             tooltip = 'Traslado entre galpones';
                                         } else if (m.type === 'IN') {
@@ -235,26 +232,32 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             }
                                         }
 
-                                        // Calculate value - ONLY for SALES and IN
+                                        // Calculate value - ONLY for compras (IN) and ventas (SALE)
                                         let totalValue = 0;
+                                        let unitPrice = 0;
                                         let isEstimate = false;
                                         let showValue = false;
 
-                                        if (m.type === 'SALE' && m.salePrice) {
-                                            totalValue = m.salePrice * m.quantity;
-                                            showValue = true;
-                                        } else if (m.type === 'IN' && !m.isTransfer) {
-                                            if (m.purchasePrice) {
-                                                totalValue = m.purchasePrice * m.quantity;
-                                            } else {
-                                                const currentPrice = productsKey[m.productId];
-                                                if (currentPrice) {
-                                                    totalValue = currentPrice * m.quantity;
-                                                    isEstimate = true;
-                                                }
+                                        if (m.type === 'IN' && !m.isTransfer) {
+                                            unitPrice = m.purchasePrice || 0;
+                                            if (!unitPrice) {
+                                                unitPrice = productsKey[m.productId] || 0;
+                                                isEstimate = true;
                                             }
-                                            showValue = true;
+                                            totalValue = unitPrice * m.quantity;
+                                            showValue = totalValue > 0;
+                                        } else if (m.type === 'SALE') {
+                                            unitPrice = m.salePrice || 0;
+                                            if (!unitPrice) {
+                                                unitPrice = productsKey[m.productId] || 0;
+                                                isEstimate = true;
+                                            }
+                                            totalValue = unitPrice * m.quantity;
+                                            showValue = totalValue > 0;
                                         }
+
+                                        const priceLabel = m.type === 'IN' ? 'Precio de compra' : 'Precio de venta';
+                                        const valueTooltip = `${priceLabel}: $${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${m.unit}`;
 
                                         return (
                                             <tr key={m.id} className="hover:bg-slate-50 group">
@@ -262,18 +265,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <div className="text-slate-900">{date}</div>
                                                     <div className="text-xs text-slate-400">{time}</div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {m.isTransfer ? (
-                                                        <div className="flex items-center gap-1 text-xs">
-                                                            <span className="font-bold text-slate-700">{m.originName}</span>
-                                                            <span className="text-slate-300">→</span>
-                                                            <span className="font-bold text-emerald-600">{m.destName}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-slate-500">{warehousesKey[m.warehouseId || ''] || '-'}</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-800">
+                                                <td className="px-6 py-4 font-medium text-slate-800">
                                                     {m.productName}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -289,7 +281,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
                                                     {showValue && totalValue > 0 ? (
-                                                        <span title={isEstimate ? "Valor estimado según precio actual" : "Valor reportado"}>
+                                                        <span title={valueTooltip}>
                                                             ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                             {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
                                                         </span>
@@ -302,6 +294,17 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-slate-400 italic">
                                                     {m.createdBy || 'Sistema'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {m.isTransfer ? (
+                                                        <div className="flex items-center gap-1 text-xs">
+                                                            <span className="font-bold text-slate-700">{m.originName}</span>
+                                                            <span className="text-slate-300">→</span>
+                                                            <span className="font-bold text-emerald-600">{m.destName}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-500">{warehousesKey[m.warehouseId || ''] || '-'}</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right">
                                                     <div className="flex items-center justify-end gap-2">

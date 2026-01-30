@@ -55,6 +55,10 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - **English**: Please speak in english, I believe agents code better in that language
 
+- **Technical context**: I asked the agent to create a file with clues, so future agent versions could read it and get information without having to read all the code,
+  If he agreed it was useful, which he did,
+  And to update it as he saw useful.
+
 + . + . + . + . + . + . +
 
 

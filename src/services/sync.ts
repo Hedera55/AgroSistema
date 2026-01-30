@@ -475,6 +475,26 @@ export class SyncService {
                         console.error(`⚠️ Schema mismatch on ${tableName}: ${error.message}. Please ensure migrations are run.`);
                     } else {
                         console.error(`Failed to push ${localStoreName}/${item.id}:`, error.message);
+
+                        // Auto-fix for legacy grain IDs or references that are not UUIDs
+                        if (error.message.includes('invalid input syntax for type uuid') &&
+                            (
+                                (item.id as string).startsWith('grain-') ||
+                                // Check potential UUID fields for legacy/invalid values
+                                ['productId', 'product_id', 'referenceId', 'reference_id'].some(key => {
+                                    const val = (item as any)[key];
+                                    return typeof val === 'string' && (val.startsWith('grain-') || val.startsWith('SERVICE-'));
+                                })
+                            )
+                        ) {
+                            console.warn(`🗑️ Auto-deleting item with invalid UUID reference: ${item.id}`);
+                            try {
+                                await db.delete(localStoreName, item.id);
+                                console.log(`✅ Deleted invalid item ${item.id}. Sync should recover on next retry.`);
+                            } catch (delError) {
+                                console.error(`Failed to auto-delete invalid item ${item.id}`, delError);
+                            }
+                        }
                     }
                 } else {
                     await db.markSynced(localStoreName, item.id);

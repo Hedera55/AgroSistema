@@ -10,6 +10,7 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
     const [activities, setActivities] = useState<OrderActivity[]>([]);
     const [orders, setOrders] = useState<Record<string, Order>>({});
     const [loading, setLoading] = useState(true);
+    const [activitiesLimit, setActivitiesLimit] = useState(20);
 
     useEffect(() => {
         async function loadData() {
@@ -50,7 +51,7 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
             <div className="flex items-center justify-between">
                 <div>
                     <Link href={`/clients/${clientId}/orders`} className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block">← Volver a Órdenes</Link>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Historial de Órdenes</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Historial de Cambios de Órdenes</h1>
                     <p className="text-slate-500 mt-1">Registro de cambios y creación de órdenes.</p>
                 </div>
             </div>
@@ -83,7 +84,7 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200 text-sm">
-                                {activities.map((a) => {
+                                {activities.slice(0, activitiesLimit).map((a) => {
                                     const { date, time } = formatDate(a.timestamp);
                                     const order = orders[a.orderId];
                                     const displayNum = a.orderNumber || order?.orderNumber || '---';
@@ -118,6 +119,26 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                )}
+                {(activities.length > activitiesLimit || activitiesLimit > 20) && (
+                    <div className="p-2 bg-slate-50 border-t border-slate-100 text-center flex justify-center gap-4">
+                        {activities.length > activitiesLimit && (
+                            <button
+                                onClick={() => setActivitiesLimit(prev => prev + 10)}
+                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
+                            >
+                                Cargar 10 más
+                            </button>
+                        )}
+                        {activitiesLimit > 20 && (
+                            <button
+                                onClick={() => setActivitiesLimit(prev => Math.max(20, prev - 10))}
+                                className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+                            >
+                                Cargar 10 menos
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
