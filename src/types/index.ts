@@ -132,6 +132,7 @@ export interface OrderItem {
     plantingDensity?: number;
     plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
     plantingSpacing?: number;
+    expectedYield?: number;
 }
 
 export interface InventoryMovement {
