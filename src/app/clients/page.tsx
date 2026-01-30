@@ -76,34 +76,10 @@ export default function ClientsPage() {
     }, [clients, isMaster, showAll, profile]);
 
     const [newClient, setNewClient] = useState({ name: '', cuit: '' });
-    const [investors, setInvestors] = useState<{ id: string, name: string, percentage: number }[]>([]);
-
-    const addInvestor = () => {
-        setInvestors([...investors, { id: generateId(), name: '', percentage: 0 }]);
-    };
-
-    const removeInvestor = (id: string) => {
-        setInvestors(investors.filter(i => i.id !== id));
-    };
-
-    const updateInvestor = (id: string, field: 'name' | 'percentage', value: string) => {
-        setInvestors(investors.map(i => {
-            if (i.id === id) {
-                return { ...i, [field]: field === 'percentage' ? parseFloat(value) || 0 : value };
-            }
-            return i;
-        }));
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newClient.name) return;
-
-        const totalPercentage = investors.reduce((sum, i) => sum + i.percentage, 0);
-        if (totalPercentage > 100.01) { // Floating point leeway
-            alert('El porcentaje total de los inversores no puede superar el 100%.');
-            return;
-        }
 
         setIsSubmitting(true);
         try {
@@ -111,7 +87,8 @@ export default function ClientsPage() {
                 id: isEditing ? editingClientId! : generateId(),
                 name: newClient.name,
                 cuit: newClient.cuit,
-                investors: investors.map(i => ({ name: i.name, percentage: i.percentage }))
+                // Inherit or keep empty investors; they are managed in the Investors tab now
+                investors: isEditing ? clients.find(c => c.id === editingClientId)?.investors || [] : []
             };
 
             if (isEditing) {
@@ -123,7 +100,6 @@ export default function ClientsPage() {
             setIsEditing(false);
             setEditingClientId(null);
             setNewClient({ name: '', cuit: '' });
-            setInvestors([]);
         } finally {
             setIsSubmitting(false);
         }
@@ -151,7 +127,6 @@ export default function ClientsPage() {
                                 setIsEditing(false);
                                 setEditingClientId(null);
                                 setNewClient({ name: '', cuit: '' });
-                                setInvestors([]);
                             }
                             setShowForm(!showForm);
                         }}>
@@ -168,7 +143,6 @@ export default function ClientsPage() {
                             setIsEditing(false);
                             setEditingClientId(null);
                             setNewClient({ name: '', cuit: '' });
-                            setInvestors([]);
                             setShowForm(false);
                         }}
                         className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -176,7 +150,7 @@ export default function ClientsPage() {
                     >
                         ✕
                     </button>
-                    
+
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-slate-800">
                             {isEditing ? 'Editar Empresa' : 'Nueva Empresa'}
@@ -191,7 +165,6 @@ export default function ClientsPage() {
                                         setIsEditing(false);
                                         setEditingClientId(null);
                                         setNewClient({ name: '', cuit: '' });
-                                        setInvestors([]);
                                     }
                                 }}
                                 className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors mr-6"
@@ -216,60 +189,7 @@ export default function ClientsPage() {
                             onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
                         />
 
-                        {/* Investors Section */}
-                        <div className="md:col-span-3 border-t border-slate-100 pt-4 mt-2">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-tight">Inversores / Socios</h3>
-                                <button
-                                    type="button"
-                                    onClick={addInvestor}
-                                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
-                                >
-                                    + Agregar Inversor
-                                </button>
-                            </div>
-
-                            {investors.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic mb-4">No hay inversores definidos para esta empresa.</p>
-                            ) : (
-                                <div className="space-y-3 mb-4">
-                                    {investors.map((investor, idx) => (
-                                        <div key={investor.id} className="flex gap-2 items-end animate-fadeIn">
-                                            <div className="flex-1">
-                                                <Input
-                                                    label={idx === 0 ? "Nombre del Inversor" : ""}
-                                                    placeholder="ej. Juan Perez"
-                                                    value={investor.name}
-                                                    onChange={e => updateInvestor(investor.id, 'name', e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="w-24">
-                                                <Input
-                                                    label={idx === 0 ? "% Part." : ""}
-                                                    type="number"
-                                                    placeholder="0"
-                                                    value={investor.percentage.toString()}
-                                                    onChange={e => updateInvestor(investor.id, 'percentage', e.target.value)}
-                                                />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeInvestor(investor.id)}
-                                                className="h-10 w-10 flex items-center justify-center text-slate-300 hover:text-red-500 mb-0.5 transition-colors"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <div
-                                        className={`flex justify-end text-[10px] font-bold uppercase tracking-widest transition-colors ${investors.reduce((sum, i) => sum + i.percentage, 0) < 99.99 ? 'text-red-500' : 'text-slate-500'}`}
-                                        title={investors.reduce((sum, i) => sum + i.percentage, 0) < 99.99 ? "Porcentaje menor a 100" : ""}
-                                    >
-                                        Total: {investors.reduce((sum, i) => sum + i.percentage, 0).toFixed(2)}%
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        {/* Investors section removed here - managed in Investors tab */}
 
                         <Button type="submit" isLoading={isSubmitting} className="md:col-start-3">
                             {isEditing ? 'Actualizar Empresa' : 'Guardar Empresa'}
@@ -330,7 +250,6 @@ export default function ClientsPage() {
                                                             name: client.name,
                                                             cuit: client.cuit || ''
                                                         });
-                                                        setInvestors((client.investors || []).map(i => ({ ...i, id: generateId() })));
                                                         setEditingClientId(client.id);
                                                         setIsEditing(true);
                                                         setShowForm(true);

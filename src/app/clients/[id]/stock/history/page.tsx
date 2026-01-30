@@ -12,12 +12,15 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [productsKey, setProductsKey] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
+    const [ordersKey, setOrdersKey] = useState<Record<string, string>>({});
+    const [warehousesKey, setWarehousesKey] = useState<Record<string, string>>({});
 
     async function loadData() {
-        const [allMovements, allProducts, allOrders] = await Promise.all([
+        const [allMovements, allProducts, allOrders, allWarehouses] = await Promise.all([
             db.getAll('movements'),
             db.getAll('products'),
-            db.getAll('orders')
+            db.getAll('orders'),
+            db.getAll('warehouses')
         ]);
 
         const clientMovements = allMovements
@@ -36,13 +39,33 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             orderTypeMap[o.id] = o.type;
         });
 
+        // Map warehouses for consolidation
+        const wMap: Record<string, string> = {};
+        allWarehouses.forEach((w: any) => {
+            wMap[w.id] = w.name;
+        });
+
         setMovements(clientMovements);
         setProductsKey(priceMap);
         setOrdersKey(orderTypeMap);
+        setWarehousesKey(wMap);
         setLoading(false);
     }
 
-    const [ordersKey, setOrdersKey] = useState<Record<string, string>>({});
+    const handleDeleteMovement = async (id: string, partnerId?: string) => {
+        if (!confirm('¿Eliminar este movimiento? (No afectará al stock actual, solo al historial)')) return;
+
+        try {
+            await db.delete('movements', id);
+            if (partnerId) {
+                await db.delete('movements', partnerId);
+            }
+            await loadData();
+        } catch (error) {
+            console.error('Error deleting movement:', error);
+            alert('Error al eliminar');
+        }
+    };
 
     useEffect(() => {
         loadData();
@@ -118,11 +141,20 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         <p className="text-slate-500">No hay registros de ingresos o egresos todavía.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <div
+                        className="overflow-x-auto"
+                        onWheel={(e) => {
+                            if (e.deltaY !== 0) {
+                                e.preventDefault();
+                                e.currentTarget.scrollLeft += e.deltaY;
+                            }
+                        }}
+                    >
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
@@ -133,129 +165,190 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200 text-sm">
-                                {movements.map((m) => {
-                                    const { date, time } = formatDate(m.date);
+                                {(() => {
+                                    const groupedMovements: any[] = [];
+                                    const processedIds = new Set();
 
-                                    // Determine Label and Tooltip
-                                    let label = 'EGRESO-T';
-                                    let labelClass = 'bg-orange-100 text-orange-800';
-                                    let tooltip = 'Transferencia';
+                                    movements.forEach((m: InventoryMovement) => {
+                                        if (processedIds.has(m.id)) return;
 
-                                    if (m.type === 'IN') {
-                                        label = 'INGRESO-C';
-                                        labelClass = 'bg-green-100 text-green-800';
-                                        tooltip = 'Compra';
-                                    } else if (m.type === 'HARVEST') {
-                                        label = 'INGRESO-CC';
-                                        labelClass = 'bg-lime-100 text-lime-800';
-                                        tooltip = 'Cosecha';
-                                    } else if (m.type === 'SALE') {
-                                        label = 'EGRESO-V';
-                                        labelClass = 'bg-blue-100 text-blue-800';
-                                        tooltip = 'Venta';
-                                    } else if (m.type === 'OUT') {
-                                        // Check if it's Sowing
-                                        const orderType = ordersKey[m.referenceId];
-                                        if (orderType === 'SOWING') {
-                                            label = 'EGRESO-S';
-                                            labelClass = 'bg-emerald-100 text-emerald-800';
-                                            tooltip = 'Siembra';
-                                        }
-                                    }
+                                        if (m.referenceId?.startsWith('MOVE-')) {
+                                            const partner = movements.find((p: InventoryMovement) =>
+                                                p.id !== m.id &&
+                                                p.referenceId === m.referenceId &&
+                                                p.productId === m.productId
+                                            );
 
-                                    // Calculate value - ONLY for SALES and IN
-                                    let totalValue = 0;
-                                    let isEstimate = false;
-                                    let showValue = false;
+                                            if (partner) {
+                                                const outM = m.type === 'OUT' ? m : partner;
+                                                const inM = m.type === 'IN' ? m : partner;
 
-                                    if (m.type === 'SALE' && m.salePrice) {
-                                        totalValue = m.salePrice * m.quantity;
-                                        showValue = true;
-                                    } else if (m.type === 'IN') {
-                                        if (m.purchasePrice) {
-                                            totalValue = m.purchasePrice * m.quantity;
-                                        } else {
-                                            const currentPrice = productsKey[m.productId];
-                                            if (currentPrice) {
-                                                totalValue = currentPrice * m.quantity;
-                                                isEstimate = true;
+                                                groupedMovements.push({
+                                                    ...outM,
+                                                    isTransfer: true,
+                                                    originName: warehousesKey[outM.warehouseId || ''] || 'Desconocido',
+                                                    destName: warehousesKey[inM.warehouseId || ''] || 'Desconocido',
+                                                    partnerId: partner.id
+                                                });
+
+                                                processedIds.add(m.id);
+                                                processedIds.add(partner.id);
+                                                return;
                                             }
                                         }
-                                        showValue = true;
-                                    }
 
-                                    return (
-                                        <tr key={m.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-slate-900">{date}</div>
-                                                <div className="text-xs text-slate-400">{time}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-800">
-                                                {m.productName}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                <span
-                                                    title={tooltip}
-                                                    className={`px-2 py-1 rounded-full text-xs font-bold ${labelClass}`}
-                                                >
-                                                    {label}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
-                                                {m.type === 'IN' ? '+' : '-'}{m.quantity} {m.unit}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
-                                                {showValue && totalValue > 0 ? (
-                                                    <span title={isEstimate ? "Valor estimado según precio actual" : "Valor reportado"}>
-                                                        ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                        {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-300">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
-                                                {m.notes}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-slate-400 italic">
-                                                {m.createdBy || 'Sistema'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                {m.facturaImageUrl ? (
-                                                    <a
-                                                        href={m.facturaImageUrl}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        title="Ver factura"
-                                                        className="inline-block"
+                                        groupedMovements.push(m);
+                                        processedIds.add(m.id);
+                                    });
+
+                                    return groupedMovements.map((m) => {
+                                        const { date, time } = formatDate(m.date);
+
+                                        // Determine Label and Tooltip
+                                        let label = 'EGRESO-T';
+                                        let labelClass = 'bg-orange-100 text-orange-800';
+                                        let tooltip = 'Transferencia';
+
+                                        if (m.isTransfer) {
+                                            label = 'TRASLADO';
+                                            labelClass = 'bg-indigo-100 text-indigo-800';
+                                            tooltip = 'Traslado entre galpones';
+                                        } else if (m.type === 'IN') {
+                                            label = 'INGRESO-C';
+                                            labelClass = 'bg-green-100 text-green-800';
+                                            tooltip = 'Compra';
+                                        } else if (m.type === 'HARVEST') {
+                                            label = 'INGRESO-CC';
+                                            labelClass = 'bg-lime-100 text-lime-800';
+                                            tooltip = 'Cosecha';
+                                        } else if (m.type === 'SALE') {
+                                            label = 'EGRESO-V';
+                                            labelClass = 'bg-blue-100 text-blue-800';
+                                            tooltip = 'Venta';
+                                        } else if (m.type === 'OUT') {
+                                            // Check if it's Sowing
+                                            const orderType = ordersKey[m.referenceId];
+                                            if (orderType === 'SOWING') {
+                                                label = 'EGRESO-S';
+                                                labelClass = 'bg-emerald-100 text-emerald-800';
+                                                tooltip = 'Siembra';
+                                            }
+                                        }
+
+                                        // Calculate value - ONLY for SALES and IN
+                                        let totalValue = 0;
+                                        let isEstimate = false;
+                                        let showValue = false;
+
+                                        if (m.type === 'SALE' && m.salePrice) {
+                                            totalValue = m.salePrice * m.quantity;
+                                            showValue = true;
+                                        } else if (m.type === 'IN' && !m.isTransfer) {
+                                            if (m.purchasePrice) {
+                                                totalValue = m.purchasePrice * m.quantity;
+                                            } else {
+                                                const currentPrice = productsKey[m.productId];
+                                                if (currentPrice) {
+                                                    totalValue = currentPrice * m.quantity;
+                                                    isEstimate = true;
+                                                }
+                                            }
+                                            showValue = true;
+                                        }
+
+                                        return (
+                                            <tr key={m.id} className="hover:bg-slate-50 group">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-slate-900">{date}</div>
+                                                    <div className="text-xs text-slate-400">{time}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {m.isTransfer ? (
+                                                        <div className="flex items-center gap-1 text-xs">
+                                                            <span className="font-bold text-slate-700">{m.originName}</span>
+                                                            <span className="text-slate-300">→</span>
+                                                            <span className="font-bold text-emerald-600">{m.destName}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-500">{warehousesKey[m.warehouseId || ''] || '-'}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-800">
+                                                    {m.productName}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    <span
+                                                        title={tooltip}
+                                                        className={`px-2 py-1 rounded-full text-[10px] font-bold ${labelClass}`}
                                                     >
+                                                        {label}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
+                                                    {m.type === 'IN' && !m.isTransfer ? '+' : '-'}{m.quantity} {m.unit}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
+                                                    {showValue && totalValue > 0 ? (
+                                                        <span title={isEstimate ? "Valor estimado según precio actual" : "Valor reportado"}>
+                                                            ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-300">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
+                                                    {m.notes}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-slate-400 italic">
+                                                    {m.createdBy || 'Sistema'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {m.facturaImageUrl ? (
+                                                            <a
+                                                                href={m.facturaImageUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                title="Ver factura"
+                                                                className="inline-block"
+                                                            >
+                                                                <button
+                                                                    className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
+                                                                >
+                                                                    F
+                                                                </button>
+                                                            </a>
+                                                        ) : (
+                                                            <div className="inline-block relative">
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*,application/pdf"
+                                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+                                                                    onChange={(e) => handleFileUpload(e, m.id)}
+                                                                    disabled={uploadingId === m.id}
+                                                                    title="Subir factura faltante"
+                                                                />
+                                                                <button
+                                                                    className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
+                                                                >
+                                                                    {uploadingId === m.id ? '...' : 'F'}
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                         <button
-                                                            className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
+                                                            onClick={() => handleDeleteMovement(m.id, m.partnerId)}
+                                                            className="w-6 h-6 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
+                                                            title="Eliminar movimiento"
                                                         >
-                                                            F
-                                                        </button>
-                                                    </a>
-                                                ) : (
-                                                    <div className="inline-block relative">
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*,application/pdf"
-                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
-                                                            onChange={(e) => handleFileUpload(e, m.id)}
-                                                            disabled={uploadingId === m.id}
-                                                            title="Subir factura faltante"
-                                                        />
-                                                        <button
-                                                            className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
-                                                        >
-                                                            {uploadingId === m.id ? '...' : 'F'}
+                                                            ✕
                                                         </button>
                                                     </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
+                                })()}
                             </tbody>
                         </table>
                     </div>

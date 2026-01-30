@@ -27,7 +27,7 @@ interface EnrichedStockItem extends ClientStock {
 export default function ClientStockPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { role, isMaster, profile, displayName } = useAuth();
-    const { stock, updateStock, loading: stockLoading } = useClientStock(id);
+    const { stock, updateStock, deleteStock, loading: stockLoading } = useClientStock(id);
     const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse, loading: warehousesLoading } = useWarehouses(id);
     const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
 
@@ -315,7 +315,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 productType: product?.type || 'OTHER',
                 unit: product?.unit || 'UNIT',
                 price: product?.price || 0,
-                productBrand: product?.brandName || '',
+                productBrand: item.productBrand || product?.brandName || '',
                 hasProduct: !!product
             };
         }).filter(item => item.hasProduct);
@@ -393,6 +393,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 clientId: id,
                 warehouseId: selectedWarehouseId || undefined,
                 productId: selectedProductId,
+                productBrand: tempBrand || product?.brandName || '-',
                 quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId)) ? existingItem.quantity + qtyNum : qtyNum,
                 lastUpdated: new Date().toISOString()
             };
@@ -408,7 +409,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const movementId = generateId();
             let facturaUrl = '';
 
-            if (facturaFile) {
+            if (facturaFile && !newItem.referenceId?.startsWith('MOVE-')) {
                 setFacturaUploading(true);
                 facturaUrl = await uploadFactura(movementId);
                 setFacturaUploading(false);
@@ -573,10 +574,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const currentStockItem = stock.find(s => s.id === item.id);
             if (currentStockItem) {
                 const newQty = currentStockItem.quantity - qtyToMove;
-                // If 0, do we delete? Or leave as 0? Usually stock records at 0 might be kept or deleted.
-                // Logic in handleAddStock doesn't delete. Let's keep at 0 for now or delete if desired.
-                // Keeping at 0 allows history view of "runs out".
-                await updateStock({ ...currentStockItem, quantity: Math.max(0, newQty) });
+                await updateStock({ ...currentStockItem, productBrand: item.productBrand, quantity: Math.max(0, newQty) });
             }
 
             // 3. If TRANSFER, create IN (Destination)
@@ -588,6 +586,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 if (existingDestItem) {
                     await updateStock({
                         ...existingDestItem,
+                        productBrand: item.productBrand,
                         quantity: existingDestItem.quantity + qtyToMove
                     });
                 } else {
@@ -596,6 +595,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         clientId: id,
                         warehouseId: destinationWarehouseId,
                         productId: item.productId,
+                        productBrand: item.productBrand,
                         quantity: qtyToMove,
                         lastUpdated: now.toISOString()
                     });
@@ -650,6 +650,42 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } catch (e) {
             console.error(e);
             alert('Error al eliminar producto');
+        }
+    };
+
+    const handleEditBrand = async (stockId: string, currentBrand: string) => {
+        const newBrand = prompt('Editar Marca:', currentBrand);
+        if (newBrand === null || newBrand === currentBrand) return;
+
+        const item = stock.find(s => s.id === stockId);
+        if (!item) return;
+
+        // Find if there's already stock for this exact product + brand + warehouse
+        const existingItem = stock.find(s =>
+            s.id !== stockId &&
+            s.productId === item.productId &&
+            s.warehouseId === item.warehouseId &&
+            (s.productBrand || '').toLowerCase().trim() === newBrand.toLowerCase().trim()
+        );
+
+        if (existingItem) {
+            if (confirm(`Ya existe stock de este producto con la marca "${newBrand}". ¿Desea unificar ambos registros?\n\nCantidad actual: ${item.quantity}\nCantidad en "${newBrand}": ${existingItem.quantity}\nTotal resultante: ${item.quantity + existingItem.quantity}`)) {
+                // Merge logic:
+                // 1. Update the existing item with the sum of quantities
+                await updateStock({
+                    ...existingItem,
+                    quantity: existingItem.quantity + item.quantity
+                });
+                // 2. Delete the current item
+                await deleteStock(stockId);
+                alert('Stock unificado con éxito.');
+            }
+        } else {
+            // Just update the brand
+            await updateStock({
+                ...item,
+                productBrand: newBrand
+            });
         }
     };
 
@@ -742,11 +778,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
                 <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
-                        Existencias {warehouses.find(w => w.id === activeWarehouseId)?.name || 'Cargando...'}
+                        Existencias - {warehouses.find(w => w.id === activeWarehouseId)?.name || 'seleccione un galpón'}
                     </h3>
                     {/* removed configuración text */}
                 </div>
-                {stockLoading || productsLoading ? (
+                {!activeWarehouseId ? (
+                    <div className="p-12 text-center text-slate-500">
+                        <h3 className="text-lg font-medium text-slate-900">Seleccione un galpón</h3>
+                        <p>Elija un galpón de la izquierda para ver su inventario.</p>
+                    </div>
+                ) : stockLoading || productsLoading ? (
                     <div className="p-8 text-center text-slate-500">Cargando stock...</div>
                 ) : enrichedStock.length === 0 ? (
                     <div className="p-12 text-center text-slate-500">
@@ -754,13 +795,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         <p>No hay productos cargados todavía.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <div
+                        className="overflow-x-auto"
+                        onWheel={(e) => {
+                            if (e.deltaY !== 0) {
+                                e.preventDefault();
+                                e.currentTarget.scrollLeft += e.deltaY;
+                            }
+                        }}
+                    >
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Galpón</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                     {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
                                         <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (pesos)</th>
@@ -780,11 +828,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                                                 {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
-                                                {products.find(p => p.id === item.productId)?.brandName || '-'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-700 font-medium">
-                                                {item.warehouseName}
+                                            <td
+                                                className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium hover:bg-slate-100 transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleEditBrand(item.id, item.productBrand || '');
+                                                }}
+                                            >
+                                                {item.productBrand || '-'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                                 {typeLabels[item.productType] || item.productType}
@@ -911,7 +962,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         onClick={() => setShowWarehouses(!showWarehouses)}
                         className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showWarehouses ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                     >
-                        {showWarehouses ? 'Cerrar gestión de granos' : 'Gestionar Galpones'}
+                        {showWarehouses ? 'Cerrar gestión de galpón' : 'Gestionar Galpones'}
                     </button>
                 )}
                 <button
@@ -1363,7 +1414,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         setEditingProductId(null);
                                     }}
                                 >
-                                    Cerrar
+                                    Cerrar gestión de galpón
                                 </Button>
                                 <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
                                     {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
@@ -1378,9 +1429,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             {showStockForm && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-slate-800">Cargar Ingreso de Stock</h2>
+                        <h2 className="text-lg font-semibold text-slate-800">
+                            {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' ? 'Gestión de Galpón' : 'Cargar Ingreso de Stock'}
+                        </h2>
                         <button
-                            onClick={() => setShowStockForm(false)}
+                            onClick={() => {
+                                setShowStockForm(false);
+                                setNote('');
+                                setShowNote(false);
+                                setNoteConfirmed(false);
+                            }}
                             className="text-slate-400 hover:text-slate-600 p-1"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1428,7 +1486,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 />
                                 <div>
                                     <Input
-                                        label={`Precio ($/${availableProducts.find(p => p.id === selectedProductId)?.unit || 'u.'})`}
+                                        label={`Precio (${availableProducts.find(p => p.id === selectedProductId)?.unit === 'L' ? '$/litro' : availableProducts.find(p => p.id === selectedProductId)?.unit === 'KG' ? '$/kg' : '$/' + (availableProducts.find(p => p.id === selectedProductId)?.unit || 'u.')})`}
                                         type="number"
                                         step="0.01"
                                         placeholder={availableProducts.find(p => p.id === selectedProductId)?.price ? String(availableProducts.find(p => p.id === selectedProductId)?.price) : "0.00"}
@@ -1519,9 +1577,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-2"
                                 >
                                     {showNote ? 'Quitar Nota' : note ? '+ Editar Nota' : '+ Agregar Nota'}
-                                    {(!showNote && note) && (
-                                        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    )}
                                 </button>
 
                                 <div className="flex items-center gap-2 border-l pl-4 border-slate-200">

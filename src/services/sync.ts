@@ -60,6 +60,7 @@ const mappers = {
         client_id: s.clientId,
         warehouse_id: s.warehouseId || null,
         product_id: s.productId,
+        product_brand: s.productBrand || null,
         quantity: s.quantity,
         updated_at: s.updatedAt || s.lastUpdated || new Date().toISOString()
     }),
@@ -205,6 +206,7 @@ const reverseMappers = {
         clientId: s.client_id,
         warehouseId: s.warehouse_id,
         productId: s.product_id,
+        productBrand: s.product_brand,
         quantity: s.quantity,
         updatedAt: s.updated_at,
         lastUpdated: s.updated_at,

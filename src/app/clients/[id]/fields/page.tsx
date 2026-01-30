@@ -747,7 +747,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                         <span className="text-emerald-700 font-black uppercase tracking-widest">{lot.cropSpecies}</span>
                                                                         {lot.yield && lot.status !== 'HARVESTED' ? <span className="text-slate-400 font-medium tracking-tight">({lot.yield} kg/ha)</span> : ''}
                                                                         {lot.status === 'HARVESTED' && lot.observedYield ? (
-                                                                            <span className="text-blue-600 ml-auto font-black text-[10px] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-tighter mr-2">Rinde: {lot.observedYield} kg</span>
+                                                                            <span className="text-blue-600 ml-auto font-normal text-[10px] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-widest mr-2">Rinde: {lot.observedYield} kg</span>
                                                                         ) : <div className="ml-auto"></div>}
 
                                                                         {lot.status === 'HARVESTED' && (

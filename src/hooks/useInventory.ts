@@ -135,7 +135,13 @@ export function useClientStock(clientId: string) {
         return finalItem;
     };
 
-    return { stock, loading, updateStock, refresh };
+    const deleteStock = async (id: string) => {
+        await db.delete('stock', id);
+        await refresh();
+        syncService.pushChanges();
+    };
+
+    return { stock, loading, updateStock, deleteStock, refresh };
 }
 
 export function useClientMovements(clientId: string) {

@@ -69,9 +69,14 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         const nextStatus = order.status === 'DONE' ? 'PENDING' : 'DONE';
 
         try {
+            let finalPrice = order.servicePrice;
             if (nextStatus === 'DONE' && (!order.servicePrice || order.servicePrice === 0)) {
-                if (!confirm('No se ha registrado el costo todavía. ¿Desea continuar?')) {
-                    return;
+                const val = prompt('No se ha registrado el costo todavía. Ingrese el costo por hectárea ($/ha) o cancele para omitir el costo por ahora:', '');
+                if (val !== null && val !== '') {
+                    const price = parseFloat(val);
+                    if (!isNaN(price)) {
+                        finalPrice = price;
+                    }
                 }
             }
 
@@ -83,7 +88,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 appliedAt: undefined
             };
 
-            await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema', auditData);
+            await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema', auditData, finalPrice);
         } catch (e) {
             alert('Error al actualizar el estado');
         }
@@ -110,8 +115,25 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
     const handleWheel = (e: React.WheelEvent) => {
         if (scrollContainerRef.current) {
+            e.preventDefault();
             // Translate vertical scroll into horizontal scroll
             scrollContainerRef.current.scrollLeft += e.deltaY;
+        }
+    };
+
+    const handleEditPrice = async (orderId: string, currentPrice?: number) => {
+        const val = prompt('Ingrese el costo del servicio por hectárea ($/ha):', currentPrice?.toString() || '');
+        if (val === null) return;
+        const newPrice = parseFloat(val);
+        if (isNaN(newPrice)) {
+            alert('Por favor ingrese un número válido');
+            return;
+        }
+
+        try {
+            await updateOrderStatus(orderId, undefined, displayName || 'Sistema', undefined, newPrice);
+        } catch (e) {
+            alert('Error al actualizar el precio');
         }
     };
 
@@ -198,13 +220,18 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                     order.status === 'PENDING' ? 'PENDIENTE' : order.status}
                                         </button>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono">
+                                    <td
+                                        className="px-6 py-4 whitespace-nowrap text-right font-mono cursor-pointer hover:bg-slate-100 transition-colors"
+                                        onClick={() => handleEditPrice(order.id, order.servicePrice)}
+                                    >
                                         {order.servicePrice && order.servicePrice > 0 ? (
-                                            <span className="text-slate-900 font-bold text-sm">
-                                                ${order.servicePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </span>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-slate-900 font-bold text-sm">
+                                                    ${(order.servicePrice * order.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
                                         ) : order.status === 'DONE' ? (
-                                            <span className="text-red-500 italic text-[10px] font-bold">Falta el costo</span>
+                                            <span className="text-red-500 italic text-[10px] font-bold hover:underline">Falta el costo</span>
                                         ) : (
                                             <span className="text-slate-300">---</span>
                                         )}

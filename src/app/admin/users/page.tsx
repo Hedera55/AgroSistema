@@ -43,7 +43,7 @@ export default function UserManagementPage() {
 
             // Fetch clients from IndexedDB (or Supabase if synced)
             const allClients = await db.getAll('clients');
-            setClients(allClients);
+            setClients(allClients.filter((c: Client) => !c.deleted));
 
         } catch (err) {
             console.error('Error fetching admin data:', err);
@@ -67,14 +67,22 @@ export default function UserManagementPage() {
 
         setSavingId(userId);
         try {
+            const updateData: any = { role: newRole };
+
+            // Requirement: Clients can only have ONE company assigned (or none initially)
+            // If role changes to CLIENT, we clear existing assignments to avoid forbidden state
+            if (newRole === 'CLIENT') {
+                updateData.assigned_clients = [];
+            }
+
             const { error } = await supabase
                 .from('profiles')
-                .update({ role: newRole })
+                .update(updateData)
                 .eq('id', userId);
 
             if (error) throw error;
 
-            setUsers(sortUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u)));
+            setUsers(sortUsers(users.map(u => u.id === userId ? { ...u, ...updateData } : u)));
         } catch (err) {
             console.error('Error updating role:', err);
             alert('Error al actualizar el rol');

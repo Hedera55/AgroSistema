@@ -66,6 +66,27 @@ export function StockMovementPanel({
             alert('Seleccione un galpón de destino');
             return;
         }
+
+        // Validate quantities and stock availability
+        for (const item of selectedItems) {
+            const qty = quantities[item.id] ?? item.quantity;
+
+            if (qty <= 0) {
+                alert(`La cantidad para ${item.productName} debe ser mayor a 0.`);
+                return;
+            }
+
+            if (item.quantity <= 0) {
+                alert(`No es posible mover ${item.productName} porque no hay existencias positivas en este galpón.`);
+                return;
+            }
+
+            if (qty > item.quantity) {
+                alert(`No puede mover más de la cantidad disponible para ${item.productName}.`);
+                return;
+            }
+        }
+
         setLoading(true);
         try {
             await onConfirm(action, quantities, destinationId || undefined, note);
@@ -145,70 +166,63 @@ export function StockMovementPanel({
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                {action === 'TRANSFER' && (
-                    <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Galpón de Destino</label>
-                        <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-1.5"
-                            value={destinationId}
-                            onChange={e => setDestinationId(e.target.value)}
-                        >
-                            <option value="">Seleccionar destino...</option>
-                            {validWarehouses.map(w => (
-                                <option key={w.id} value={w.id}>{w.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
-                <div className={action === 'TRANSFER' ? '' : 'col-span-2'}>
+            {action === 'TRANSFER' && (
+                <div className="mb-4 bg-slate-50 p-4 rounded-lg border border-slate-100 animate-fadeIn">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Galpón de Destino</label>
+                    <select
+                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm h-10"
+                        value={destinationId}
+                        onChange={e => setDestinationId(e.target.value)}
+                    >
+                        <option value="">Seleccione galpón de destino...</option>
+                        {validWarehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                <div className="flex items-center gap-2">
                     {!showNote ? (
                         <button
                             type="button"
                             onClick={() => setShowNote(true)}
-                            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline mt-1"
+                            className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1"
                         >
                             + Agregar Nota
                         </button>
                     ) : (
-                        <div className="animate-fadeIn">
-                            <div className="flex justify-between items-center mb-1">
-                                <label className="block text-xs font-medium text-slate-700">Nota (Opcional)</label>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowNote(false);
-                                        setNote('');
-                                    }}
-                                    className="text-[10px] text-red-400 hover:text-red-600 font-medium"
-                                >
-                                    ✕ Quitar
-                                </button>
-                            </div>
+                        <div className="flex items-center gap-2 animate-fadeIn bg-slate-50 p-2 rounded-lg border border-slate-100">
                             <Input
-                                placeholder="Razón, destino específico, etc..."
+                                placeholder="Nota (opcional)..."
                                 value={note}
                                 onChange={e => setNote(e.target.value)}
-                                className="text-sm py-1.5"
+                                className="h-8 text-sm py-1 w-64"
                             />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowNote(false);
+                                    setNote('');
+                                }}
+                                className="text-red-400 hover:text-red-600 font-bold p-1"
+                            >
+                                ✕
+                            </button>
                         </div>
                     )}
                 </div>
-            </div>
 
-            <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={onCancel}>
-                    Cancelar
-                </Button>
-                <Button
-                    onClick={handleSubmit}
-                    isLoading={loading}
-                    size="sm"
-                    className="!bg-orange-600 !hover:bg-orange-700 !text-white"
-                    style={{ backgroundColor: '#ea580c', color: 'white' }}
-                >
-                    {action === 'WITHDRAW' ? 'Confirmar Retiro' : 'Confirmar Transferencia'}
-                </Button>
+                <div className="flex justify-end gap-2">
+                    <Button
+                        onClick={handleSubmit}
+                        isLoading={loading}
+                        className="bg-orange-600 hover:bg-orange-700"
+                    >
+                        {action === 'WITHDRAW' ? 'Confirmar Retiro' : 'Confirmar Traslado'}
+                    </Button>
+                </div>
             </div>
         </div>
     );

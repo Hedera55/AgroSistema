@@ -1,0 +1,43 @@
+1- Cambiar dónde se ponen los inversores de cada empresa, no en la página de usuarios, sino en la página de inversores, con un botón "administrar inversores"
+
+2- En cargar stock, debería decir "$/litro", o "$/kg", no "$/unidad"
+
+3- When I am about to add a nota, but don't add it, and then just enter a product,
+That nota stays persistent the next time I want to edit a product
+Basically: Notas should dissapear, once I close the cargar stock box.
+
+4- In mover stock, agregar nota should be in the same line as cancelar and confirmar retiro
+
+5- Cerrar "gestión de galpón", no "gestión de granos"
+
+6- I need a function to eliminate stock entries just because. 
+   For now, it'll just be erased from the list, no influence in the money balance of contaduría
+
+7- Brands of products aren't saved when I reset the page, or there's some brand not saving behaviour. 
+- Plus, there shouldn't be a galpón column, in "existencias galpón x".
+  Le pongo bayer y termina diciendo corteva igual la marca
+  Salvo que hagamos un "existencias totales" y un "existencias por galpón" que podría ser, pero por ahora no
+
+9- Las transferencias entre galpones, no son ingresos de un galpón y egresos de otro galpón. Deberíamos sacar egreso e ingreso por transferencia. Más bien debería ser transferencia un sólo renglón, que marque el galpón dador y el receptor.
+   Tampoco hace falta marcar un monto monetario ahí
+
+10- No hace falta pedir factura para las transferencias
+
+11- The text on unselected galpones is wrong. Existencias cargando should change to Seleccione un galpón
+
+12- Hora de emisión de orden no hace falta, con fecha alcanza
+
+13- La lista de productos de nueva órden, tiene que ser la lista de productos de cargar stock, coincidir
+
+14- Hay que poder editar el precio en las órdenes a realizar, antes de que se apliquen, después de crearlas
+- El precio de las órdenes tiene que ser por hectárea
+
+15- Los lotes sólo muestran rinde esperado, si antes estaban asignados. Si son un lote sembrado que antes no fue asignado, no lo muestran
+    La órden de sembrar debería dar la opción de poner un rinde esperado. 
+    También debemos poder ver datos de espaciamiento, densidad de siembra, fecha de siembra, recorded in... maybe when you click the S of sembrado.
+
+16- Sacarle la negrita al rinde cosechado
+
+17- When I erase an empresa, I still see it in the "empresas asignadas" in the usuarios page
+
+18- When a user changes from admin to client, if it had more than one empresa assigned, it mantains them. It should deselect all assigned empresas.

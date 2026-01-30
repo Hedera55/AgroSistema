@@ -107,6 +107,7 @@ export interface ClientStock {
     clientId: string;
     warehouseId?: string; // For multi-galpón support
     productId: string;
+    productBrand?: string;
     quantity: number; // Current balance
     lastUpdated: string; // ISO Date
     updatedAt?: string; // To align with other entities
@@ -185,6 +186,7 @@ export interface Order {
     plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
     plantingSpacing?: number;
     servicePrice?: number;
+    expectedYield?: number; // For sowing orders
     notes?: string;
     createdBy?: string;
 

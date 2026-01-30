@@ -110,7 +110,14 @@ export default function InventoryPage() {
                         <p className="text-slate-500">Get started by adding your first input.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <div
+                        className="overflow-x-auto"
+                        onWheel={(e) => {
+                            if (e.deltaY !== 0) {
+                                e.currentTarget.scrollLeft += e.deltaY;
+                            }
+                        }}
+                    >
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>

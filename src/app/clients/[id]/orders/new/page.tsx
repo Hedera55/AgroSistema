@@ -13,6 +13,16 @@ import { Order, OrderItem, Unit } from '@/types';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrders } from '@/hooks/useOrders';
+import { ProductType } from '@/types';
+
+const typeLabels: Record<ProductType, string> = {
+    HERBICIDE: 'Herbicida',
+    FERTILIZER: 'Fertilizante',
+    SEED: 'Semilla',
+    FUNGICIDE: 'Fungicida',
+    INSECTICIDE: 'Insecticida',
+    OTHER: 'Otro'
+};
 
 export default function NewOrderPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -38,7 +48,6 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     }, [warehouses, selectedOrderWarehouseId]);
 
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [time, setTime] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
     const [appStart, setAppStart] = useState(new Date().toISOString().split('T')[0]);
     const [appEnd, setAppEnd] = useState(new Date().toISOString().split('T')[0]);
 
@@ -57,6 +66,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [plantingDensity, setPlantingDensity] = useState('');
     const [plantingDensityUnit, setPlantingDensityUnit] = useState<'PLANTS_HA' | 'KG_HA'>('PLANTS_HA');
     const [plantingSpacing, setPlantingSpacing] = useState('');
+    const [expectedYield, setExpectedYield] = useState('');
     const [servicePrice, setServicePrice] = useState('');
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
@@ -64,12 +74,16 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const { lots } = useLots(selectedFarmId);
     const selectedLot = lots.find(l => l.id === selectedLotId);
 
+    const availableProducts = useMemo(() => {
+        return products.filter(p => p.clientId === clientId);
+    }, [products, clientId]);
+
     const containsSeeds = useMemo(() => {
         return items.some(item => {
-            const prod = products.find(p => p.id === item.productId);
+            const prod = availableProducts.find(p => p.id === item.productId);
             return prod?.type === 'SEED';
         });
-    }, [items, products]);
+    }, [items, availableProducts]);
 
     // Add Item
     const handleAddItem = () => {
@@ -89,6 +103,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             plantingDensity: product.type === 'SEED' ? (plantingDensity ? parseFloat(plantingDensity) : undefined) : undefined,
             plantingDensityUnit: product.type === 'SEED' ? (plantingDensity ? plantingDensityUnit : undefined) : undefined,
             plantingSpacing: product.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
+            expectedYield: product.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
         };
 
         if (editingItemId) {
@@ -170,10 +185,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             const order: Order = {
                 id: generateId(),
                 orderNumber: nextOrderNumber,
-                type: 'SPRAYING',
+                type: containsSeeds ? 'SOWING' : 'SPRAYING',
                 status: 'PENDING',
                 date: date,
-                time: time,
+                time: '00:00',
                 applicationStart: appStart,
                 applicationEnd: appEnd,
                 clientId,
@@ -182,12 +197,12 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 warehouseId: selectedOrderWarehouseId || undefined,
                 applicatorId: selectedApplicatorId,
                 servicePrice: servicePrice ? parseFloat(servicePrice) : 0,
+                expectedYield: items.find(i => i.expectedYield)?.expectedYield,
                 treatedArea: selectedLot.hectares,
                 items,
-                // Order level summary fields if needed (optional since items have them)
-                plantingDensity: items.find(i => products.find(p => p.id === i.productId)?.type === 'SEED')?.plantingDensity,
-                plantingDensityUnit: items.find(i => products.find(p => p.id === i.productId)?.type === 'SEED')?.plantingDensityUnit,
-                plantingSpacing: items.find(i => products.find(p => p.id === i.productId)?.type === 'SEED')?.plantingSpacing,
+                plantingDensity: items.find(i => i.plantingDensity)?.plantingDensity,
+                plantingDensityUnit: items.find(i => i.plantingDensityUnit)?.plantingDensityUnit,
+                plantingSpacing: items.find(i => i.plantingSpacing)?.plantingSpacing,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: displayName || 'Sistema',
@@ -248,15 +263,9 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             {/* Step 1: Location */}
             {step === 1 && (
                 <div className="space-y-4 animate-fadeIn">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="w-full">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de emisión</label>
-                            <input type="date" className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" value={date} onChange={e => setDate(e.target.value)} />
-                        </div>
-                        <div className="w-full">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Hora</label>
-                            <input type="time" className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" value={time} onChange={e => setTime(e.target.value)} />
-                        </div>
+                    <div className="w-full">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de emisión</label>
+                        <input type="date" className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" value={date} onChange={e => setDate(e.target.value)} />
                     </div>
 
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 grid grid-cols-2 gap-4">
@@ -314,16 +323,25 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         </select>
                     </div>
 
-                    <div className="w-full">
+                    <div className="w-full space-y-2">
                         <Input
-                            label="Precio de Servicio (Opcional)"
+                            label="Precio de Servicio por Hectárea (Opcional)"
                             type="number"
                             step="0.01"
-                            placeholder="Puede dejarse vacío y completarse después"
+                            placeholder="ej. 8500.00"
                             value={servicePrice}
                             onChange={e => setServicePrice(e.target.value)}
                             prefix="$"
                         />
+                        {servicePrice && selectedLot && (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Costo Total Estimado:</span>
+                                <span className="text-sm font-mono font-bold text-emerald-600">
+                                    ${(parseFloat(servicePrice) * selectedLot.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                <span className="text-[10px] text-slate-400">({selectedLot.hectares} ha)</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end pt-4">
@@ -346,16 +364,20 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                 <label className="block text-xs font-medium text-slate-500 mb-1">Producto</label>
                                 <select className="block w-full rounded-md border-slate-300 shadow-sm text-sm" value={currProdId} onChange={e => setCurrProdId(e.target.value)}>
                                     <option value="">Seleccione producto...</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    {availableProducts.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({typeLabels[p.type]}) ({p.unit})
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="w-32">
                                 <label className="block text-xs font-medium text-slate-500 mb-1">
-                                    {products.find(p => p.id === currProdId)?.type === 'SEED' ? 'kg / ha' : 'Dosis / ha'}
+                                    {availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? 'kg / ha' : 'Dosis / ha'}
                                 </label>
                                 <input type="number" step="0.01" className="block w-full rounded-md border-slate-300 shadow-sm text-sm" placeholder="0.0" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
                             </div>
-                            {products.find(p => p.id === currProdId)?.type !== 'SEED' && (
+                            {availableProducts.find(p => p.id === currProdId)?.type !== 'SEED' && (
                                 <div className="flex gap-2">
                                     <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>
                                         {editingItemId ? 'Actualizar' : 'Agregar'}
@@ -399,6 +421,16 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                         placeholder="ej. 52.5"
                                         value={plantingSpacing}
                                         onChange={e => setPlantingSpacing(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Rinde esperado (qq/ha)</label>
+                                    <input
+                                        type="number"
+                                        className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                                        placeholder="ej. 35"
+                                        value={expectedYield}
+                                        onChange={e => setExpectedYield(e.target.value)}
                                     />
                                 </div>
                                 <div className="flex gap-2 w-full sm:w-auto">
@@ -490,7 +522,6 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             <div><span className="text-slate-500">Campo/Lote:</span> <span className="font-medium">{selectedLot?.name}</span></div>
                             <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>
                             <div><span className="text-slate-500">Fecha de emisión:</span> <span className="font-medium">{date}</span></div>
-                            <div><span className="text-slate-500">Hora:</span> <span className="font-medium">{time}</span></div>
                             <div className="col-span-2 bg-emerald-50 px-3 py-1 rounded text-emerald-800 border border-emerald-100">
                                 <span className="font-bold opacity-60">Ventana de aplicación:</span> {appStart} • {appEnd}
                             </div>

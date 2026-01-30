@@ -116,9 +116,10 @@ export function useOrders(clientId: string) {
 
     const updateOrderStatus = async (
         orderId: string,
-        newStatus: 'PENDING' | 'DONE',
+        newStatus: 'PENDING' | 'DONE' | undefined,
         displayName: string,
-        auditData?: { appliedBy?: string; appliedAt?: string }
+        auditData?: { appliedBy?: string; appliedAt?: string },
+        newPrice?: number
     ) => {
         try {
             const order = orders.find(o => o.id === orderId);
@@ -127,7 +128,8 @@ export function useOrders(clientId: string) {
             const updatedOrder = {
                 ...order,
                 ...auditData,
-                status: newStatus,
+                status: newStatus || order.status,
+                servicePrice: newPrice !== undefined ? newPrice : order.servicePrice,
                 updatedAt: new Date().toISOString(),
                 updatedBy: displayName,
                 synced: false
