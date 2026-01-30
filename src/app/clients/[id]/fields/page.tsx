@@ -7,7 +7,7 @@ import { useWarehouses } from '@/hooks/useWarehouses';
 import { useInventory, useClientStock } from '@/hooks/useInventory';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Farm, Lot } from '@/types';
+import { Farm, Lot, Order, OrderItem } from '@/types';
 import DynamicMap from '@/components/DynamicMap';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,11 +45,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [lotYield, setLotYield] = useState('');
     const [isHarvesting, setIsHarvesting] = useState(false);
     const [observedYield, setObservedYield] = useState('');
+    const [sowingOrder, setSowingOrder] = useState<Order | null>(null);
 
 
     // Unified Panel State (Observations, Crop Assignment, History)
     const [activePanel, setActivePanel] = useState<{
-        type: 'observations' | 'crop_assign' | 'history';
+        type: 'observations' | 'crop_assign' | 'history' | 'sowing_details';
         id: string; // The specific lot or farm ID
         farmId: string;
         lotId?: string;
@@ -76,7 +77,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     }, [selectedFarmId, selectedLotId, activePanel]);
 
-    const openPanel = (type: 'observations' | 'crop_assign' | 'history', id: string, farmId: string, lotId: string | undefined, name: string, subtitle?: string) => {
+    const openPanel = (type: 'observations' | 'crop_assign' | 'history' | 'sowing_details', id: string, farmId: string, lotId: string | undefined, name: string, subtitle?: string) => {
         // Toggle if already open with same type and ID
         if (activePanel?.type === type && activePanel?.id === id) {
             setActivePanel(null);
@@ -315,6 +316,24 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         } catch (error) {
             console.error('Error clearing crop:', error);
             alert('Error al limpiar el cultivo.');
+        }
+    };
+
+    const fetchSowingDetails = async (lotId: string) => {
+        try {
+            const allOrders = await db.getAll('orders');
+            const sowingOrders = allOrders
+                .filter(o => o.clientId === id && o.lotId === lotId && o.type === 'SOWING' && (o.status === 'CONFIRMED' || o.status === 'DONE'))
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            if (sowingOrders.length > 0) {
+                setSowingOrder(sowingOrders[0]);
+            } else {
+                setSowingOrder(null);
+            }
+        } catch (error) {
+            console.error('Error fetching sowing details:', error);
+            setSowingOrder(null);
         }
     };
 
@@ -684,8 +703,17 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                 title={lot.status === 'SOWED' ? 'Sembrado' :
                                                                                     lot.status === 'HARVESTED' ? 'Cosechado' :
                                                                                         lot.status === 'NOT_SOWED' ? 'Asignado' : 'Vacío'}
-                                                                                className={`text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg border shadow-sm ${lot.status === 'SOWED' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                                                                    lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    e.preventDefault();
+                                                                                    if (lot.status === 'SOWED') {
+                                                                                        await fetchSowingDetails(lot.id);
+                                                                                        openPanel('sowing_details', lot.id, selectedFarmId!, lot.id, lot.name, `Datos de Siembra - ${lot.name}`);
+                                                                                    }
+                                                                                }}
+                                                                                className={`text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg border shadow-sm transition-all relative z-10 ${lot.status === 'SOWED'
+                                                                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
+                                                                                    : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                                                                         lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
                                                                                             'bg-slate-100 text-slate-500 border-slate-200'
                                                                                     }`}
@@ -830,7 +858,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             <div className="flex items-center gap-4 flex-1 overflow-hidden">
                                 <h2 className="text-lg font-bold text-slate-800 flex-shrink-0">
                                     {activePanel.type === 'observations' ? 'Observaciones' :
-                                        activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') : 'Historial del Lote'}
+                                        activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') :
+                                            activePanel.type === 'sowing_details' ? 'Detalle de Siembra' : 'Historial del Lote'}
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
                                 <div className="flex items-center gap-2 overflow-hidden">
@@ -934,6 +963,98 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             {activePanel.type === 'history' && (
                                 <div className="p-6 bg-white max-h-[600px] overflow-y-auto">
                                     <LotHistory clientId={id} lotId={activePanel.id} />
+                                </div>
+                            )}
+                            {activePanel.type === 'sowing_details' && (
+                                <div className="p-6 bg-white animate-fadeIn">
+                                    {sowingOrder ? (
+                                        <div className="space-y-6">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Fecha de Siembra</div>
+                                                    <div className="font-mono text-slate-800">{new Date(sowingOrder.date).toLocaleDateString()}</div>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Orden #</div>
+                                                    <div className="font-mono text-slate-800">{sowingOrder.orderNumber || '-'}</div>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Estado</div>
+                                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase">
+                                                        {sowingOrder.status === 'DONE' ? 'REALIZADA' : 'CONFIRMADA'}
+                                                    </span>
+                                                </div>
+                                                {sowingOrder.applicatorId && (
+                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Responsable</div>
+                                                        <div className="text-sm text-slate-800 truncate">Contratista</div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">Insumos de Siembra</h3>
+                                                <div className="space-y-2">
+                                                    {sowingOrder.items.filter(i => {
+                                                        const prod = products.find(p => p.id === i.productId);
+                                                        return prod?.type === 'SEED';
+                                                    }).map(item => (
+                                                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                                                            <div>
+                                                                <div className="font-bold text-emerald-900">{item.productName}</div>
+                                                                <div className="text-xs text-emerald-600">Semilla</div>
+                                                            </div>
+                                                            <div className="flex gap-4 mt-2 sm:mt-0">
+                                                                <div className="text-right">
+                                                                    <div className="text-xs text-emerald-600 font-bold uppercase">Densidad</div>
+                                                                    <div className="font-mono text-emerald-800">
+                                                                        {item.plantingDensity ? `${item.plantingDensity} ${item.plantingDensityUnit === 'PLANTS_HA' ? 'pl/ha' : 'kg/ha'}` : '-'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-xs text-emerald-600 font-bold uppercase">Espaciamiento</div>
+                                                                    <div className="font-mono text-emerald-800">
+                                                                        {item.plantingSpacing ? `${item.plantingSpacing} cm` : '-'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+
+                                                    {sowingOrder.items.filter(i => {
+                                                        const prod = products.find(p => p.id === i.productId);
+                                                        return prod?.type !== 'SEED';
+                                                    }).length > 0 && (
+                                                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                                                <div className="text-xs text-slate-400 font-bold uppercase mb-2">Otros Insumos Aplicados</div>
+                                                                {sowingOrder.items.filter(i => {
+                                                                    const prod = products.find(p => p.id === i.productId);
+                                                                    return prod?.type !== 'SEED';
+                                                                }).map(item => (
+                                                                    <div key={item.id} className="flex justify-between items-center text-sm py-1">
+                                                                        <span className="text-slate-600">{item.productName}</span>
+                                                                        <span className="font-mono text-slate-500">{item.dosage} {item.unit}/ha</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-end pt-4 border-t border-slate-100">
+                                                <Link
+                                                    href={`/clients/${id}/orders/${sowingOrder.id}`}
+                                                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1"
+                                                >
+                                                    Ver Orden Completa →
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-400">
+                                            <p>No se encontró la orden de siembra asociada.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
