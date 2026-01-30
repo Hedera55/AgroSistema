@@ -190,7 +190,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     plantingSpacing: 0,
                     createdBy: displayName || 'Sistema',
                     createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date().toISOString(),
+                    synced: false
                 });
 
                 // Trigger refresh so the button changes to "Marcar Cosechado"
@@ -360,7 +361,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     status: 'DONE',
                     appliedAt: new Date().toISOString(),
                     appliedBy: displayName || 'Sistema',
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date().toISOString(),
+                    synced: false
                 });
             }
 
@@ -587,7 +589,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 date: newDate,
                 quantity: newYield,
                 contractorName: newContractor,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                synced: false
             });
 
             // 4. Update or Create EXPENSE movement
@@ -607,7 +610,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     harvestLaborCost: totalCost,
                     harvestLaborCost: totalCost,
                     contractorName: newContractor,
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date().toISOString(),
+                    synced: false
                 });
             } else if (newPrice > 0) {
                 // Create new if it didn't exist but now we have a price
