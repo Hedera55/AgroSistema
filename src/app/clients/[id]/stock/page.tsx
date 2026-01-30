@@ -385,6 +385,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
         setIsSubmitting(true);
         try {
+            const product = availableProducts.find((p: Product) => p.id === selectedProductId);
             const qtyNum = parseFloat(quantity);
             const existingItem = stock.find((s: ClientStock) => s.productId === selectedProductId && s.warehouseId === (selectedWarehouseId || undefined));
 
@@ -401,7 +402,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             await updateStock(newItem);
 
             // Record Movement
-            const product = availableProducts.find((p: Product) => p.id === selectedProductId);
             const now = new Date();
             const dateStr = now.toISOString().split('T')[0];
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

@@ -100,8 +100,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             dosage: parseFloat(currDosage),
             unit: product.unit,
             totalQuantity: parseFloat(currDosage) * (selectedLot?.hectares || 0),
-            plantingDensity: product.type === 'SEED' ? (plantingDensity ? parseFloat(plantingDensity) : undefined) : undefined,
-            plantingDensityUnit: product.type === 'SEED' ? (plantingDensity ? plantingDensityUnit : undefined) : undefined,
+            plantingDensity: product.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
+            plantingDensityUnit: product.type === 'SEED' ? 'KG_HA' : undefined,
             plantingSpacing: product.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
             expectedYield: product.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
         };
@@ -371,47 +371,38 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                     ))}
                                 </select>
                             </div>
-                            <div className="w-32">
-                                <label className="block text-xs font-medium text-slate-500 mb-1">
-                                    {availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? 'kg / ha' : 'Dosis / ha'}
-                                </label>
-                                <input type="number" step="0.01" className="block w-full rounded-md border-slate-300 shadow-sm text-sm" placeholder="0.0" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
-                            </div>
                             {availableProducts.find(p => p.id === currProdId)?.type !== 'SEED' && (
-                                <div className="flex gap-2">
-                                    <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>
-                                        {editingItemId ? 'Actualizar' : 'Agregar'}
-                                    </Button>
-                                    {editingItemId && (
-                                        <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
-                                            ✕
+                                <>
+                                    <div className="w-32">
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">Dosis / ha</label>
+                                        <input type="number" step="0.01" className="block w-full rounded-md border-slate-300 shadow-sm text-sm" placeholder="0.0" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>
+                                            {editingItemId ? 'Actualizar' : 'Agregar'}
                                         </Button>
-                                    )}
-                                </div>
+                                        {editingItemId && (
+                                            <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
+                                                ✕
+                                            </Button>
+                                        )}
+                                    </div>
+                                </>
                             )}
                         </div>
 
-                        {products.find(p => p.id === currProdId)?.type === 'SEED' && (
-                            <div className="animate-fadeIn grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100 items-end">
+                        {availableProducts.find(p => p.id === currProdId)?.type === 'SEED' && (
+                            <div className="animate-fadeIn grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 items-end">
                                 <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Densidad de siembra</label>
-                                    <div className="flex">
-                                        <input
-                                            type="number"
-                                            className="block w-full rounded-l-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                                            placeholder="0.0"
-                                            value={plantingDensity}
-                                            onChange={e => setPlantingDensity(e.target.value)}
-                                        />
-                                        <select
-                                            className="bg-slate-100 border-y border-r border-slate-300 rounded-r-md px-2 text-xs font-medium focus:outline-none"
-                                            value={plantingDensityUnit}
-                                            onChange={e => setPlantingDensityUnit(e.target.value as any)}
-                                        >
-                                            <option value="PLANTS_HA">pl/ha</option>
-                                            <option value="KG_HA">kg/ha</option>
-                                        </select>
-                                    </div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Densidad de siembra kg/ha</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                                        placeholder="0.0"
+                                        value={currDosage}
+                                        onChange={e => setCurrDosage(e.target.value)}
+                                    />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Espaciamiento entre hileras (cm)</label>
@@ -424,11 +415,11 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Rinde esperado (qq/ha)</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Rinde esperado (kg/ha)</label>
                                     <input
                                         type="number"
                                         className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                                        placeholder="ej. 35"
+                                        placeholder="ej. 3500"
                                         value={expectedYield}
                                         onChange={e => setExpectedYield(e.target.value)}
                                     />
