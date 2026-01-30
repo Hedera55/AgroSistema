@@ -409,7 +409,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const movementId = generateId();
             let facturaUrl = '';
 
-            if (facturaFile && !newItem.referenceId?.startsWith('MOVE-')) {
+            if (facturaFile) {
                 setFacturaUploading(true);
                 facturaUrl = await uploadFactura(movementId);
                 setFacturaUploading(false);
