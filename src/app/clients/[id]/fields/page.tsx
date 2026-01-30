@@ -238,7 +238,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 type: 'SEED', // Grain is essentially seed type for Acopio
                 unit: 'kg',
                 price: 0,
-                createdBy: 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false
             };
