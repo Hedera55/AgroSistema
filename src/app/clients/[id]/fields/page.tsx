@@ -606,7 +606,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     purchasePrice: totalCost,
                     harvestLaborPricePerHa: newPrice,
                     harvestLaborCost: totalCost,
-                    harvestLaborCost: totalCost,
                     contractorName: newContractor,
                     updatedAt: new Date().toISOString(),
                     synced: false
