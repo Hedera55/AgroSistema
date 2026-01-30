@@ -324,7 +324,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         type: 'OTHER',
                         unit: 'UN',
                         price: 0,
-                        createdBy: 'Sistema',
                         createdAt: new Date().toISOString(),
                         synced: false
                     });
