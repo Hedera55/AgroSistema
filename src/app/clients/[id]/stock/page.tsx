@@ -862,7 +862,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
+                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE' || lastAction === 'IN') && (
                             <Button
                                 onClick={async () => {
                                     const client = await db.get('clients', id) as any;
