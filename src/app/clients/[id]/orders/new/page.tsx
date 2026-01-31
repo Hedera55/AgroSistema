@@ -442,7 +442,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                             <span className="font-medium text-blue-600">Espaciamiento: {item.plantingSpacing} cm</span>
                                         )}
                                         {item.expectedYield && (
-                                            <span className="font-medium text-emerald-600">Rinde Esperado: {item.expectedYield} kg/ha</span>
+                                            <span className="font-medium text-blue-600">Rinde Esperado: {item.expectedYield} kg/ha</span>
                                         )}
                                     </div>
                                 </div>
@@ -501,12 +501,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     <div className="bg-white p-6 border border-slate-200 rounded-xl shadow-sm space-y-4">
                         <h3 className="font-bold text-lg border-b pb-2">Resumen de la Orden</h3>
                         <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div><span className="text-slate-500">Campo/Lote:</span> <span className="font-medium">{selectedLot?.name}</span></div>
+                            <div><span className="text-slate-500">Campo/Lote:</span> <span className="font-medium">{farms.find(f => f.id === selectedFarmId)?.name} - {selectedLot?.name}</span></div>
                             <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>
                             <div><span className="text-slate-500">Fecha de emisión:</span> <span className="font-medium">{date}</span></div>
-                            <div className="col-span-2 bg-emerald-50 px-3 py-1 rounded text-emerald-800 border border-emerald-100">
-                                <span className="font-bold opacity-60">Ventana de aplicación:</span> {appStart} • {appEnd}
-                            </div>
+                            <div><span className="text-slate-500">Ventana de aplicación:</span> <span className="font-medium">{appStart} • {appEnd}</span></div>
                             {containsSeeds && (() => {
                                 const seedItem = items.find(i => availableProducts.find(p => p.id === i.productId)?.type === 'SEED');
                                 return seedItem && (

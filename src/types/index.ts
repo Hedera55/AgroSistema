@@ -163,6 +163,9 @@ export interface InventoryMovement {
     plateNumber?: string; // Truck plate number
     deliveryLocation?: string; // Destination location (for Sales)
     receiverName?: string; // Name of person receiving/withdrawing (for Remito)
+    deleted?: boolean;
+    deletedAt?: string;
+    deletedBy?: string;
 }
 
 export interface Order {
@@ -204,6 +207,10 @@ export interface Order {
     updatedAt: string;
     updatedBy?: string;
     synced: boolean;
+    deleted?: boolean;
+    deletedAt?: string;
+    deletedBy?: string;
+    sowingOrderId?: string;
 }
 
 export interface OrderActivity {

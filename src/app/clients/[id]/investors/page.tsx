@@ -94,7 +94,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
 
             if (m.type === 'IN' && !isTransfer) {
-                investedMovements += (m.quantity * (m.purchasePrice || product?.price || 0));
+                const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
+                investedMovements += (m.quantity * purchasePrice);
             } else if (m.type === 'SALE') {
                 sold += (m.quantity * (m.salePrice || 0));
             }
@@ -125,12 +126,13 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
 
             if (m.type === 'IN' && !isTransfer) {
+                const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
                 history.push({
                     id: m.id,
                     date: m.date,
                     type: 'PURCHASE',
                     description: `Compra: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
-                    amount: m.quantity * (m.purchasePrice || product?.price || 0)
+                    amount: m.quantity * purchasePrice
                 });
             } else if (m.type === 'SALE') {
                 history.push({
@@ -149,7 +151,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     id: o.id,
                     date: o.date,
                     type: 'SERVICE',
-                    description: `Servicio: Orden Nro ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
+                    description: o.type === 'HARVEST' ? 'Servicio de cosecha' : `Servicio: Orden Nro ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
                     amount: o.servicePrice * o.treatedArea
                 });
             }

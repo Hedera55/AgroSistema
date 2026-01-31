@@ -30,6 +30,20 @@ export function useInventory() {
     }, [refresh]);
 
     const addProduct = async (product: Omit<Product, 'id'> & { id?: string }) => {
+        // 1. Check if a product with same name AND brand already exists for this client
+        const allProducts = await db.getAll('products');
+        const existing = allProducts.find((p: Product) =>
+            p.clientId === product.clientId &&
+            p.name.toLowerCase().trim() === product.name.toLowerCase().trim() &&
+            (p.brandName || '').toLowerCase().trim() === (product.brandName || '').toLowerCase().trim() &&
+            !p.deleted
+        );
+
+        if (existing) {
+            console.log('Found existing product, merging:', existing.id);
+            return existing;
+        }
+
         const finalProduct = {
             ...product,
             id: product.id || generateId(),
@@ -153,7 +167,7 @@ export function useClientMovements(clientId: string) {
         setLoading(true);
         try {
             const allMovements = await db.getAll('movements');
-            const clientMovements = allMovements.filter((m: any) => m.clientId === clientId);
+            const clientMovements = allMovements.filter((m: any) => m.clientId === clientId && !m.deleted);
             // Sort by date desc
             clientMovements.sort((a: any, b: any) => new Date(b.date + 'T' + (b.time || '00:00')).getTime() - new Date(a.date + 'T' + (a.time || '00:00')).getTime());
             setMovements(clientMovements);

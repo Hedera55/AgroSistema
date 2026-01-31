@@ -462,7 +462,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdAt: now.toISOString(),
                 synced: false,
                 warehouseId: selectedWarehouseId,
-                purchasePrice: parseFloat(transactionPrice) || (product?.price && product.price > 0 ? product.price : undefined)
+                purchasePrice: (transactionPrice !== '' && !isNaN(parseFloat(transactionPrice))) ? parseFloat(transactionPrice) : (product?.price && product.price > 0 ? product.price : undefined)
             };
 
             await db.put('movements', movementData);
@@ -821,7 +821,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             variant={sellingStockId ? "secondary" : "primary"}
                                             className={`${sellingStockId ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"} animate-fadeIn`}
                                         >
-                                            {sellingStockId ? 'Cancelar' : 'Vender'}
+                                            {sellingStockId ? 'Cancelar Vender' : 'Vender'}
                                         </Button>
                                     )}
                                 </>
@@ -833,7 +833,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 variant={showStockForm ? "secondary" : "primary"}
                                 className={showStockForm ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : ""}
                             >
-                                {showStockForm ? 'Cancelar' : 'Cargar Stock'}
+                                {showStockForm ? 'Cancelar Cargar Stock' : 'Cargar Stock'}
                             </Button>
                         </div>
                     )}
@@ -862,7 +862,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {(lastAction === 'IN' || lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
+                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
                             <Button
                                 onClick={async () => {
                                     const client = await db.get('clients', id) as any;
@@ -1540,7 +1540,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 )}
                             </div>
                             <Input
-                                label="Precio de Referencia (pesos/unidad)"
+                                label={`Precio de Referencia (pesos/${(newProductUnit || 'unidad').toLowerCase()})`}
                                 type="number"
                                 step="0.01"
                                 placeholder="0.00"

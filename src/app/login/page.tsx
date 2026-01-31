@@ -10,7 +10,7 @@ export default function LoginPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
+    const [companyName, setCompanyName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
@@ -35,7 +35,7 @@ export default function LoginPage() {
                     password,
                     options: {
                         data: {
-                            full_name: fullName,
+                            company_name: companyName,
                         },
                     },
                 });
@@ -85,11 +85,11 @@ export default function LoginPage() {
                         {!isLogin && (
                             <div className="animate-fadeIn">
                                 <Input
-                                    label="Nombre Completo"
+                                    label="Nombre de la Empresa"
                                     type="text"
-                                    placeholder="Juan Pérez"
-                                    value={fullName}
-                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="ej. Estancia La Paz"
+                                    value={companyName}
+                                    onChange={(e) => setCompanyName(e.target.value)}
                                     required
                                 />
                             </div>

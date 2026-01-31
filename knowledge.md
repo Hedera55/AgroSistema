@@ -59,6 +59,13 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
   If he agreed it was useful, which he did,
   And to update it as he saw useful.
 
+- **Money spent and reference monetary value**: We need to make a difference.
+  If I buy soja by 0$, because I got it free, that's no expenditure of money you should ingress in the contaduría.
+  That being said, if I see my galpón, and see 100kg of soja, or -100kg of soja, I do see now, the price of reference for that soja. That value, in that table or history, is calculated with the reference price.
+  In the history, we care about what we paid, in a buy, or what we charged, in a sale.
+  But in the stock list, we see how much stock of a product we have, and that is accounted with the reference price
+  I hope the difference is being understood.
+
 + . + . + . + . + . + . +
 
 

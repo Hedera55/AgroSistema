@@ -68,9 +68,9 @@ const mappers = {
         id: o.id,
         order_number: o.orderNumber,
         client_id: o.clientId,
-        farm_id: o.farmId,
-        lot_id: o.lotId,
-        warehouse_id: o.warehouseId,
+        farm_id: (o.farmId && o.farmId !== '') ? o.farmId : null,
+        lot_id: (o.lotId && o.lotId !== '') ? o.lotId : null,
+        warehouse_id: (o.warehouseId && o.warehouseId !== '') ? o.warehouseId : null,
         type: o.type,
         status: o.status,
         date: o.date,
@@ -89,12 +89,16 @@ const mappers = {
         updated_by: o.updatedBy,
         created_at: o.createdAt || new Date().toISOString(),
         updated_at: o.updatedAt || new Date().toISOString(),
-        synced: true
+        synced: true,
+        deleted: o.deleted || false,
+        deleted_at: o.deletedAt || null,
+        deleted_by: o.deletedBy || null,
+        sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null
     }),
     movement: (m: InventoryMovement) => ({
         id: m.id,
         client_id: m.clientId,
-        warehouse_id: m.warehouseId,
+        warehouse_id: (m.warehouseId && m.warehouseId !== '') ? m.warehouseId : null,
         product_id: m.productId,
         product_name: m.productName,
         product_brand: m.productBrand,
@@ -105,11 +109,14 @@ const mappers = {
         time: m.time,
         sale_price: m.salePrice || 0,
         purchase_price: m.purchasePrice || 0,
-        reference_id: m.referenceId,
+        reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
         notes: m.notes,
         factura_image_url: m.facturaImageUrl,
         created_by: m.createdBy,
-        created_at: m.createdAt || new Date(m.date).toISOString()
+        created_at: m.createdAt || new Date(m.date).toISOString(),
+        deleted: m.deleted || false,
+        deleted_at: m.deletedAt || null,
+        deleted_by: m.deletedBy || null
     }),
     activity: (a: OrderActivity) => ({
         id: a.id,
@@ -237,7 +244,11 @@ const reverseMappers = {
         updatedBy: o.updated_by,
         createdAt: o.created_at,
         updatedAt: o.updated_at,
-        synced: true
+        synced: true,
+        deleted: o.deleted,
+        deletedAt: o.deleted_at,
+        deletedBy: o.deleted_by,
+        sowingOrderId: o.sowing_order_id
     }),
     movement: (m: any): InventoryMovement => ({
         id: m.id,
@@ -258,7 +269,10 @@ const reverseMappers = {
         facturaImageUrl: m.factura_image_url,
         createdBy: m.created_by,
         createdAt: m.created_at,
-        synced: true
+        synced: true,
+        deleted: m.deleted,
+        deletedAt: m.deleted_at,
+        deletedBy: m.deleted_by
     }),
     activity: (a: any): OrderActivity => ({
         id: a.id,

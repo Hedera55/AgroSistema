@@ -101,18 +101,15 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     const handleToggleStatus = async (orderId: string) => {
         const order = orders.find(o => o.id === orderId);
         if (!order) return;
-        if (order.status === 'DONE' && order.type === 'SOWING') {
-            // Check based on Order History rather than mutable Lot status.
-            // We cannot revert a Sowing if there is a subsequent Harvest order.
-            const hasSubsequentHarvest = rawOrders.some(o =>
+        if (order.type === 'SOWING') {
+            const blockingHarvest = rawOrders.filter(o => !o.deleted).find(o =>
                 o.type === 'HARVEST' &&
-                o.lotId === order.lotId &&
-                // Only consider valid harvest orders (not cancelled if that status exists, though usually deleted are filtered)
-                o.date >= order.date // String comparison works for YYYY-MM-DD
+                (o.status === 'DONE' || o.status === 'CONFIRMED') &&
+                o.sowingOrderId === order.id
             );
 
-            if (hasSubsequentHarvest) {
-                alert('Ya ha sido cosechada');
+            if (blockingHarvest) {
+                alert('Ya ha sido cosechada (Bloqueado por Orden de Cosecha registrada)');
                 return;
             }
         }

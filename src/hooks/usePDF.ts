@@ -151,9 +151,9 @@ export function usePDF() {
         // Origin/Destination Info
         autoTable(doc, {
             body: [
-                [`TITULAR: ${client.name}`, `CUIT: ${client.cuit || '-'}`],
-                [`ORIGEN: ${warehouseName}`, `DESTINO: ${movement.deliveryLocation || movement.receiverName || 'Retiro en Galpón'}`],
-                [`REFERENCIA: ${movement.referenceId}`, `TIPO: ${movement.type === 'SALE' ? 'VENTA' : 'RETIRO DE STOCK'}`]
+                [`EMPRESA: ${client.name}`, `CUIT: ${client.cuit || '-'}`],
+                [`GALPÓN DE ORIGEN: ${warehouseName}`, `DESTINO: ${movement.deliveryLocation || movement.receiverName || 'Retiro en Galpón'}`],
+                [`REFERENCIA: ${movement.referenceId}`, `TIPO: ${movement.type === 'SALE' ? 'VENTA' : (movement.type === 'IN' ? 'INGRESO' : 'RETIRO DE STOCK')}`]
             ],
             startY: 40,
             theme: 'plain',
@@ -161,16 +161,29 @@ export function usePDF() {
         });
 
         // Detail Table
+        const tableColumns = ['Producto', 'Marca', 'Cantidad', 'Unidad'];
+        const tableRows = [
+            [
+                movement.productName,
+                movement.productBrand || '-',
+                movement.quantity.toString(),
+                movement.unit
+            ]
+        ];
+
+        // Add pricing if it's a SALE or IN
+        if (movement.type === 'SALE' || movement.type === 'IN') {
+            tableColumns.push('Precio Unit.', 'Total');
+            const price = movement.type === 'SALE' ? (movement.salePrice || 0) : (movement.purchasePrice || 0);
+            tableRows[0].push(
+                `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                `$${(price * movement.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            );
+        }
+
         autoTable(doc, {
-            head: [['Producto', 'Marca', 'Cantidad', 'Unidad']],
-            body: [
-                [
-                    movement.productName,
-                    movement.productBrand || '-',
-                    movement.quantity.toString(),
-                    movement.unit
-                ]
-            ],
+            head: [tableColumns],
+            body: tableRows,
             startY: 70,
             theme: 'grid',
             headStyles: { fillColor: [70, 70, 70] }, // Dark Gray

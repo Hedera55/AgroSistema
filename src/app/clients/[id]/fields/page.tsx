@@ -166,35 +166,36 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
         // Mode 1: Creating a Plan
         if (!harvestPlanOrder) {
-            if (!harvestContractor) {
-                // Warning or required? Let's make it optional for plan but recommended
-            }
-
             try {
+                // Find the latest active sowing order for this lot to link it
+                const lastSowing = orders
+                    .filter(o => o.lotId === lot.id && o.type === 'SOWING' && (o.status === 'DONE' || o.status === 'PENDING' || o.status === 'CONFIRMED') && !o.deleted)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
                 await db.put('orders', {
                     id: generateId(),
-                    orderNumber: Math.floor(Math.random() * 10000), // Simple random number or fetch max
                     clientId: id,
                     farmId: lot.farmId,
                     lotId: lot.id,
                     type: 'HARVEST',
                     status: 'CONFIRMED',
                     date: harvestDate,
-                    expectedYield: observedYield ? parseFloat(observedYield) : 0, // Store estimated yield
-                    servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0, // Store planned price
+                    expectedYield: observedYield ? parseFloat(observedYield) : 0,
+                    servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
                     contractorName: harvestContractor,
                     applicatorId: contractors.find(c => c.username === harvestContractor)?.id,
-                    items: [], // No products yet
+                    items: [],
                     treatedArea: lot.hectares,
-                    plantingDensity: 0, // Hack or unused
+                    plantingDensity: 0,
                     plantingSpacing: 0,
+                    sowingOrderId: lastSowing?.id, // Link established here
                     createdBy: displayName || 'Sistema',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
 
-                // Trigger refresh so the button changes to "Marcar Cosechado"
+                // Trigger refresh 
                 await fetchSowingDetails(lot.id);
                 await refreshOrders();
                 setIsHarvesting(false);
@@ -212,47 +213,39 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         // Mode 2: Executing the Plan (Confirming Harvest)
         if (!observedYield) return alert('Ingrese el rinde observado');
         const yieldVal = parseFloat(observedYield);
-        // if (!harvestLaborPrice) return alert('Ingrese el precio de labor'); // Optional?
 
-        const grainName = `Granos de ${lot.cropSpecies}`;
+        const grainName = lot.cropSpecies || 'Granos';
         let product = products.find(p => p.name === grainName && p.type === 'SEED' && p.clientId === id);
 
-        // Fix for legacy bad IDs (e.g., 'grain-soja') causing sync errors
-        // If found product has a non-UUID id, delete it and force recreation
+        // Fix for legacy bad IDs
         if (product && !/^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.id)) {
             try {
-                console.warn('Cleaning up invalid product ID:', product.id);
                 await db.delete('products', product.id);
                 product = undefined;
-            } catch (e) {
-                console.error('Failed to cleanup invalid product ID:', e);
-            }
+            } catch (e) { }
         }
 
         if (!product && lot.cropSpecies) {
-            // Auto-create product for this grain
-            product = {
-                id: generateId(), // Use proper UUID
+            product = await addProduct({
                 clientId: id,
                 name: grainName,
-                type: 'SEED', // Grain is essentially seed type for Acopio
+                type: 'SEED',
                 unit: 'kg',
                 price: 0,
                 createdAt: new Date().toISOString(),
                 synced: false
-            };
-            await db.put('products', product);
+            });
         }
 
         if (!product) {
-            alert('No se pudo identificar el cultivo del lote. Asegúrese de que tenga una especie asignada.');
+            alert('No se pudo identificar el cultivo del lote.');
             return;
         }
 
         const allWarehouses = await db.getAll('warehouses') as Warehouse[];
         const harvestWarehouse = allWarehouses.find((w: Warehouse) => w.name === 'Acopio de Granos');
         if (!harvestWarehouse) {
-            alert('No hay un depósito de Cosecha (Acopio de Granos) configurado.');
+            alert('No hay un depósito de Cosecha configurado.');
             return;
         }
 
@@ -268,16 +261,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             // 2. Update Stock (IN)
             const allStock = await db.getAll('stock') as ClientStock[];
             const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
-
             const existingStock = clientStock.find((s: ClientStock) => s.productId === product.id && s.warehouseId === harvestWarehouse.id);
             const currentQty = existingStock?.quantity || 0;
 
             await updateStock({
-                id: existingStock?.id, // If undefined, updateStock handles create? 
-                // We need to be careful. updateStock in hooks usually handles create.
-                // Here we are calling the function from the hook which abstracts db calls? 
-                // No, updateStock is from hook useInventory? 
-                // Line 163 calls `updateStock` which comes from `useInventory`.
+                id: existingStock?.id,
                 clientId: id,
                 warehouseId: harvestWarehouse.id,
                 productId: product.id,
@@ -287,7 +275,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             const movementDate = harvestDate || new Date().toISOString().split('T')[0];
 
-            // 3. Record Movement 1: HARVEST (Stock In)
+            // 3. Record Movement 1: HARVEST
             const farm = farms.find(f => f.id === lot.farmId);
             await db.put('movements', {
                 id: generateId(),
@@ -308,13 +296,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 synced: false
             });
 
-            // 4. Record Movement 2: EXPENSE (Service Out)
+            // 4. Record Movement 2: EXPENSE
             if (harvestLaborPrice) {
                 const pricePerHa = parseFloat(harvestLaborPrice);
                 const totalCost = pricePerHa * lot.hectares;
                 const serviceProductId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
-
-                // Ensure Service Product exists
                 const existingService = await db.get('products', serviceProductId);
                 if (!existingService) {
                     await db.put('products', {
@@ -322,7 +308,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         clientId: id,
                         name: 'Egresos de Cosecha (Labor)',
                         type: 'OTHER',
-                        unit: 'UN',
+                        unit: 'UNIT',
                         price: 0,
                         createdAt: new Date().toISOString(),
                         synced: false
@@ -332,12 +318,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 await db.put('movements', {
                     id: generateId(),
                     clientId: id,
-                    warehouseId: harvestWarehouse.id, // Link to harvest warehouse for context
+                    warehouseId: harvestWarehouse.id,
                     productId: serviceProductId,
                     productName: 'Egresos de Cosecha (Labor)',
                     type: 'OUT',
                     quantity: 1,
-                    unit: 'UN',
+                    unit: 'UNIT',
                     date: movementDate,
                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     referenceId: lot.id,
@@ -352,7 +338,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 });
             }
 
-            // 5. Update Order Status (Complete the Plan)
+            // 5. Update Order Status
             if (harvestPlanOrder) {
                 await db.put('orders', {
                     ...harvestPlanOrder,
@@ -362,17 +348,44 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
+            } else {
+                const lastSowing = orders
+                    .filter(o => o.lotId === lot.id && o.type === 'SOWING' && (o.status === 'DONE' || o.status === 'PENDING' || o.status === 'CONFIRMED') && !o.deleted)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+                await db.put('orders', {
+                    id: generateId(),
+                    clientId: id,
+                    farmId: lot.farmId,
+                    lotId: lot.id,
+                    type: 'HARVEST',
+                    status: 'DONE',
+                    date: movementDate,
+                    expectedYield: yieldVal,
+                    servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
+                    contractorName: harvestContractor,
+                    applicatorId: contractors.find(c => c.username === harvestContractor)?.id,
+                    items: [],
+                    treatedArea: lot.hectares,
+                    plantingDensity: 0,
+                    plantingSpacing: 0,
+                    sowingOrderId: lastSowing?.id,
+                    createdBy: displayName || 'Sistema',
+                    appliedBy: displayName || 'Sistema',
+                    appliedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
             }
 
             syncService.pushChanges();
-
             setIsHarvesting(false);
             setObservedYield('');
             setHarvestLaborPrice('');
             setHarvestContractor('');
             setHarvestDate('');
             setHarvestPlanOrder(null);
-
         } catch (error) {
             console.error('Error marking harvested:', error);
             alert('Error al registrar la cosecha.');
@@ -1019,32 +1032,45 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                     <div className="flex justify-between items-center">
                                                                         <div>
                                                                             {lot.status && (
-                                                                                <span
-                                                                                    title={lot.status === 'SOWED' ? 'Sembrado' :
-                                                                                        lot.status === 'HARVESTED' ? 'Cosechado' :
-                                                                                            lot.status === 'NOT_SOWED' ? 'Asignado' : 'Vacío'}
-                                                                                    onClick={async (e) => {
-                                                                                        e.stopPropagation();
-                                                                                        e.preventDefault();
-                                                                                        if (lot.status === 'SOWED') {
-                                                                                            await fetchSowingDetails(lot.id);
-                                                                                            openPanel('sowing_details', lot.id, selectedFarmId!, lot.id, lot.name, `Datos de Siembra - ${lot.name}`);
-                                                                                        } else if (lot.status === 'HARVESTED') {
-                                                                                            await fetchHarvestDetails(lot.id);
-                                                                                            openPanel('harvest_details', lot.id, selectedFarmId!, lot.id, lot.name, `Datos de Cosecha - ${lot.name}`);
-                                                                                        }
-                                                                                    }}
-                                                                                    className={`text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg border shadow-sm transition-all relative z-10 ${lot.status === 'SOWED'
-                                                                                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
-                                                                                        : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-pointer hover:bg-blue-200 hover:scale-110' :
-                                                                                            lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                                                                                                'bg-slate-100 text-slate-500 border-slate-200'
-                                                                                        }`}
-                                                                                >
-                                                                                    {lot.status === 'SOWED' ? 'S' :
-                                                                                        lot.status === 'HARVESTED' ? 'C' :
-                                                                                            lot.status === 'NOT_SOWED' ? 'A' : 'V'}
-                                                                                </span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span
+                                                                                        title={lot.status === 'SOWED' ? 'Sembrado' :
+                                                                                            lot.status === 'HARVESTED' ? 'Cosechado' :
+                                                                                                lot.status === 'NOT_SOWED' ? 'Asignado' : 'Vacío'}
+                                                                                        onClick={async (e) => {
+                                                                                            e.stopPropagation();
+                                                                                            e.preventDefault();
+                                                                                            if (lot.status === 'SOWED') {
+                                                                                                await fetchSowingDetails(lot.id);
+                                                                                                openPanel('sowing_details', lot.id, selectedFarmId!, lot.id, lot.name, `Datos de Siembra - ${lot.name}`);
+                                                                                            } else if (lot.status === 'HARVESTED') {
+                                                                                                await fetchHarvestDetails(lot.id);
+                                                                                                openPanel('harvest_details', lot.id, selectedFarmId!, lot.id, lot.name);
+                                                                                            }
+                                                                                        }}
+                                                                                        className={`text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg border shadow-sm transition-all relative z-10 ${lot.status === 'SOWED'
+                                                                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
+                                                                                            : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-pointer hover:bg-blue-200 hover:scale-110' :
+                                                                                                lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                                                                                    'bg-slate-100 text-slate-500 border-slate-200'
+                                                                                            }`}
+                                                                                    >
+                                                                                        {lot.status === 'SOWED' ? 'S' :
+                                                                                            lot.status === 'HARVESTED' ? 'C' :
+                                                                                                lot.status === 'NOT_SOWED' ? 'A' : 'V'}
+                                                                                    </span>
+                                                                                    {lot.status === 'HARVESTED' && (
+                                                                                        <button
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                handleClearCrop(lot);
+                                                                                            }}
+                                                                                            className="text-[10px] font-bold text-red-400 hover:text-red-600 bg-white px-2 py-0.5 rounded border border-slate-200 hover:border-red-200 transition-colors uppercase tracking-tight"
+                                                                                        >
+                                                                                            Reiniciar
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
                                                                             )}
                                                                         </div>
 
@@ -1252,7 +1278,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     {activePanel.type === 'observations' ? 'Observaciones' :
                                         activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') :
                                             activePanel.type === 'sowing_details' ? 'Detalle de Siembra' :
-                                                activePanel.type === 'harvest_details' ? 'Detalle de Cosecha' : 'Historial del Lote'}
+                                                activePanel.type === 'harvest_details' ? `Detalle de Cosecha - ${activePanel.name}` : 'Historial del Lote'}
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
                                 <div className="flex items-center gap-2 overflow-hidden">
@@ -1461,7 +1487,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                         <div className="text-sm text-slate-800 truncate">{harvestMovement.contractorName || '-'}</div>
                                                     </div>
                                                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Costo Labor</div>
+                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Costo Labor Total</div>
                                                         <div className="font-mono text-slate-800">
                                                             {harvestMovement.harvestLaborCost
                                                                 ? `$${harvestMovement.harvestLaborCost.toLocaleString()}`

@@ -239,21 +239,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         let showValue = false;
 
                                         if (m.type === 'IN' && !m.isTransfer) {
-                                            unitPrice = m.purchasePrice || 0;
-                                            if (!unitPrice) {
-                                                unitPrice = productsKey[m.productId] || 0;
-                                                isEstimate = true;
-                                            }
+                                            unitPrice = m.purchasePrice !== undefined ? m.purchasePrice : 0;
                                             totalValue = unitPrice * m.quantity;
-                                            showValue = totalValue > 0;
+                                            showValue = true; // Always show even if 0
                                         } else if (m.type === 'SALE') {
-                                            unitPrice = m.salePrice || 0;
-                                            if (!unitPrice) {
-                                                unitPrice = productsKey[m.productId] || 0;
-                                                isEstimate = true;
-                                            }
+                                            unitPrice = m.salePrice !== undefined ? m.salePrice : 0;
                                             totalValue = unitPrice * m.quantity;
-                                            showValue = totalValue > 0;
+                                            showValue = true; // Always show even if 0
+                                        } else if (m.type === 'HARVEST') {
+                                            // Optional: if you want to show 0 for harvest too
+                                            unitPrice = 0;
+                                            totalValue = 0;
+                                            showValue = false; // Usually harvest doesn't have a "price" here, it's just production
                                         }
 
                                         const priceLabel = m.type === 'IN' ? 'Precio de compra' : 'Precio de venta';
@@ -277,10 +274,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
-                                                    {m.type === 'IN' && !m.isTransfer ? '+' : '-'}{m.quantity} {m.unit}
+                                                    {(m.type === 'IN' || m.type === 'HARVEST' || m.isTransfer) ? '+' : '-'}{m.quantity} {m.unit}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
-                                                    {showValue && totalValue > 0 ? (
+                                                    {showValue ? (
                                                         <span title={valueTooltip}>
                                                             ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                             {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
@@ -298,12 +295,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     {m.isTransfer ? (
                                                         <div className="flex items-center gap-1 text-xs">
-                                                            <span className="font-bold text-slate-700">{m.originName}</span>
+                                                            <span className="font-bold text-slate-900">{m.originName}</span>
                                                             <span className="text-slate-300">→</span>
                                                             <span className="font-bold text-emerald-600">{m.destName}</span>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-slate-500">{warehousesKey[m.warehouseId || ''] || '-'}</span>
+                                                        <span className="text-slate-900">{warehousesKey[m.warehouseId || ''] || '-'}</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right">

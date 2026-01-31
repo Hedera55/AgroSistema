@@ -13,7 +13,7 @@ export function useOrders(clientId: string) {
         try {
             const allOrders = await db.getAll('orders');
             const clientOrders = allOrders
-                .filter((o: Order) => o.clientId === clientId)
+                .filter((o: Order) => o.clientId === clientId && !o.deleted)
                 .sort((a: Order, b: Order) => (b.orderNumber || 0) - (a.orderNumber || 0));
             setOrders(clientOrders);
         } catch (error) {
@@ -177,14 +177,34 @@ export function useOrders(clientId: string) {
             const order = orders.find(o => o.id === orderId);
             if (!order) throw new Error('Order not found');
 
-            await db.delete('orders', orderId);
+            // 1. Soft-delete the order
+            await db.put('orders', {
+                ...order,
+                deleted: true,
+                deletedAt: new Date().toISOString(),
+                deletedBy: displayName,
+                synced: false
+            });
+
+            // 2. Soft-delete associated movements
+            const allMovements = await db.getAll('movements');
+            const associatedMovements = allMovements.filter((m: any) => m.referenceId === orderId);
+            for (const m of associatedMovements) {
+                await db.put('movements', {
+                    ...m,
+                    deleted: true,
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: displayName,
+                    synced: false
+                });
+            }
 
             await db.logOrderActivity({
                 orderId: orderId,
                 orderNumber: order.orderNumber,
                 clientId: clientId,
                 action: 'DELETE',
-                description: 'Orden eliminada',
+                description: 'Orden eliminada (soft-delete)',
                 userName: displayName
             });
 
