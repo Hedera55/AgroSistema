@@ -119,7 +119,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     }, [movements, products, orders]);
 
     const financialHistory = useMemo(() => {
-        const history: { id: string, date: string, type: 'PURCHASE' | 'SALE' | 'SERVICE', description: string, amount: number }[] = [];
+        const history: {
+            id: string,
+            date: string,
+            type: 'PURCHASE' | 'SALE' | 'SERVICE',
+            description: string,
+            amount: number,
+            detail?: string
+        }[] = [];
 
         movements.forEach(m => {
             const product = products.find(p => p.id === m.productId);
@@ -132,15 +139,18 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     date: m.date,
                     type: 'PURCHASE',
                     description: `Compra: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
-                    amount: m.quantity * purchasePrice
+                    amount: m.quantity * purchasePrice,
+                    detail: `${m.quantity} ${product?.unit || 'u.'} @ $${purchasePrice.toLocaleString()} / ${product?.unit || 'u.'}`
                 });
             } else if (m.type === 'SALE') {
+                const salePrice = m.salePrice || 0;
                 history.push({
                     id: m.id,
                     date: m.date,
                     type: 'SALE',
                     description: `Venta: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
-                    amount: m.quantity * (m.salePrice || 0)
+                    amount: m.quantity * salePrice,
+                    detail: `${m.quantity} ${product?.unit || 'u.'} @ $${salePrice.toLocaleString()} / ${product?.unit || 'u.'}`
                 });
             }
         });
@@ -151,8 +161,11 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     id: o.id,
                     date: o.date,
                     type: 'SERVICE',
-                    description: o.type === 'HARVEST' ? 'Servicio de cosecha' : `Servicio: Orden Nro ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
-                    amount: o.servicePrice * o.treatedArea
+                    description: o.type === 'HARVEST' ? 'Servicio de cosecha' :
+                        (o.type === 'SOWING' ? 'Siembra' : 'Pulverización') +
+                        `: Orden Nro ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
+                    amount: o.servicePrice * o.treatedArea,
+                    detail: `${o.treatedArea} ha @ $${o.servicePrice.toLocaleString()} / ha`
                 });
             }
         });
@@ -234,7 +247,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Fecha</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Descripción</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Monto</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Monto Total</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -259,8 +272,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                         <td className="px-6 py-4 text-sm text-slate-600 font-medium">
                                             {item.description}
                                         </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.type === 'SALE' ? 'text-emerald-600' : 'text-red-500'
-                                            }`}>
+                                        <td
+                                            title={item.detail}
+                                            className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.type === 'SALE' ? 'text-emerald-600' : 'text-red-500'
+                                                }`}>
                                             {item.type === 'SALE' ? '+' : '-'}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                     </tr>

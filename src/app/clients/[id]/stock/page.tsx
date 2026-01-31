@@ -862,7 +862,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE' || lastAction === 'IN') && (
+                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
                             <Button
                                 onClick={async () => {
                                     const client = await db.get('clients', id) as any;
@@ -874,7 +874,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 variant="outline"
                                 className="border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                             >
-                                📄 {lastAction === 'IN' ? 'Descargar Comprobante' : 'Descargar Remito'}
+                                📄 Descargar Remito
                             </Button>
                         )}
                         {lastAction === 'SALE' && (

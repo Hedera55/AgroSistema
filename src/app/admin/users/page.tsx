@@ -357,7 +357,9 @@ export default function UserManagementPage() {
                                                     if (confirm(`¿Eliminar usuario ${user.email}? Esta acción es irreversible.`)) {
                                                         setSavingId(user.id);
                                                         try {
-                                                            const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+                                                            const { error } = await supabase.rpc('delete_user_entirely', {
+                                                                user_id_to_delete: user.id
+                                                            });
                                                             if (error) throw error;
                                                             setUsers(users.filter(u => u.id !== user.id));
                                                         } catch (e) {

@@ -243,7 +243,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
 
         const allWarehouses = await db.getAll('warehouses') as Warehouse[];
-        const harvestWarehouse = allWarehouses.find((w: Warehouse) => w.name === 'Acopio de Granos');
+        // Filter by client ID to avoid picking standard warehouses from other clients
+        const clientWarehouses = allWarehouses.filter(w => w.clientId === id);
+        const harvestWarehouse = clientWarehouses.find((w: Warehouse) => w.name === 'Acopio de Granos');
         if (!harvestWarehouse) {
             alert('No hay un depósito de Cosecha configurado.');
             return;
@@ -275,8 +277,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             const movementDate = harvestDate || new Date().toISOString().split('T')[0];
 
-            // 3. Record Movement 1: HARVEST
+            // 3. Record Movement: HARVEST (Consolidated)
             const farm = farms.find(f => f.id === lot.farmId);
+            const pricePerHa = harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0;
+            const totalCost = pricePerHa * lot.hectares;
+
             await db.put('movements', {
                 id: generateId(),
                 clientId: id,
@@ -287,56 +292,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 quantity: yieldVal,
                 unit: product.unit,
                 date: movementDate,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                // Fixed 24h format to avoid "Invalid Date"
+                time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 referenceId: lot.id,
                 notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'})`,
                 contractorName: harvestContractor || undefined,
+                harvestLaborPricePerHa: pricePerHa || undefined,
+                harvestLaborCost: totalCost || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false
             });
 
-            // 4. Record Movement 2: EXPENSE
-            if (harvestLaborPrice) {
-                const pricePerHa = parseFloat(harvestLaborPrice);
-                const totalCost = pricePerHa * lot.hectares;
-                const serviceProductId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
-                const existingService = await db.get('products', serviceProductId);
-                if (!existingService) {
-                    await db.put('products', {
-                        id: serviceProductId,
-                        clientId: id,
-                        name: 'Egresos de Cosecha (Labor)',
-                        type: 'OTHER',
-                        unit: 'UNIT',
-                        price: 0,
-                        createdAt: new Date().toISOString(),
-                        synced: false
-                    });
-                }
-
-                await db.put('movements', {
-                    id: generateId(),
-                    clientId: id,
-                    warehouseId: harvestWarehouse.id,
-                    productId: serviceProductId,
-                    productName: 'Egresos de Cosecha (Labor)',
-                    type: 'OUT',
-                    quantity: 1,
-                    unit: 'UNIT',
-                    date: movementDate,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    referenceId: lot.id,
-                    purchasePrice: totalCost,
-                    harvestLaborPricePerHa: pricePerHa,
-                    harvestLaborCost: totalCost,
-                    contractorName: harvestContractor || undefined,
-                    notes: `Labor de cosecha - Lote ${lot.name}`,
-                    createdBy: displayName || 'Sistema',
-                    createdAt: new Date().toISOString(),
-                    synced: false
-                });
-            }
+            // Step 4 (Labor movement) was removed to avoid physical stock confusion
 
             // 5. Update Order Status
             if (harvestPlanOrder) {

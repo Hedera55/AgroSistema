@@ -29,14 +29,15 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                         status: o.status,
                         description: o.plantingDensity ? 'Siembra' : 'Pulverización',
                         items: o.items,
+                        serviceCost: (o.servicePrice || 0) * (o.treatedArea || 0),
                         author: o.createdBy || 'Sistema',
                         timestamp: new Date(`${o.date}T${o.time || '00:00'}`).getTime()
                     }));
 
-                // 2. Fetch Harvest Movements
+                // 2. Fetch Harvest Movements (Filtering out zero-quantity labor-only movements if they exist)
                 const allMovements = await db.getAll('movements');
                 const harvestMovements = allMovements
-                    .filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST')
+                    .filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha')
                     .map((m: any) => ({
                         id: m.id,
                         date: m.date,
@@ -85,14 +86,16 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                         <th className="px-4 py-3 font-bold text-slate-700 w-24">Tipo</th>
                         <th className="px-4 py-3 font-bold text-slate-700">Descripción</th>
                         <th className="px-4 py-3 font-bold text-slate-700 text-right">Rinde / Costo</th>
-                        <th className="px-4 py-3 font-bold text-slate-700 w-10"></th>
+                        <th className="px-4 py-3 font-bold text-slate-700 w-24">Usuario</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {history.map((event) => (
                         <tr key={event.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="px-4 py-3 align-top">
-                                <div className="font-mono text-slate-600 font-bold">{new Date(event.timestamp).toLocaleDateString()}</div>
+                                <div className="font-mono text-slate-600 font-bold">
+                                    {isNaN(event.timestamp) ? event.date : new Date(event.timestamp).toLocaleDateString()}
+                                </div>
                                 <div className="text-[10px] text-slate-400">{event.time}</div>
                             </td>
                             <td className="px-4 py-3 align-top">
@@ -107,7 +110,7 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                                     {event.status && (
                                         <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border
                                             ${event.status === 'CONFIRMED' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                                                'bg-slate-50 text-slate-400 border-slate-100' // Realizado defaults to subtle
+                                                'bg-slate-50 text-slate-400 border-slate-100'
                                             }`}>
                                             {event.status === 'CONFIRMED' ? 'Asignado' : 'Realizado'}
                                         </span>
@@ -121,9 +124,6 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                                         {event.contractorName && (
                                             <div className="text-xs text-slate-500 mt-0.5">Contratista: {event.contractorName}</div>
                                         )}
-                                        <div className="text-[10px] text-slate-400 mt-1">
-                                            Por: {event.author}
-                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-1">
@@ -143,17 +143,25 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                                     <div>
                                         <div className="font-mono font-bold text-blue-700">{event.observedYield?.toLocaleString()} kg</div>
                                         {event.harvestLaborCost && (
-                                            <div className="text-xs font-mono text-slate-500 mt-0.5">
-                                                Lab: ${event.harvestLaborCost.toLocaleString()}
+                                            <div className="text-xs font-mono text-slate-500 mt-0.5 whitespace-nowrap">
+                                                Costo de Labor: ${event.harvestLaborCost.toLocaleString()}
                                             </div>
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="text-slate-400 text-xs">-</div>
+                                    <div>
+                                        {event.serviceCost > 0 ? (
+                                            <div className="text-xs font-mono text-slate-500">
+                                                Costo de {event.type === 'SOWING' ? 'Siembra' : 'Labor'}: ${event.serviceCost.toLocaleString()}
+                                            </div>
+                                        ) : (
+                                            <div className="text-slate-400 text-xs">-</div>
+                                        )}
+                                    </div>
                                 )}
                             </td>
                             <td className="px-4 py-3 align-top">
-                                {/* Actions placeholder */}
+                                <span className="text-xs text-slate-600 font-medium italic">{event.author}</span>
                             </td>
                         </tr>
                     ))}

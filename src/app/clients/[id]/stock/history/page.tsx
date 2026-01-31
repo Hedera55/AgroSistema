@@ -305,36 +305,38 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {m.facturaImageUrl ? (
-                                                            <a
-                                                                href={m.facturaImageUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                title="Ver factura"
-                                                                className="inline-block"
-                                                            >
-                                                                <button
-                                                                    className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
+                                                        {m.type !== 'HARVEST' && (
+                                                            m.facturaImageUrl ? (
+                                                                <a
+                                                                    href={m.facturaImageUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    title="Ver factura"
+                                                                    className="inline-block"
                                                                 >
-                                                                    F
-                                                                </button>
-                                                            </a>
-                                                        ) : (
-                                                            <div className="inline-block relative">
-                                                                <input
-                                                                    type="file"
-                                                                    accept="image/*,application/pdf"
-                                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
-                                                                    onChange={(e) => handleFileUpload(e, m.id)}
-                                                                    disabled={uploadingId === m.id}
-                                                                    title="Subir factura faltante"
-                                                                />
-                                                                <button
-                                                                    className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
-                                                                >
-                                                                    {uploadingId === m.id ? '...' : 'F'}
-                                                                </button>
-                                                            </div>
+                                                                    <button
+                                                                        className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
+                                                                    >
+                                                                        F
+                                                                    </button>
+                                                                </a>
+                                                            ) : (
+                                                                <div className="inline-block relative">
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="image/*,application/pdf"
+                                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+                                                                        onChange={(e) => handleFileUpload(e, m.id)}
+                                                                        disabled={uploadingId === m.id}
+                                                                        title="Subir factura faltante"
+                                                                    />
+                                                                    <button
+                                                                        className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
+                                                                    >
+                                                                        {uploadingId === m.id ? '...' : 'F'}
+                                                                    </button>
+                                                                </div>
+                                                            )
                                                         )}
                                                         <button
                                                             onClick={() => handleDeleteMovement(m.id, m.partnerId)}

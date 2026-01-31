@@ -474,7 +474,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
                     <div className="flex justify-between pt-6 border-t border-slate-100">
                         <Button variant="secondary" onClick={() => setStep(1)}>Volver</Button>
-                        <Button onClick={() => setStep(3)} disabled={items.length === 0}>Revisar stock</Button>
+                        <Button onClick={() => setStep(3)} disabled={items.length === 0}>Confirmar orden</Button>
                     </div>
                 </div>
             )}

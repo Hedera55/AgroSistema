@@ -109,7 +109,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             );
 
             if (blockingHarvest) {
-                alert('Ya ha sido cosechada (Bloqueado por Orden de Cosecha registrada)');
+                alert('Ya ha sido cosechada, no se puede cancelar la siembra');
                 return;
             }
         }
