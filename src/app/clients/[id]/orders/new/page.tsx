@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
-import { Order, OrderItem, Unit } from '@/types';
+import { Order, OrderItem, Unit, Client } from '@/types';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrders } from '@/hooks/useOrders';
@@ -21,6 +21,8 @@ const typeLabels: Record<ProductType, string> = {
     SEED: 'Semilla',
     FUNGICIDE: 'Fungicida',
     INSECTICIDE: 'Insecticida',
+    COADYUVANTE: 'Coadyuvante',
+    INOCULANTE: 'Inoculante',
     OTHER: 'Otro'
 };
 
@@ -35,6 +37,11 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const { stock, refresh: refreshStock } = useClientStock(clientId);
     const { warehouses } = useWarehouses(clientId);
     const { addOrder } = useOrders(clientId);
+    const [client, setClient] = useState<Client | null>(null);
+
+    useEffect(() => {
+        db.get('clients', clientId).then(setClient);
+    }, [clientId]);
 
     // Form State
     const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -68,6 +75,16 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [plantingSpacing, setPlantingSpacing] = useState('');
     const [expectedYield, setExpectedYield] = useState('');
     const [servicePrice, setServicePrice] = useState('');
+    const [selectedPartnerName, setSelectedPartnerName] = useState('');
+    const [notes, setNotes] = useState('');
+    const [facturaImageUrl, setFacturaImageUrl] = useState<string | null>(null);
+    const [showNotes, setShowNotes] = useState(false);
+
+    // Mechanical Labor State
+    const [isMechanicalLabor, setIsMechanicalLabor] = useState(false);
+    const [mechanicalLaborName, setMechanicalLaborName] = useState('');
+    const [currLoadingOrder, setCurrLoadingOrder] = useState('');
+
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
     // Derived Data
@@ -87,31 +104,32 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
     // Add Item
     const handleAddItem = () => {
-        if (!currProdId || !currDosage) return;
-        const product = products.find(p => p.id === currProdId);
-        if (!product) return;
+        if (!isMechanicalLabor && (!currProdId || !currDosage)) return;
+        if (isMechanicalLabor && !mechanicalLaborName) return;
+
+        const product = isMechanicalLabor ? null : products.find(p => p.id === currProdId);
 
         const item: OrderItem = {
             id: generateId(),
-            productId: currProdId,
-            productName: product.name,
-            brandName: product.brandName,
-            activeIngredient: product.activeIngredient,
-            dosage: parseFloat(currDosage),
-            unit: product.unit,
-            totalQuantity: parseFloat(currDosage) * (selectedLot?.hectares || 0),
-            plantingDensity: product.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
-            plantingDensityUnit: product.type === 'SEED' ? 'KG_HA' : undefined,
-            plantingSpacing: product.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
-            expectedYield: product.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
+            productId: isMechanicalLabor ? 'LABOREO_MECANICO' : currProdId,
+            productName: isMechanicalLabor ? mechanicalLaborName : (product?.name || ''),
+            brandName: product?.brandName,
+            commercialName: product?.commercialName,
+            activeIngredient: product?.activeIngredient,
+            dosage: parseFloat(currDosage || '0'),
+            unit: product?.unit || 'ha',
+            totalQuantity: parseFloat(currDosage || '0') * (selectedLot?.hectares || 0),
+            loadingOrder: currLoadingOrder ? parseInt(currLoadingOrder) : undefined,
+            plantingDensity: product?.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
+            plantingDensityUnit: product?.type === 'SEED' ? 'KG_HA' : undefined,
+            plantingSpacing: product?.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
+            expectedYield: product?.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
         };
 
         if (editingItemId) {
-            // Update existing item
             setItems(items.map(i => i.id === editingItemId ? { ...item, id: editingItemId } : i));
             setEditingItemId(null);
         } else {
-            // Add new item
             setItems([...items, item]);
         }
 
@@ -119,14 +137,24 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         setCurrDosage('');
         setPlantingDensity('');
         setPlantingSpacing('');
+        setCurrLoadingOrder('');
+        setIsMechanicalLabor(false);
+        setMechanicalLaborName('');
     };
 
     const handleEditItem = (item: OrderItem) => {
         setEditingItemId(item.id);
-        setCurrProdId(item.productId);
+        if (item.productId === 'LABOREO_MECANICO') {
+            setIsMechanicalLabor(true);
+            setMechanicalLaborName(item.productName);
+        } else {
+            setIsMechanicalLabor(false);
+            setCurrProdId(item.productId);
+        }
         setCurrDosage(String(item.dosage));
         setPlantingDensity(item.plantingDensity ? String(item.plantingDensity) : '');
         setPlantingSpacing(item.plantingSpacing ? String(item.plantingSpacing) : '');
+        setCurrLoadingOrder(item.loadingOrder ? String(item.loadingOrder) : '');
     };
 
     const handleCancelEdit = () => {
@@ -135,6 +163,9 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         setCurrDosage('');
         setPlantingDensity('');
         setPlantingSpacing('');
+        setCurrLoadingOrder('');
+        setIsMechanicalLabor(false);
+        setMechanicalLaborName('');
     };
 
     const handleRemoveItem = (id: string) => {
@@ -203,6 +234,9 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 plantingDensity: items.find(i => i.plantingDensity)?.plantingDensity,
                 plantingDensityUnit: items.find(i => i.plantingDensityUnit)?.plantingDensityUnit,
                 plantingSpacing: items.find(i => i.plantingSpacing)?.plantingSpacing,
+                notes: notes,
+                facturaImageUrl: facturaImageUrl || undefined,
+                investorName: selectedPartnerName,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: displayName || 'Sistema',
@@ -287,42 +321,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         </select>
                     </div>
 
-
-                    <div className="w-full">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Aplicador (Contratista)</label>
-                        <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
-                            value={selectedApplicatorId}
-                            onChange={e => setSelectedApplicatorId(e.target.value)}
-                        >
-                            <option value="">Seleccione Aplicador...</option>
-                            {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
-                        </select>
-                    </div>
-
-                    <div className="w-full space-y-2">
-                        <Input
-                            label="Precio de Servicio por Hectárea (Opcional)"
-                            type="number"
-                            step="0.01"
-                            placeholder="ej. 8500.00"
-                            value={servicePrice}
-                            onChange={e => setServicePrice(e.target.value)}
-                            prefix="$"
-                        />
-                        {servicePrice && selectedLot && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg">
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Costo Total Estimado:</span>
-                                <span className="text-sm font-mono font-bold text-emerald-600">
-                                    ${(parseFloat(servicePrice) * selectedLot.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                                <span className="text-[10px] text-slate-400">({selectedLot.hectares} ha)</span>
-                            </div>
-                        )}
-                    </div>
-
                     <div className="flex justify-end pt-4">
-                        <Button onClick={() => setStep(2)} disabled={!selectedLotId || !date}>Agregar productos</Button>
+                        <Button onClick={() => setStep(2)} disabled={!selectedLotId || !date}>Agregar producto</Button>
                     </div>
                 </div>
             )}
@@ -335,11 +335,108 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         <span className="text-emerald-700 bg-emerald-100 px-2 py-1 rounded">{selectedLot.hectares} hectáreas</span>
                     </div>
 
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm space-y-4">
+                    <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50 p-6 rounded-xl border border-slate-100">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Orden de Carga</label>
+                                <Input
+                                    type="number"
+                                    placeholder="ej. 1"
+                                    value={currLoadingOrder}
+                                    onChange={e => setCurrLoadingOrder(e.target.value)}
+                                    className="h-[46px]"
+                                />
+                            </div>
+
+                            <div className="md:col-span-5">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Producto / Labor</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm"
+                                    value={isMechanicalLabor ? 'LABOREO_MECANICO' : currProdId}
+                                    onChange={e => {
+                                        if (e.target.value === 'LABOREO_MECANICO') {
+                                            setIsMechanicalLabor(true);
+                                            setCurrProdId('');
+                                        } else {
+                                            setIsMechanicalLabor(false);
+                                            setCurrProdId(e.target.value);
+                                        }
+                                    }}
+                                >
+                                    <option value="">Seleccione producto...</option>
+                                    <optgroup label="Servicios Especiales">
+                                        <option value="LABOREO_MECANICO">Laboreo Mecánico</option>
+                                    </optgroup>
+                                    <optgroup label="Stock Galpón">
+                                        {availableProducts.map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.activeIngredient || p.name} {p.commercialName ? `| ${p.commercialName}` : ''} {p.brandName ? `(${p.brandName})` : ''} ({typeLabels[p.type]})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-3">
+                                {isMechanicalLabor ? (
+                                    <Input
+                                        placeholder="ej. Arada"
+                                        value={mechanicalLaborName}
+                                        onChange={e => setMechanicalLaborName(e.target.value)}
+                                        className="h-[46px]"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={currDosage}
+                                            onChange={e => setCurrDosage(e.target.value)}
+                                            className={`${availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? 'hidden' : ''} h-[46px]`}
+                                        />
+                                        {!isMechanicalLabor && currProdId && availableProducts.find(p => p.id === currProdId)?.type !== 'SEED' && (
+                                            <span className="text-xs font-bold text-slate-400 uppercase whitespace-nowrap">
+                                                {availableProducts.find(p => p.id === currProdId)?.unit || 'u'}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="md:col-span-2 flex gap-2">
+                                <Button onClick={handleAddItem} disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)} className="w-full">
+                                    {editingItemId ? 'Ok' : '+'}
+                                </Button>
+                                {editingItemId && (
+                                    <Button variant="secondary" onClick={handleCancelEdit}>
+                                        ✕
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {!isMechanicalLabor && currProdId && availableProducts.find(p => p.id === currProdId)?.type === 'SEED' && (
+                            <div className="animate-fadeIn grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-1">Densidad (kg/ha)</label>
+                                    <Input type="number" step="0.01" placeholder="ej. 80" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-1">Espaciamiento (cm)</label>
+                                    <Input type="number" step="0.1" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-1">Rinde esperado (kg/ha)</label>
+                                    <Input type="number" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value)} />
+                                </div>
+                            </div>
+                        )}
+
                         <div className="w-full">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Origen (Galpón)</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Depósito de Origen</label>
                             <select
-                                className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                                className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
                                 value={selectedOrderWarehouseId}
                                 onChange={e => setSelectedOrderWarehouseId(e.target.value)}
                             >
@@ -347,81 +444,86 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             </select>
                         </div>
 
-                        <div className="flex gap-4 items-end">
-                            <div className="flex-1">
-                                <label className="block text-xs font-medium text-slate-500 mb-1">Producto</label>
-                                <select className="block w-full rounded-md border-slate-300 shadow-sm text-sm" value={currProdId} onChange={e => setCurrProdId(e.target.value)}>
-                                    <option value="">Seleccione producto...</option>
-                                    {availableProducts.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({typeLabels[p.type]}) ({p.unit})
-                                        </option>
+                        <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
+                                    value={selectedApplicatorId}
+                                    onChange={e => setSelectedApplicatorId(e.target.value)}
+                                >
+                                    <option value="">Seleccione Aplicador...</option>
+                                    {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={servicePrice}
+                                    onChange={e => setServicePrice(e.target.value)}
+                                    className="h-[46px]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Socio Responsable</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
+                                    value={selectedPartnerName}
+                                    onChange={e => setSelectedPartnerName(e.target.value)}
+                                >
+                                    <option value="">Seleccione Socio...</option>
+                                    {client?.partners?.map((p: any) => (
+                                        <option key={p.name} value={p.name}>{p.name}</option>
                                     ))}
                                 </select>
                             </div>
-                            {availableProducts.find(p => p.id === currProdId)?.type !== 'SEED' && (
-                                <>
-                                    <div className="w-32">
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Dosis / ha</label>
-                                        <input type="number" step="0.01" className="block w-full rounded-md border-slate-300 shadow-sm text-sm" placeholder="0.0" value={currDosage} onChange={e => setCurrDosage(e.target.value)} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button onClick={handleAddItem} disabled={!currProdId || !currDosage}>
-                                            {editingItemId ? 'Actualizar' : 'Agregar'}
-                                        </Button>
-                                        {editingItemId && (
-                                            <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
-                                                ✕
-                                            </Button>
-                                        )}
-                                    </div>
-                                </>
-                            )}
                         </div>
 
-                        {availableProducts.find(p => p.id === currProdId)?.type === 'SEED' && (
-                            <div className="animate-fadeIn grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 items-end">
-                                <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Densidad de siembra kg/ha</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                                        placeholder="0.0"
-                                        value={currDosage}
-                                        onChange={e => setCurrDosage(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Espaciamiento entre hileras (cm)</label>
-                                    <input
-                                        type="number"
-                                        className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                                        placeholder="ej. 52.5"
-                                        value={plantingSpacing}
-                                        onChange={e => setPlantingSpacing(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider text-slate-400">Rinde esperado (kg/ha)</label>
-                                    <input
-                                        type="number"
-                                        className="block w-full rounded-md border-slate-300 shadow-sm text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                                        placeholder="ej. 3500"
-                                        value={expectedYield}
-                                        onChange={e => setExpectedYield(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                    <Button onClick={handleAddItem} disabled={!currProdId || !currDosage} className="flex-1 sm:flex-initial">
-                                        {editingItemId ? 'Actualizar' : 'Agregar'}
-                                    </Button>
-                                    {editingItemId && (
-                                        <Button variant="secondary" onClick={handleCancelEdit} title="Cancelar edición">
-                                            ✕
-                                        </Button>
-                                    )}
-                                </div>
+                        <div className="flex gap-6 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowNotes(!showNotes)}
+                                className={`text-[10px] font-bold uppercase tracking-widest transition-all ${showNotes ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                            >
+                                {showNotes ? '✓ Nota Agregada' : '+ Agregar Nota'}
+                            </button>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => document.getElementById('factura-upload')?.click()}
+                                    className={`text-[10px] font-bold uppercase tracking-widest transition-all ${facturaImageUrl ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                                >
+                                    {facturaImageUrl ? '✓ Factura Adjunta' : '+ Adjuntar Factura'}
+                                </button>
+                                <input
+                                    id="factura-upload"
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => setFacturaImageUrl(reader.result as string);
+                                            reader.readAsDataURL(file);
+                                        }
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {showNotes && (
+                            <div className="animate-fadeIn">
+                                <textarea
+                                    className="w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-4"
+                                    placeholder="Escriba aquí cualquier observación o detalle adicional..."
+                                    rows={3}
+                                    value={notes}
+                                    onChange={e => setNotes(e.target.value)}
+                                />
                             </div>
                         )}
                     </div>
@@ -432,7 +534,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         {items.filter(i => i.id !== editingItemId).map((item) => (
                             <div key={item.id} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
                                 <div>
-                                    <div className="font-bold text-slate-800">{item.productName}</div>
+                                    <div className="font-bold text-slate-800">
+                                        {item.loadingOrder && <span className="text-emerald-600 mr-2">[{item.loadingOrder}]</span>}
+                                        {item.productName} {item.commercialName ? `| ${item.commercialName}` : ''}
+                                    </div>
                                     <div className="text-xs text-slate-500 flex flex-wrap gap-x-4">
                                         <span>Dosis: {item.dosage} {item.unit}/ha</span>
                                         {item.plantingDensity && (
@@ -528,6 +633,15 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             })()}
                             <div><span className="text-slate-500">Galpón:</span> <span className="font-medium">{warehouses.find(w => w.id === selectedOrderWarehouseId)?.name || 'Cargando...'}</span></div>
                             <div><span className="text-slate-500">Aplicador:</span> <span className="font-medium">{contractors.find(c => c.id === selectedApplicatorId)?.username || 'No asignado'}</span></div>
+                            {servicePrice && (
+                                <div><span className="text-slate-500">Precio Servicio:</span> <span className="font-medium">USD {servicePrice} / ha</span></div>
+                            )}
+                            {selectedPartnerName && (
+                                <div><span className="text-slate-500">Responsable:</span> <span className="font-medium">{selectedPartnerName}</span></div>
+                            )}
+                            {notes && (
+                                <div className="col-span-2"><span className="text-slate-500 block">Nota:</span> <p className="text-slate-800 text-sm italic">"{notes}"</p></div>
+                            )}
                         </div>
 
                         <table className="min-w-full text-sm">
@@ -540,7 +654,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             <tbody>
                                 {items.map(item => (
                                     <tr key={item.id} className="border-b last:border-0 border-slate-50">
-                                        <td className="py-2">{item.productName}</td>
+                                        <td className="py-2">
+                                            {item.productName}
+                                            {item.commercialName && <span className="text-slate-400 text-xs ml-2">({item.commercialName})</span>}
+                                        </td>
                                         <td className="py-2 text-right font-mono">{item.totalQuantity.toFixed(2)} {item.unit}</td>
                                     </tr>
                                 ))}

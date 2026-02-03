@@ -7,7 +7,7 @@ import { useWarehouses } from '@/hooks/useWarehouses';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
-import { ProductType, Unit, InventoryMovement, ClientStock, Product, Observation } from '@/types';
+import { ProductType, Unit, InventoryMovement, MovementItem, ClientStock, Product, Observation } from '@/types';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { syncService } from '@/services/sync';
@@ -22,6 +22,7 @@ interface EnrichedStockItem extends ClientStock {
     unit: Unit;
     price: number;
     productBrand?: string;
+    productCommercialName?: string;
     hasProduct: boolean;
 }
 
@@ -38,6 +39,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showProductForm, setShowProductForm] = useState(false);
     const [showCatalog, setShowCatalog] = useState(false);
     const [showWarehouses, setShowWarehouses] = useState(false);
+    const [showWarehouseForm, setShowWarehouseForm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Active Warehouse context
@@ -51,28 +53,35 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showMovePanel, setShowMovePanel] = useState(false);
 
     // New entry state
-    const [selectedProductId, setSelectedProductId] = useState('');
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [newProductName, setNewProductName] = useState('');
     const [newProductBrand, setNewProductBrand] = useState('');
+    const [newProductCommercialName, setNewProductCommercialName] = useState('');
     const [newProductPA, setNewProductPA] = useState('');
+    const [newProductPrice, setNewProductPrice] = useState('');
     const [newProductType, setNewProductType] = useState<ProductType>('HERBICIDE');
     const [newProductUnit, setNewProductUnit] = useState<Unit>('L');
     const [availableUnits, setAvailableUnits] = useState<string[]>(['L', 'KG']);
+    const [availableSellers, setAvailableSellers] = useState<string[]>([]);
     const [unitsLoaded, setUnitsLoaded] = useState(false);
+    const [sellersLoaded, setSellersLoaded] = useState(false);
     const [showUnitInput, setShowUnitInput] = useState(false);
     const [showUnitDelete, setShowUnitDelete] = useState(false);
+    const [showSellerInput, setShowSellerInput] = useState(false);
+    const [showSellerDelete, setShowSellerDelete] = useState(false);
     const [unitInputValue, setUnitInputValue] = useState('');
-    const [newProductPrice, setNewProductPrice] = useState(''); // Added Price
-    const [quantity, setQuantity] = useState('');
-    const [transactionPrice, setTransactionPrice] = useState(''); // PRICE PAID
+    const [sellerInputValue, setSellerInputValue] = useState('');
     const [note, setNote] = useState('');
     const [noteConfirmed, setNoteConfirmed] = useState(false);
-    const [tempBrand, setTempBrand] = useState('');
+    const [selectedInvestor, setSelectedInvestor] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [isDuplicate, setIsDuplicate] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+    // Multi-product entry state
+    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
+    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; seller: string }[]>([]);
 
     // Factura upload state
     const [sellingStockId, setSellingStockId] = useState<string | null>(null);
@@ -89,6 +98,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [saleTruckDriver, setSaleTruckDriver] = useState('');
     const [salePlateNumber, setSalePlateNumber] = useState('');
     const [saleDestination, setSaleDestination] = useState('');
+    const [client, setClient] = useState<any>(null);
 
     // Success Ribbon State
     const [lastMovement, setLastMovement] = useState<InventoryMovement | null>(null);
@@ -123,20 +133,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         return publicUrlData.publicUrl;
     };
 
+    // Fetch client data for partners list
+    useEffect(() => {
+        db.get('clients', id).then(setClient);
+    }, [id]);
+
     // Persistence for form state
     useEffect(() => {
-        const savedProduct = sessionStorage.getItem(`stock_productId_${id}`);
-        const savedQuantity = sessionStorage.getItem(`stock_quantity_${id}`);
         const savedNote = sessionStorage.getItem(`stock_note_${id}`);
         const savedShowNote = sessionStorage.getItem(`stock_showNote_${id}`);
 
-        if (savedProduct) setSelectedProductId(savedProduct);
-        if (savedQuantity) setQuantity(savedQuantity);
-        if (savedNote) setNote(savedNote);
-        if (savedShowNote === 'true') setShowNote(true);
-
-        if (savedProduct) setSelectedProductId(savedProduct);
-        if (savedQuantity) setQuantity(savedQuantity);
         if (savedNote) setNote(savedNote);
         if (savedShowNote === 'true') setShowNote(true);
 
@@ -185,20 +191,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         else setSelectedWarehouseId('');
     }, [activeWarehouseId, id]);
 
-    useEffect(() => {
-        if (selectedProductId) {
-            sessionStorage.setItem(`stock_productId_${id}`, selectedProductId);
-            // Default tempBrand to product's brandName
-            const product = products.find(p => p.id === selectedProductId);
-            if (product && !tempBrand) {
-                setTempBrand(product.brandName || '');
-            }
-        }
-        else {
-            sessionStorage.removeItem(`stock_productId_${id}`);
-            setTempBrand('');
-        }
-    }, [selectedProductId, id, products]);
 
     // Handle click outside to clear warehouse selection
     useEffect(() => {
@@ -214,10 +206,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         };
     }, []);
 
-    useEffect(() => {
-        if (quantity) sessionStorage.setItem(`stock_quantity_${id}`, quantity);
-        else sessionStorage.removeItem(`stock_quantity_${id}`);
-    }, [quantity, id]);
 
     useEffect(() => {
         if (note) sessionStorage.setItem(`stock_note_${id}`, note);
@@ -245,10 +233,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         setNewProductUnit(''); // Select placeholder if empty
                     }
                 }
+                if (client?.enabledSellers) {
+                    setAvailableSellers(client.enabledSellers);
+                }
                 setUnitsLoaded(true);
+                setSellersLoaded(true);
             } catch (error) {
-                console.error('Error loading client units:', error);
+                console.error('Error loading client generic data:', error);
                 setUnitsLoaded(true);
+                setSellersLoaded(true);
             }
         };
         loadClientUnits();
@@ -289,6 +282,23 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     };
 
+    const saveClientSellers = async (newSellers: string[]) => {
+        try {
+            const client = await db.get('clients', id);
+            if (client) {
+                await db.put('clients', {
+                    ...client,
+                    enabledSellers: newSellers,
+                    synced: false,
+                    updatedAt: new Date().toISOString()
+                });
+                syncService.pushChanges();
+            }
+        } catch (error) {
+            console.error('Error saving client sellers:', error);
+        }
+    };
+
     const handleAddUnit = () => {
         if (unitInputValue.trim()) {
             const upper = unitInputValue.trim().toUpperCase();
@@ -300,6 +310,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             }
             setUnitInputValue('');
             setShowUnitInput(false);
+        }
+    };
+
+    const handleAddSeller = () => {
+        if (sellerInputValue.trim()) {
+            const formatted = sellerInputValue.trim();
+            if (!availableSellers.includes(formatted)) {
+                const newSellers = [...availableSellers, formatted];
+                setAvailableSellers(newSellers);
+                saveClientSellers(newSellers);
+                updateActiveStockItem('seller', formatted);
+            }
+            setSellerInputValue('');
+            setShowSellerInput(false);
         }
     };
 
@@ -318,6 +342,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         const duplicate = availableProducts.find(p =>
             p.id !== editingProductId && // Don't count self when editing
             p.activeIngredient?.toLowerCase().trim() === newProductPA.toLowerCase().trim() &&
+            p.commercialName?.toLowerCase().trim() === newProductCommercialName.toLowerCase().trim() &&
             p.brandName?.toLowerCase().trim() === newProductBrand.toLowerCase().trim()
         );
 
@@ -345,6 +370,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 unit: product?.unit || 'UNIT',
                 price: product?.price || 0,
                 productBrand: item.productBrand || product?.brandName || '',
+                productCommercialName: product?.commercialName || '',
                 hasProduct: !!product
             };
         }).filter(item => item.hasProduct);
@@ -358,7 +384,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 const qtyNum = parseFloat(saleQuantity);
                 const priceNum = parseFloat(salePrice);
                 if (!isNaN(qtyNum) && !isNaN(priceNum)) {
-                    setSaleNote(`${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
+                    setSaleNote(`${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
                 }
             }
         }
@@ -375,6 +401,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     id: editingProductId,
                     name: newProductName,
                     brandName: newProductBrand,
+                    commercialName: newProductCommercialName,
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
@@ -386,6 +413,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 await addProduct({
                     name: newProductName,
                     brandName: newProductBrand,
+                    commercialName: newProductCommercialName,
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
@@ -396,6 +424,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             setNewProductName('');
             setNewProductBrand('');
+            setNewProductCommercialName('');
             setNewProductPA('');
             setNewProductPrice('');
             setEditingProductId(null);
@@ -410,31 +439,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     const handleStockSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedProductId || !quantity) return;
+
+        // Include active items if present
+        const allItemsToProcess = [...stockItems];
+        if (activeStockItem.productId && activeStockItem.quantity) {
+            allItemsToProcess.push(activeStockItem);
+        }
+
+        const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
+        if (validItems.length === 0) return;
 
         setIsSubmitting(true);
         try {
-            const product = availableProducts.find((p: Product) => p.id === selectedProductId);
-            const qtyNum = parseFloat(quantity);
-            const existingItem = stock.find((s: ClientStock) => s.productId === selectedProductId && s.warehouseId === (selectedWarehouseId || undefined));
-
-            const newItem = {
-                id: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId)) ? existingItem.id : generateId(),
-                clientId: id,
-                warehouseId: selectedWarehouseId || undefined,
-                productId: selectedProductId,
-                productBrand: tempBrand || product?.brandName || '-',
-                quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId)) ? existingItem.quantity + qtyNum : qtyNum,
-                lastUpdated: new Date().toISOString()
-            };
-
-            await updateStock(newItem);
-
-            // Record Movement
-            const now = new Date();
-            const dateStr = now.toISOString().split('T')[0];
-            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
             const movementId = generateId();
             let facturaUrl = '';
 
@@ -444,44 +460,91 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setFacturaUploading(false);
             }
 
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const movementItems: MovementItem[] = [];
+
+            for (const item of validItems) {
+                const product = availableProducts.find((p: Product) => p.id === item.productId);
+                const qtyNum = parseFloat(item.quantity);
+                const priceNum = parseFloat(item.price) || 0;
+
+                const existingItem = stock.find((s: ClientStock) =>
+                    s.productId === item.productId &&
+                    s.warehouseId === (selectedWarehouseId || undefined)
+                );
+
+                const stockId = (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
+                    ? existingItem.id
+                    : generateId();
+
+                const newItem = {
+                    id: stockId,
+                    clientId: id,
+                    warehouseId: selectedWarehouseId || undefined,
+                    productId: item.productId,
+                    productBrand: item.tempBrand || product?.brandName || '-',
+                    quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
+                        ? existingItem.quantity + qtyNum
+                        : qtyNum,
+                    lastUpdated: now.toISOString()
+                };
+
+                await updateStock(newItem);
+
+                movementItems.push({
+                    id: generateId(),
+                    productId: item.productId,
+                    productName: product?.name || 'Unknown',
+                    productCommercialName: product?.commercialName || '',
+                    productBrand: item.tempBrand || product?.brandName || '-',
+                    quantity: qtyNum,
+                    unit: product?.unit || 'L',
+                    price: priceNum,
+                    sellerName: item.seller || undefined
+                });
+            }
+
             const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
-                productId: selectedProductId,
-                productName: product?.name || 'Unknown',
-                productBrand: tempBrand || product?.brandName || '-',
+                warehouseId: selectedWarehouseId || undefined,
+                productId: 'CONSOLIDATED', // Marker for multi-item
+                productName: 'Compra de insumos',
                 type: 'IN',
-                quantity: qtyNum,
-                unit: product?.unit || 'L',
+                quantity: validItems.length, // count of products
+                unit: 'items',
                 date: dateStr,
                 time: timeStr,
-                referenceId: newItem.id,
+                referenceId: `PURCHASE-${movementId}`,
                 notes: note || '-',
                 facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
-                warehouseId: selectedWarehouseId,
-                purchasePrice: (transactionPrice !== '' && !isNaN(parseFloat(transactionPrice))) ? parseFloat(transactionPrice) : (product?.price && product.price > 0 ? product.price : undefined)
+                investorName: selectedInvestor || undefined,
+                sellerName: validItems.length === 1 ? validItems[0].seller : undefined, // Save seller at top level if only one item
+                items: movementItems
             };
 
             await db.put('movements', movementData);
-
             setLastMovement(movementData);
             setLastAction('IN');
 
             syncService.pushChanges();
 
-            // Reset form fields for next entry (Batch mode)
-            setSelectedProductId('');
+            // Reset
+            setStockItems([]);
+            setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
             setSelectedWarehouseId('');
-            setQuantity('');
             setNote('');
             setNoteConfirmed(false);
-            setTempBrand('');
             setShowNote(false);
             setFacturaFile(null);
-            setTransactionPrice('');
+            setSelectedInvestor('');
+            setShowStockForm(false);
         } catch (error) {
             console.error(error);
         } finally {
@@ -533,6 +596,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 warehouseId: stockItem.warehouseId,
                 productId: stockItem.productId,
                 productName: stockItem.productName,
+                productCommercialName: stockItem.productCommercialName || '',
                 productBrand: stockItem.productBrand || '-',
                 type: 'SALE',
                 quantity: qtyNum,
@@ -541,7 +605,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 date: new Date().toISOString().split('T')[0],
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 referenceId: `SALE-${generateId()}`,
-                notes: saleNote || `${priceNum} $/ ${stockItem.unit}, $${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
+                notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
                 facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
@@ -602,6 +666,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 warehouseId: item.warehouseId,
                 productId: item.productId,
                 productName: item.productName,
+                productCommercialName: item.productCommercialName || '',
                 productBrand: item.productBrand || '-',
                 type: 'OUT',
                 quantity: qtyToMove,
@@ -667,6 +732,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     warehouseId: destinationWarehouseId,
                     productId: item.productId,
                     productName: item.productName,
+                    productCommercialName: item.productCommercialName || '',
                     productBrand: item.productBrand || '-',
                     type: 'IN',
                     quantity: qtyToMove,
@@ -759,14 +825,36 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     };
 
-    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'OTHER'];
+    const addStockToBatch = () => {
+        if (!activeStockItem.productId || !activeStockItem.quantity) return;
+        setStockItems([...stockItems, { ...activeStockItem }]);
+        setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
+    };
 
-    const typeLabels: Record<ProductType, string> = {
+    const removeBatchItem = (idx: number) => {
+        setStockItems(stockItems.filter((_, i) => i !== idx));
+    };
+
+    const editBatchItem = (idx: number) => {
+        const itemToEdit = stockItems[idx];
+        setActiveStockItem({ ...itemToEdit });
+        setStockItems(stockItems.filter((_, i) => i !== idx));
+    };
+
+    const updateActiveStockItem = (field: string, value: string) => {
+        setActiveStockItem(prev => ({ ...prev, [field]: value }));
+    };
+
+    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
+
+    const typeLabels: Record<string, string> = {
         HERBICIDE: 'Herbicida',
         FERTILIZER: 'Fertilizante',
         SEED: 'Semilla',
         FUNGICIDE: 'Fungicida',
         INSECTICIDE: 'Insecticida',
+        COADYUVANTE: 'Coadyuvante',
+        INOCULANTE: 'Inoculante',
         OTHER: 'Otro'
     };
 
@@ -917,7 +1005,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 {!activeWarehouseId ? (
                     <div className="p-12 text-center text-slate-500">
                         <h3 className="text-lg font-medium text-slate-900">Seleccione un galpón</h3>
-                        <p>Elija un galpón de la izquierda para ver su inventario.</p>
+                        <p>elija un galpón para ver su inventario</p>
                     </div>
                 ) : stockLoading || productsLoading ? (
                     <div className="p-8 text-center text-slate-500">Cargando stock...</div>
@@ -940,6 +1028,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             <thead className="bg-slate-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                     {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
@@ -974,7 +1063,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             </td>
                                             {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
-                                                    ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    USD {(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </td>
                                             )}
                                             <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-emerald-600">
@@ -998,7 +1087,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                             </div>
                                                             <div className="flex-1 min-w-[120px]">
                                                                 <Input
-                                                                    label={`Precio de Venta ($/${item.unit})`}
+                                                                    label={`Precio de Venta (USD/${item.unit})`}
                                                                     type="number"
                                                                     step="0.01"
                                                                     value={salePrice}
@@ -1063,7 +1152,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                                     {saleFacturaFile ? (
                                                                         <span className="text-emerald-700 font-bold truncate max-w-[120px]">{saleFacturaFile.name}</span>
                                                                     ) : (
-                                                                        <span>+ Adjuntar Factura</span>
+                                                                        <span>+ Adjuntar factura</span>
                                                                     )}
                                                                 </label>
                                                                 <input
@@ -1138,39 +1227,61 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             {/* Warehouse Management View */}
             {showWarehouses && !isReadOnly && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-6">
-                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Galpones Disponibles</h3>
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className="flex-1">
-                            <Input
-                                placeholder="Nombre del nuevo galpón..."
-                                id="new-warehouse-name"
-                                className="h-[38px] text-sm"
-                                onKeyDown={async (e) => {
-                                    if (e.key === 'Enter') {
-                                        const input = e.currentTarget as HTMLInputElement;
-                                        if (input.value) {
-                                            await addWarehouse(input.value);
-                                            input.value = '';
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-semibold text-slate-900">Galpones Disponibles</h3>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setShowWarehouseForm(!showWarehouseForm)}
+                                className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                            >
+                                {showWarehouseForm ? 'Cancelar' : 'Agregar'}
+                            </button>
+                            <button
+                                onClick={() => setShowWarehouses(false)}
+                                className="text-slate-400 hover:text-slate-600 p-1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {showWarehouseForm && (
+                        <div className="flex items-center gap-2 mb-6 animate-fadeIn">
+                            <div className="flex-1">
+                                <Input
+                                    placeholder="Nombre del nuevo galpón..."
+                                    id="new-warehouse-name"
+                                    className="h-[38px] text-sm"
+                                    onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                            const input = e.currentTarget as HTMLInputElement;
+                                            if (input.value) {
+                                                await addWarehouse(input.value);
+                                                input.value = '';
+                                            }
                                         }
+                                    }}
+                                />
+                            </div>
+                            <Button
+                                onClick={async () => {
+                                    const input = document.getElementById('new-warehouse-name') as HTMLInputElement;
+                                    if (input.value) {
+                                        await addWarehouse(input.value);
+                                        input.value = '';
                                     }
                                 }}
-                            />
+                                size="sm"
+                                className="h-[38px] px-6"
+                            >
+                                Agregar
+                            </Button>
                         </div>
-                        <Button
-                            onClick={async () => {
-                                const input = document.getElementById('new-warehouse-name') as HTMLInputElement;
-                                if (input.value) {
-                                    await addWarehouse(input.value);
-                                    input.value = '';
-                                }
-                            }}
-                            size="sm"
-                            className="h-[38px] px-6"
-                        >
-                            Agregar
-                        </Button>
-                    </div>
+                    )}
                     <div className="space-y-3" ref={warehouseContainerRef}>
 
                         {warehouses.map(w => (
@@ -1181,7 +1292,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         // Toggle: if clicking the active one, deactivate it (show all)
                                         if (activeWarehouseId === w.id) {
                                             setActiveWarehouseId(null);
-                                            // Reset to default if needed, or null to show all? 
+                                            // Reset to default if needed, or null to show all?
                                             // User request: "make it inactive" -> implies showing all or no filter.
                                             // Logic at line 289 handles null/undefined as "first warehouse" OR if we want "ALL", we need to adjust filtering.
                                             // However, line 140 forces a default if none selected. We might need to relax that or handle "null" explicitly in the filter.
@@ -1296,28 +1407,39 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             )}
 
             {showCatalog && (
-                <div className="bg-white rounded-xl shadow-sm border border-emerald-200 overflow-hidden mb-8 animate-fadeIn">
-                    <div className="bg-emerald-50 px-6 py-3 border-b border-emerald-100 flex justify-between items-center">
-                        <h3 className="font-bold text-emerald-900 text-sm uppercase tracking-wider">Catálogo de Productos</h3>
-                        {!isReadOnly && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-lg font-semibold text-slate-900">Catálogo de Productos</h2>
+                        <div className="flex items-center gap-4">
+                            {!isReadOnly && (
+                                <button
+                                    onClick={() => {
+                                        setIsEditingProduct(false);
+                                        setEditingProductId(null);
+                                        setNewProductName('');
+                                        setNewProductBrand('');
+                                        setNewProductPA('');
+                                        setNewProductPrice('');
+                                        setShowProductForm(true);
+                                        setTimeout(() => {
+                                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                        }, 100);
+                                    }}
+                                    className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                                >
+                                    Registrar nuevo producto
+                                </button>
+                            )}
                             <button
-                                onClick={() => {
-                                    setIsEditingProduct(false);
-                                    setEditingProductId(null);
-                                    setNewProductName('');
-                                    setNewProductBrand('');
-                                    setNewProductPA('');
-                                    setNewProductPrice('');
-                                    setShowProductForm(true);
-                                    setTimeout(() => {
-                                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                                    }, 100);
-                                }}
-                                className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                                onClick={() => setShowCatalog(false)}
+                                className="text-slate-400 hover:text-slate-600 p-1"
                             >
-                                Registrar nuevo producto
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
                             </button>
-                        )}
+                        </div>
                     </div>
                     {productsLoading ? (
                         <div className="p-8 text-center text-slate-500">Cargando catálogo...</div>
@@ -1332,10 +1454,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 <thead className="bg-slate-50">
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Unidad</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio de Referencia (pesos/unidad)</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
@@ -1343,10 +1465,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     {availableProducts.map((p) => (
                                         <tr key={p.id} className="hover:bg-slate-50">
                                             <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{p.activeIngredient || p.name}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.commercialName || '-'}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.brandName || '-'}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{typeLabels[p.type] || p.type}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.unit}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">${(p.price || 0).toFixed(2)}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                 {!isReadOnly && (
                                                     <div className="flex justify-end gap-2">
@@ -1356,6 +1478,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                                 setEditingProductId(p.id);
                                                                 setNewProductName(p.name);
                                                                 setNewProductBrand(p.brandName || '');
+                                                                setNewProductCommercialName(p.commercialName || '');
                                                                 setNewProductPA(p.activeIngredient || '');
                                                                 setNewProductType(p.type);
                                                                 setNewProductUnit(p.unit);
@@ -1387,211 +1510,197 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
                     )}
                 </div>
-            )}
+            )
+            }
             {/* Product Registration/Edition Form */}
-            {showProductForm && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-8">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-emerald-800">
-                            {editingProductId ? 'Editar Producto' : 'Registrar Nuevo Producto'}
-                        </h2>
-                        <button
-                            onClick={() => {
-                                setShowProductForm(false);
-                                setIsEditingProduct(false);
-                                setEditingProductId(null);
-                            }}
-                            className="text-emerald-500 hover:text-emerald-700 p-1"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleProductSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Input
-                                label={newProductType === 'SEED' ? 'Cultivo' : 'P.A. (Principio Activo)'}
-                                placeholder={newProductType === 'SEED' ? 'ej. Soja, Maíz...' : 'ej. Glifosato 48%'}
-                                value={newProductPA}
-                                onChange={e => {
-                                    setNewProductPA(e.target.value);
-                                    setNewProductName(e.target.value);
+            {
+                showProductForm && (
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-8">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-semibold text-emerald-800">
+                                {editingProductId ? 'Editar Producto' : 'Registrar Nuevo Producto'}
+                            </h2>
+                            <button
+                                onClick={() => {
+                                    setShowProductForm(false);
+                                    setIsEditingProduct(false);
+                                    setEditingProductId(null);
                                 }}
-                                className="h-[42px]"
-                                required
-                            />
-                            <Input
-                                label="Marca"
-                                placeholder="ej. Bayer"
-                                value={newProductBrand}
-                                onChange={e => setNewProductBrand(e.target.value)}
-                                className="h-[42px]"
-                            />
-                            <div className="w-full">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                    value={newProductType}
-                                    onChange={e => setNewProductType(e.target.value as ProductType)}
-                                >
-                                    {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
-                                </select>
-                            </div>
-                            <div className="w-full relative">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                    value={newProductUnit}
+                                className="text-emerald-500 hover:text-emerald-700 p-1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleProductSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <Input
+                                    label={newProductType === 'SEED' ? 'Cultivo' : 'P.A. (Principio Activo)'}
+                                    placeholder={newProductType === 'SEED' ? 'ej. Soja, Maíz...' : 'ej. Glifosato 48%'}
+                                    value={newProductPA}
                                     onChange={e => {
-                                        if (e.target.value === 'ADD_NEW') {
-                                            setShowUnitInput(true);
-                                            // Reset to whatever it was (or placeholder) so it doesn't stay on ADD_NEW
-                                            // This allows clicking it again if they close the input without adding
-                                        } else if (e.target.value === 'DELETE_UNIT') {
-                                            setShowUnitDelete(true);
-                                        } else {
-                                            setNewProductUnit(e.target.value);
-                                        }
+                                        setNewProductPA(e.target.value);
+                                        setNewProductName(e.target.value);
                                     }}
-                                >
-                                    {(!newProductUnit || !availableUnits.includes(newProductUnit)) && (
-                                        <option value="">Seleccionar...</option>
-                                    )}
-                                    {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                    <option value="ADD_NEW">+ unidad</option>
-                                    {availableUnits.length > 0 && (
-                                        <option value="DELETE_UNIT">- unidad</option>
-                                    )}
-                                </select>
-
-                                {showUnitInput && (
-                                    <div
-                                        ref={unitInputRef}
-                                        className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2"
+                                    className="h-[42px]"
+                                    required
+                                />
+                                <Input
+                                    label="Nombre Comercial"
+                                    placeholder="ej. Roundup"
+                                    value={newProductCommercialName}
+                                    onChange={e => setNewProductCommercialName(e.target.value)}
+                                    className="h-[42px]"
+                                />
+                                <Input
+                                    label="Marca"
+                                    placeholder="ej. Bayer"
+                                    value={newProductBrand}
+                                    onChange={e => setNewProductBrand(e.target.value)}
+                                    className="h-[42px]"
+                                />
+                                <div className="w-full">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+                                    <select
+                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                        value={newProductType}
+                                        onChange={e => setNewProductType(e.target.value as ProductType)}
                                     >
-                                        <input
-                                            type="text"
-                                            className="flex-1 rounded border-slate-300 text-xs focus:ring-emerald-500 focus:border-emerald-500"
-                                            placeholder="NUEVA UNIDAD..."
-                                            value={unitInputValue}
-                                            onChange={e => setUnitInputValue(e.target.value.toUpperCase())}
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    handleAddUnit();
-                                                }
-                                            }}
-                                            autoFocus
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleAddUnit}
-                                            className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
-                                        >
-                                            +
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setShowUnitInput(false);
-                                                setUnitInputValue('');
-                                            }}
-                                            className="text-slate-400 p-1 hover:text-slate-600"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                )}
-
-                                {showUnitDelete && (
-                                    <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowUnitDelete(false)}
-                                            className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
-                                        >
-                                            ✕
-                                        </button>
-                                        <p className="text-xs text-slate-500 mb-2 font-medium">Eliminar unidad:</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {availableUnits.map(u => (
-                                                <button
-                                                    key={u}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const newUnits = availableUnits.filter(unit => unit !== u);
-                                                        setAvailableUnits(newUnits);
-                                                        saveClientUnits(newUnits);
-                                                        if (newProductUnit === u) {
-                                                            setNewProductUnit(newUnits[0] || '');
-                                                        }
-                                                        // Keep box open as requested
-                                                    }}
-                                                    className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
-                                                >
-                                                    {u} ✕
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <Input
-                                label={`Precio de Referencia (pesos/${(newProductUnit || 'unidad').toLowerCase()})`}
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={newProductPrice}
-                                onChange={e => setNewProductPrice(e.target.value)}
-                                className="h-[42px]"
-                                prefix="$"
-                            />
-                        </div>
-                        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
-                            {isDuplicate && (
-                                <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg animate-fadeIn flex-1 sm:flex-initial">
-                                    <p className="text-xs font-bold text-red-600 uppercase tracking-tight">
-                                        ⚠️ Este producto ya existe en el catálogo
-                                    </p>
+                                        {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+                                    </select>
                                 </div>
-                            )}
-                            <div className="flex gap-3">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setShowProductForm(false);
-                                        setIsEditingProduct(false);
-                                        setEditingProductId(null);
-                                    }}
-                                >
-                                    Cerrar gestión de galpón
-                                </Button>
-                                <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
-                                    {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
-                                </Button>
+                                <div className="w-full relative">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
+                                    <select
+                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                        value={newProductUnit}
+                                        onChange={e => {
+                                            if (e.target.value === 'ADD_NEW') {
+                                                setShowUnitInput(true);
+                                                // Reset to whatever it was (or placeholder) so it doesn't stay on ADD_NEW
+                                                // This allows clicking it again if they close the input without adding
+                                            } else if (e.target.value === 'DELETE_UNIT') {
+                                                setShowUnitDelete(true);
+                                            } else {
+                                                setNewProductUnit(e.target.value);
+                                            }
+                                        }}
+                                    >
+                                        {(!newProductUnit || !availableUnits.includes(newProductUnit)) && (
+                                            <option value="">Seleccionar...</option>
+                                        )}
+                                        {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                                        <option value="ADD_NEW">+ unidad</option>
+                                        {availableUnits.length > 0 && (
+                                            <option value="DELETE_UNIT">- unidad</option>
+                                        )}
+                                    </select>
+
+                                    {showUnitInput && (
+                                        <div
+                                            ref={unitInputRef}
+                                            className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2"
+                                        >
+                                            <input
+                                                type="text"
+                                                className="flex-1 rounded border-slate-300 text-xs focus:ring-emerald-500 focus:border-emerald-500"
+                                                placeholder="NUEVA UNIDAD..."
+                                                value={unitInputValue}
+                                                onChange={e => setUnitInputValue(e.target.value.toUpperCase())}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddUnit();
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAddUnit}
+                                                className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
+                                            >
+                                                +
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowUnitInput(false);
+                                                    setUnitInputValue('');
+                                                }}
+                                                className="text-slate-400 p-1 hover:text-slate-600"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {showUnitDelete && (
+                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowUnitDelete(false)}
+                                                className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
+                                            >
+                                                ✕
+                                            </button>
+                                            <p className="text-xs text-slate-500 mb-2 font-medium">Eliminar unidad:</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {availableUnits.map(u => (
+                                                    <button
+                                                        key={u}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newUnits = availableUnits.filter(unit => unit !== u);
+                                                            setAvailableUnits(newUnits);
+                                                            saveClientUnits(newUnits);
+                                                            if (newProductUnit === u) {
+                                                                setNewProductUnit(newUnits[0] || '');
+                                                            }
+                                                            // Keep box open as requested
+                                                        }}
+                                                        className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
+                                                    >
+                                                        {u} ✕
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </form>
-                </div>
-            )}
+                            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
+                                {isDuplicate && (
+                                    <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg animate-fadeIn flex-1 sm:flex-initial">
+                                        <p className="text-xs font-bold text-red-600 uppercase tracking-tight">
+                                            ⚠️ Este producto ya existe en el catálogo
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="flex gap-3">
+                                    <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
+                                        {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </form >
+                    </div>
+                )}
 
             {/* Stock Entry Form */}
             {showStockForm && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-slate-800">
-                            {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' ? 'Gestión de Galpón' : 'Cargar Ingreso de Stock'}
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-lg font-semibold text-slate-900">
+                            {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' ? 'Gestión de Galpón (Granos)' : 'Cargar Ingreso de Stock'}
                         </h2>
                         <button
                             onClick={() => {
                                 setShowStockForm(false);
-                                setNote('');
-                                setShowNote(false);
-                                setNoteConfirmed(false);
+                                setStockItems([{ productId: '', quantity: '', price: '', tempBrand: '', seller: '' }]);
                             }}
                             className="text-slate-400 hover:text-slate-600 p-1"
                         >
@@ -1602,72 +1711,229 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </button>
                     </div>
 
-                    <form onSubmit={handleStockSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-2">
-                            <div className="w-full">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Seleccionar Producto</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                    value={selectedProductId}
-                                    onChange={e => setSelectedProductId(e.target.value)}
-                                    required
-                                >
-                                    <option value="">Seleccione un producto...</option>
-                                    {availableProducts
-                                        .filter(p => {
-                                            const targetW = warehouses.find(w => w.id === selectedWarehouseId);
-                                            if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
-                                            return true;
-                                        })
-                                        .map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.activeIngredient || p.name} {p.brandName ? `(${p.brandName})` : ''} ({typeLabels[p.type]}) ({p.unit})
-                                            </option>
-                                        ))}
-                                </select>
-                            </div>
+                    <form onSubmit={handleStockSubmit} className="space-y-6">
+                        <div className="space-y-4 mb-4">
+                            {/* Active Entry Area - Removed box styles for a 'free' look */}
+                            <div className="relative animate-fadeIn">
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                                    {/* Row 1: Insumo (8), Vendedor (2), Cantidad (2) */}
+                                    <div className="md:col-span-8">
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo / Producto</label>
+                                        <select
+                                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
+                                            value={activeStockItem.productId}
+                                            onChange={e => updateActiveStockItem('productId', e.target.value)}
+                                            required={stockItems.length === 0}
+                                        >
+                                            <option value="">Seleccione...</option>
+                                            {availableProducts
+                                                .filter(p => {
+                                                    const targetW = warehouses.find(w => w.id === selectedWarehouseId);
+                                                    if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
+                                                    return true;
+                                                })
+                                                .map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.activeIngredient || p.name} ({p.commercialName || '-'}) ({p.brandName || '-'})
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <div className="relative">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vendedor</label>
+                                            <select
+                                                className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-[10px] h-10"
+                                                value={activeStockItem.seller}
+                                                onChange={e => {
+                                                    if (e.target.value === 'ADD_NEW') {
+                                                        setShowSellerInput(true);
+                                                    } else if (e.target.value === 'DELETE') {
+                                                        setShowSellerDelete(true);
+                                                    } else {
+                                                        updateActiveStockItem('seller', e.target.value);
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">Seleccione...</option>
+                                                {availableSellers.map(s => <option key={s} value={s}>{s}</option>)}
+                                                <option value="ADD_NEW">+ vendedor</option>
+                                                {availableSellers.length > 0 && <option value="DELETE">- vendedor</option>}
+                                            </select>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <Input
-                                    label="Cantidad a Ingresar"
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    value={quantity}
-                                    onChange={e => setQuantity(e.target.value)}
-                                    className="h-[42px]"
-                                    required
-                                />
-                                <div>
-                                    <Input
-                                        label={`Precio (${availableProducts.find(p => p.id === selectedProductId)?.unit === 'L' ? '$/litro' : availableProducts.find(p => p.id === selectedProductId)?.unit === 'KG' ? '$/kg' : '$/' + (availableProducts.find(p => p.id === selectedProductId)?.unit || 'u.')})`}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder={availableProducts.find(p => p.id === selectedProductId)?.price ? String(availableProducts.find(p => p.id === selectedProductId)?.price) : "0.00"}
-                                        value={transactionPrice}
-                                        onChange={e => setTransactionPrice(e.target.value)}
-                                        className="h-[42px]"
-                                        prefix="$"
-                                    />
+                                            {showSellerInput && (
+                                                <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        className="flex-1 rounded border-slate-300 text-[10px] focus:ring-emerald-500 focus:border-emerald-500"
+                                                        placeholder="NUEVO VENDEDOR..."
+                                                        value={sellerInputValue}
+                                                        onChange={e => setSellerInputValue(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                handleAddSeller();
+                                                            }
+                                                        }}
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAddSeller()}
+                                                        className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
+                                                    >
+                                                        +
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowSellerInput(false)}
+                                                        className="text-slate-400 p-1 hover:text-slate-600"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {showSellerDelete && (
+                                                <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowSellerDelete(false)}
+                                                        className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                    <p className="text-[10px] text-slate-500 mb-2 font-medium">Eliminar vendedor:</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {availableSellers.map(s => (
+                                                            <button
+                                                                key={s}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const newSellers = availableSellers.filter(seller => seller !== s);
+                                                                    setAvailableSellers(newSellers);
+                                                                    saveClientSellers(newSellers);
+                                                                }}
+                                                                className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
+                                                            >
+                                                                {s} ✕
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <Input
+                                            label="Cantidad"
+                                            labelClassName="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                                            type="number"
+                                            step="0.01"
+                                            value={activeStockItem.quantity}
+                                            onChange={e => updateActiveStockItem('quantity', e.target.value)}
+                                            className="h-10 border-slate-200 text-sm"
+                                            required={stockItems.length === 0}
+                                        />
+                                    </div>
+
+                                    {/* Row 2: Precio (2), Empty (9), Green Box (1) */}
+                                    <div className="md:col-span-2 mt-4 md:mt-2">
+                                        <Input
+                                            label={`Precio USD/${availableProducts.find(p => p.id === activeStockItem.productId)?.unit || 'u.'}`}
+                                            labelClassName="block text-[10px] font-bold text-slate-400 uppercase mb-1"
+                                            type="number"
+                                            step="0.01"
+                                            value={activeStockItem.price}
+                                            onChange={e => updateActiveStockItem('price', e.target.value)}
+                                            className="h-10 border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                    <div className="hidden md:block md:col-span-9"></div>
+                                    <div className="md:col-span-1 flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={addStockToBatch}
+                                            className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm"
+                                            title="Agregar a la lista"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                <polyline points="12 5 19 12 12 19"></polyline>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="w-full">
-                                <Input
-                                    label="Marca"
-                                    placeholder="ej. Bayer"
-                                    value={tempBrand}
-                                    onChange={e => setTempBrand(e.target.value)}
-                                    className="h-[42px]"
-                                />
-                            </div>
+                            {/* Growing List of Pending Items - Removed box styling */}
+                            {stockItems.length > 0 && (
+                                <div className="space-y-2 pt-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Productos a cargar</label>
+                                    <div className="overflow-hidden divide-y divide-slate-100">
+                                        {stockItems.map((item, idx) => {
+                                            const product = availableProducts.find(p => p.id === item.productId);
+                                            return (
+                                                <div key={idx} className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-sm font-bold text-slate-800 truncate">
+                                                            {product?.activeIngredient || product?.name || 'Insumo desconocido'}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 uppercase font-medium flex gap-2">
+                                                            <span>{item.seller || 'Sin vendedor'}</span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span>{item.quantity} {product?.unit || 'u.'}</span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span>USD {item.price ? (parseFloat(item.price) * parseFloat(item.quantity)).toFixed(2) : '0.00'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 ml-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => editBatchItem(idx)}
+                                                            className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors"
+                                                            title="Editar"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeBatchItem(idx)}
+                                                            className="p-1.5 text-slate-300 hover:text-red-400 transition-colors"
+                                                            title="Eliminar"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
-                            <div className="w-full">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Destino (Galpón)</label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Inversor / Pagado por</label>
                                 <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
+                                    value={selectedInvestor}
+                                    onChange={e => setSelectedInvestor(e.target.value)}
+                                >
+                                    <option value="">Seleccione un socio...</option>
+                                    {client?.partners?.map((p: any) => (
+                                        <option key={p.name} value={p.name}>{p.name} {p.cuit ? `(CUIT: ${p.cuit})` : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Destino (Galpón)</label>
+                                <select
+                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                                     value={selectedWarehouseId}
                                     onChange={e => setSelectedWarehouseId(e.target.value)}
+                                    required
                                 >
                                     {warehouses.map(w => (
                                         <option key={w.id} value={w.id}>{w.name}</option>
@@ -1676,69 +1942,22 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             </div>
                         </div>
 
-                        {showNote && (
-                            <div className="animate-fadeIn w-full mt-2 relative">
-                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota (Opcional)</label>
-                                <div className="flex gap-2">
-                                    <textarea
-                                        className={`block w-full rounded-lg shadow-sm focus:ring-emerald-500 text-sm py-2 px-3 transition-colors ${noteConfirmed ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 focus:border-emerald-500'}`}
-                                        rows={2}
-                                        placeholder="ej. Factura #1234, Lote específico..."
-                                        value={note}
-                                        onChange={e => {
-                                            setNote(e.target.value);
-                                            setNoteConfirmed(false);
-                                        }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (note.trim()) {
-                                                setNoteConfirmed(true);
-                                                // Small delay to show the checkmark before closing
-                                                setTimeout(() => {
-                                                    setNoteConfirmed(false);
-                                                    setShowNote(false);
-                                                }, 800);
-                                            }
-                                        }}
-                                        className={`flex-none w-10 h-10 self-end rounded-lg flex items-center justify-center transition-all ${note.trim() ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md transform active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-                                        title="Confirmar nota"
-                                    >
-                                        {noteConfirmed ? (
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce">
-                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                            </svg>
-                                        ) : (
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                                <polyline points="12 5 19 12 12 19"></polyline>
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
-                                {noteConfirmed && (
-                                    <span className="absolute -bottom-5 right-12 text-[10px] font-bold text-emerald-600 uppercase tracking-widest animate-fadeIn">Guardada</span>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100">
                             <div className="flex items-center gap-4">
                                 <button
                                     type="button"
                                     onClick={() => setShowNote(!showNote)}
-                                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-2"
+                                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
                                 >
-                                    {showNote ? 'Quitar Nota' : note ? '+ Editar Nota' : '+ Agregar Nota'}
+                                    {showNote ? '× Quitar Nota' : '+ Agregar nota'}
                                 </button>
 
-                                <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                                    <label htmlFor="factura-upload-stock" className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
+                                <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
+                                    <label htmlFor="factura-upload-stock" className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2">
                                         {facturaFile ? (
-                                            <span className="text-emerald-700 font-bold truncate max-w-[120px]">{facturaFile.name}</span>
+                                            <span className="text-emerald-700 font-bold truncate max-w-[200px]">{facturaFile.name}</span>
                                         ) : (
-                                            <span>+ Adjuntar Factura</span>
+                                            <span>+ Adjuntar factura</span>
                                         )}
                                     </label>
                                     <input
@@ -1746,27 +1965,36 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         type="file"
                                         accept="image/*,application/pdf"
                                         onChange={handleFacturaChange}
-                                        disabled={facturaUploading}
                                         className="hidden"
                                     />
                                     {facturaFile && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setFacturaFile(null)}
-                                            className="text-red-400 hover:text-red-600 font-bold px-1"
-                                        >
+                                        <button type="button" onClick={() => setFacturaFile(null)} className="text-red-400 hover:text-red-600">
                                             ✕
                                         </button>
                                     )}
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3">
-                                <Button type="submit" isLoading={isSubmitting}>
-                                    Confirmar Ingreso
-                                </Button>
-                            </div>
+                            <Button
+                                type="submit"
+                                isLoading={isSubmitting || facturaUploading}
+                                className="px-8 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto"
+                            >
+                                Confirmar Compra
+                            </Button>
                         </div>
+
+                        {showNote && (
+                            <div className="pt-2">
+                                <textarea
+                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4 animate-fadeIn"
+                                    rows={2}
+                                    placeholder="ej. Factura #0001-12345678, observaciones adicionales..."
+                                    value={note}
+                                    onChange={e => setNote(e.target.value)}
+                                />
+                            </div>
+                        )}
                     </form>
                 </div>
             )}

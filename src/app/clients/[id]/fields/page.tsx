@@ -56,6 +56,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [harvestPlanOrder, setHarvestPlanOrder] = useState<Order | null>(null);
     const [isEditingHarvestPanel, setIsEditingHarvestPanel] = useState(false);
     const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
+    const [client, setClient] = useState<any>(null);
+    const [selectedHarvestInvestor, setSelectedHarvestInvestor] = useState('');
 
     // Compute harvest plans map for efficiently checking status per lot
     const harvestPlansByLot = useMemo(() => {
@@ -72,15 +74,18 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     }, [orders]);
 
     useEffect(() => {
-        const fetchContractors = async () => {
-            const { data } = await supabase
+        const fetchExtras = async () => {
+            const { data: contractorsData } = await supabase
                 .from('profiles')
                 .select('id, username')
                 .eq('role', 'CONTRATISTA');
-            if (data) setContractors(data);
+            if (contractorsData) setContractors(contractorsData);
+
+            const clientData = await db.get('clients', id);
+            setClient(clientData);
         };
-        fetchContractors();
-    }, []);
+        fetchExtras();
+    }, [id]);
 
 
     // Unified Panel State (Observations, Crop Assignment, History)
@@ -183,6 +188,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     expectedYield: observedYield ? parseFloat(observedYield) : 0,
                     servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
                     contractorName: harvestContractor,
+                    investorName: selectedHarvestInvestor,
                     applicatorId: contractors.find(c => c.username === harvestContractor)?.id,
                     items: [],
                     treatedArea: lot.hectares,
@@ -203,6 +209,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 setHarvestLaborPrice('');
                 setHarvestContractor('');
                 setHarvestDate('');
+                setSelectedHarvestInvestor('');
             } catch (error) {
                 console.error('Error creating harvest plan:', error);
                 alert('Error al crear el plan.');
@@ -299,6 +306,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 contractorName: harvestContractor || undefined,
                 harvestLaborPricePerHa: pricePerHa || undefined,
                 harvestLaborCost: totalCost || undefined,
+                investorName: selectedHarvestInvestor || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false
@@ -313,6 +321,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     status: 'DONE',
                     appliedAt: new Date().toISOString(),
                     appliedBy: displayName || 'Sistema',
+                    investorName: selectedHarvestInvestor || undefined,
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
@@ -332,6 +341,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     expectedYield: yieldVal,
                     servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
                     contractorName: harvestContractor,
+                    investorName: selectedHarvestInvestor,
                     applicatorId: contractors.find(c => c.username === harvestContractor)?.id,
                     items: [],
                     treatedArea: lot.hectares,
@@ -354,6 +364,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             setHarvestContractor('');
             setHarvestDate('');
             setHarvestPlanOrder(null);
+            setSelectedHarvestInvestor('');
         } catch (error) {
             console.error('Error marking harvested:', error);
             alert('Error al registrar la cosecha.');
@@ -372,7 +383,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const handleDeleteLot = async (lotId: string) => {
         if (confirm('¿Está seguro de eliminar este lote?')) {
-            await deleteLot(lotId);
+            await deleteLot(lotId, displayName || 'Sistema');
         }
     };
 
@@ -547,7 +558,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     };
 
-    const handleUpdateHarvest = async (originalHarvest: InventoryMovement, newDate: string, newYield: number, newPrice: number, newContractor: string) => {
+    const handleUpdateHarvest = async (originalHarvest: InventoryMovement, newDate: string, newYield: number, newPrice: number, newContractor: string, newInvestor?: string) => {
         try {
             // 1. Calculate yield difference to adjust stock
             const yieldDiff = newYield - originalHarvest.quantity;
@@ -568,6 +579,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 date: newDate,
                 quantity: newYield,
                 contractorName: newContractor,
+                investorName: newInvestor,
                 updatedAt: new Date().toISOString(),
                 synced: false
             });
@@ -588,6 +600,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     harvestLaborPricePerHa: newPrice,
                     harvestLaborCost: totalCost,
                     contractorName: newContractor,
+                    investorName: newInvestor,
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
@@ -676,7 +689,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const handleDeleteFarm = async (farmId: string) => {
         if (confirm('¿Está seguro de eliminar este campo? Se eliminarán también sus lotes.')) {
-            await deleteFarm(farmId);
+            await deleteFarm(farmId, displayName || 'Sistema');
             if (selectedFarmId === farmId) setSelectedFarmId(null);
         }
     };
@@ -1167,12 +1180,28 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                     />
                                                                                 )}
                                                                                 <Input
-                                                                                    label="Precio Labor ($/ha)"
+                                                                                    label="Precio Labor (USD/ha)"
                                                                                     type="number"
                                                                                     value={harvestLaborPrice}
                                                                                     onChange={e => setHarvestLaborPrice(e.target.value)}
                                                                                     className="bg-white"
                                                                                 />
+                                                                                <div>
+                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Pagado por</label>
+                                                                                    <select
+                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                                                                        value={selectedHarvestInvestor}
+                                                                                        onChange={e => setSelectedHarvestInvestor(e.target.value)}
+                                                                                    >
+                                                                                        <option value="">Seleccionar...</option>
+                                                                                        {client?.partners?.map((p: any) => (
+                                                                                            <option key={p.name} value={p.name}>{p.name} {p.cuit ? `(CUIT: ${p.cuit})` : ''}</option>
+                                                                                        ))}
+                                                                                        {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
+                                                                                            <option key={inv.name} value={inv.name}>{inv.name}</option>
+                                                                                        ))}
+                                                                                    </select>
+                                                                                </div>
                                                                             </div>
                                                                             <div className="flex justify-end gap-2">
                                                                                 <button
@@ -1458,9 +1487,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                         <div className="text-xs text-slate-500 uppercase font-bold mb-1">Costo Labor Total</div>
                                                         <div className="font-mono text-slate-800">
                                                             {harvestMovement.harvestLaborCost
-                                                                ? `$${harvestMovement.harvestLaborCost.toLocaleString()}`
+                                                                ? `USD ${harvestMovement.harvestLaborCost.toLocaleString()}`
                                                                 : '-'}
                                                         </div>
+                                                    </div>
+                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pagado por</div>
+                                                        <div className="text-sm text-slate-800 truncate">{harvestMovement.investorName || '-'}</div>
                                                     </div>
                                                 </div>
 
@@ -1482,7 +1515,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                         fd.get('date') as string,
                                                         parseFloat(fd.get('yield') as string),
                                                         parseFloat(fd.get('price') as string),
-                                                        fd.get('contractor') as string
+                                                        fd.get('contractor') as string,
+                                                        selectedHarvestInvestor
                                                     );
                                                 }}
                                                 className="space-y-4"
@@ -1509,10 +1543,26 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                     />
                                                     <Input
                                                         name="price"
-                                                        label="Precio Labor ($/ha)"
+                                                        label="Precio Labor (USD/ha)"
                                                         type="number"
                                                         defaultValue={harvestMovement.harvestLaborPricePerHa || 0}
                                                     />
+                                                    <div className="w-full">
+                                                        <label className="block text-sm font-medium text-slate-700 mb-1">Pagado por:</label>
+                                                        <select
+                                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                                            value={selectedHarvestInvestor}
+                                                            onChange={e => setSelectedHarvestInvestor(e.target.value)}
+                                                        >
+                                                            <option value="">Seleccione un socio...</option>
+                                                            {client?.partners?.map((p: any) => (
+                                                                <option key={p.name} value={p.name}>{p.name} {p.cuit ? `(CUIT: ${p.cuit})` : ''}</option>
+                                                            ))}
+                                                            {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
+                                                                <option key={inv.name} value={inv.name}>{inv.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 </div>
                                                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                                                     <Button type="button" variant="ghost" onClick={() => setIsEditingHarvestPanel(false)}>Cancelar</Button>

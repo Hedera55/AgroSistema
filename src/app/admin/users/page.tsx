@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { UserProfile, UserRole, Client } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { db } from '@/services/db';
+import Link from 'next/link';
 
 export default function UserManagementPage() {
     const { isMaster, loading: authLoading, user: currentUser, refreshProfile } = useAuth();
@@ -264,6 +265,8 @@ export default function UserManagementPage() {
                 </div>
             )}
 
+            {/* Modal de Editar Perfil Removed */}
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
@@ -278,18 +281,29 @@ export default function UserManagementPage() {
                         {users.map((user) => (
                             <tr key={user.id} className="hover:bg-slate-50 transition-colors group relative">
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-slate-900">
-                                        {user.role === 'CLIENT' ? (
-                                            user.email
-                                        ) : (
-                                            <>
-                                                {user.username && user.username !== user.email && (
-                                                    <div className="text-slate-900 font-bold">{user.username}</div>
-                                                )}
-                                                <div className={user.username && user.username !== user.email ? "text-xs text-slate-500" : ""}>
-                                                    {user.email}
-                                                </div>
-                                            </>
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-sm font-medium text-slate-900">
+                                            {user.role === 'CLIENT' ? (
+                                                user.email
+                                            ) : (
+                                                <>
+                                                    {user.username && user.username !== user.email && (
+                                                        <div className="text-slate-900 font-bold">{user.username}</div>
+                                                    )}
+                                                    <div className={user.username && user.username !== user.email ? "text-xs text-slate-500" : ""}>
+                                                        {user.email}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                        {isMaster && (
+                                            <Link
+                                                href={`/admin/users/${user.id}`}
+                                                className="text-slate-300 hover:text-emerald-500 transition-colors p-1"
+                                                title="Gestionar perfil completo"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+                                            </Link>
                                         )}
                                     </div>
                                 </td>

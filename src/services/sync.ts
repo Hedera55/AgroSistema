@@ -8,6 +8,7 @@ const mappers = {
         id: c.id,
         name: c.name,
         investors: c.investors || [],
+        partners: c.partners || [],
         created_at: c.createdAt || new Date().toISOString(),
         updated_at: c.updatedAt || new Date().toISOString(),
         deleted: c.deleted || false,
@@ -23,7 +24,10 @@ const mappers = {
         created_by: f.createdBy,
         last_updated_by: f.lastUpdatedBy,
         created_at: f.createdAt || new Date().toISOString(),
-        updated_at: f.updatedAt || new Date().toISOString()
+        updated_at: f.updatedAt || new Date().toISOString(),
+        deleted: f.deleted || false,
+        deleted_at: f.deletedAt,
+        deleted_by: f.deletedBy
     }),
     lot: (l: Lot) => ({
         id: l.id,
@@ -39,7 +43,10 @@ const mappers = {
         created_by: l.createdBy,
         last_updated_by: l.lastUpdatedBy,
         created_at: l.createdAt || new Date().toISOString(),
-        updated_at: l.updatedAt || new Date().toISOString()
+        updated_at: l.updatedAt || new Date().toISOString(),
+        deleted: l.deleted || false,
+        deleted_at: l.deletedAt,
+        deleted_by: l.deletedBy
     }),
     product: (p: Product) => {
         return {
@@ -93,7 +100,8 @@ const mappers = {
         deleted: o.deleted || false,
         deleted_at: o.deletedAt || null,
         deleted_by: o.deletedBy || null,
-        sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null
+        sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null,
+        investor_name: o.investorName || null
     }),
     movement: (m: InventoryMovement) => ({
         id: m.id,
@@ -112,6 +120,7 @@ const mappers = {
         reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
         notes: m.notes,
         factura_image_url: m.facturaImageUrl,
+        investor_name: m.investorName || null,
         created_by: m.createdBy,
         created_at: m.createdAt || new Date(m.date).toISOString(),
         deleted: m.deleted || false,
@@ -159,6 +168,7 @@ const reverseMappers = {
         id: c.id,
         name: c.name,
         investors: c.investors || [],
+        partners: c.partners || [],
         createdAt: c.created_at,
         updatedAt: c.updated_at,
         deleted: c.deleted,
@@ -176,7 +186,10 @@ const reverseMappers = {
         lastUpdatedBy: f.last_updated_by,
         createdAt: f.created_at,
         updatedAt: f.updated_at,
-        synced: true
+        synced: true,
+        deleted: f.deleted,
+        deletedAt: f.deleted_at,
+        deletedBy: f.deleted_by
     }),
     lot: (l: any): Lot => ({
         id: l.id,
@@ -193,7 +206,10 @@ const reverseMappers = {
         lastUpdatedBy: l.last_updated_by,
         createdAt: l.created_at,
         updatedAt: l.updated_at,
-        synced: true
+        synced: true,
+        deleted: l.deleted,
+        deletedAt: l.deleted_at,
+        deletedBy: l.deleted_by
     }),
     product: (p: any): Product => ({
         id: p.id,
@@ -248,7 +264,8 @@ const reverseMappers = {
         deleted: o.deleted,
         deletedAt: o.deleted_at,
         deletedBy: o.deleted_by,
-        sowingOrderId: o.sowing_order_id
+        sowingOrderId: o.sowing_order_id,
+        investorName: o.investor_name
     }),
     movement: (m: any): InventoryMovement => ({
         id: m.id,
@@ -267,6 +284,7 @@ const reverseMappers = {
         referenceId: m.reference_id || 'manual',
         notes: m.notes,
         facturaImageUrl: m.factura_image_url,
+        investorName: m.investor_name,
         createdBy: m.created_by,
         createdAt: m.created_at,
         synced: true,

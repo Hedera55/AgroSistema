@@ -12,4 +12,8 @@ They cannot change things in orders. Those are just managed by the admin.
 
 And... a client only sees their own client dashboard. Different from an admin, who can see various clients dashboards.
 
-Implement this.
+
+. . . . . .. 
+
+Retroactively changing how much an expenditure cost or who paid for it.
+Como si fuera un excel que le podés cambiar los datos, este programa también debería poder.

@@ -2,16 +2,17 @@ import { InputHTMLAttributes, forwardRef } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
     label?: string;
+    labelClassName?: string;
     error?: string;
     prefix?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-    ({ label, error, prefix, className = '', ...props }, ref) => {
+    ({ label, labelClassName, error, prefix, className = '', ...props }, ref) => {
         return (
             <div className="w-full">
                 {label && (
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className={labelClassName || "block text-sm font-medium text-slate-700 mb-1"}>
                         {label}
                     </label>
                 )}

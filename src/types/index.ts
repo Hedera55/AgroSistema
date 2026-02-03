@@ -6,6 +6,7 @@ export interface UserProfile {
     username?: string;
     role: UserRole;
     assigned_clients?: string[]; // IDs of clients for ADMIN/CONTRATISTA role
+    cuit?: string;
 }
 
 // --- Location Entities ---
@@ -16,9 +17,11 @@ export interface Client {
     email?: string;
     phone?: string;
     cuit?: string; // Government ID
-    investors?: { name: string; percentage: number }[]; // Investor shares
+    investors?: { name: string; percentage: number }[]; // Legacy/To be removed
+    partners?: { name: string; cuit?: string }[]; // List of available partner objects for expenditures
     synced?: boolean;
     enabledUnits?: string[];
+    enabledSellers?: string[];
     createdAt?: string;
     updatedAt?: string;
     deleted?: boolean;
@@ -50,6 +53,9 @@ export interface Farm { // Campo
     createdAt?: string;
     updatedAt?: string;
     synced?: boolean;
+    deleted?: boolean;
+    deletedAt?: string;
+    deletedBy?: string;
 }
 
 export type LotStatus = 'EMPTY' | 'NOT_SOWED' | 'SOWED' | 'HARVESTED';
@@ -70,6 +76,9 @@ export interface Lot { // Lote
     createdAt?: string;
     updatedAt?: string;
     synced?: boolean;
+    deleted?: boolean;
+    deletedAt?: string;
+    deletedBy?: string;
 }
 
 export interface Environment { // Ambiente (within a lot)
@@ -81,7 +90,7 @@ export interface Environment { // Ambiente (within a lot)
 
 // --- Inventory ---
 
-export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'OTHER';
+export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'COADYUVANTE' | 'INOCULANTE' | 'OTHER';
 export type Unit = string;
 
 export interface Product {
@@ -92,6 +101,7 @@ export interface Product {
     type: ProductType;
     unit: Unit;
     activeIngredient?: string;
+    commercialName?: string;
     concentration?: string; // e.g., "30%"
     price?: number; // Price per unit (USD/KG or USD/L)
     synced?: boolean;
@@ -124,6 +134,7 @@ export interface OrderItem {
     productId: string;
     productName: string; // Cached for offline display
     brandName?: string;  // Cached for PDF
+    commercialName?: string; // Cached for PDF
     activeIngredient?: string; // P.A. cached for PDF
     dosage: number; // Amount per hectare
     unit: Unit;
@@ -135,6 +146,18 @@ export interface OrderItem {
     expectedYield?: number;
 }
 
+export interface MovementItem {
+    id: string;
+    productId: string;
+    productName: string;
+    productBrand?: string;
+    productCommercialName?: string;
+    quantity: number;
+    unit: Unit;
+    price?: number;
+    sellerName?: string;
+}
+
 export interface InventoryMovement {
     id: string;
     clientId: string;
@@ -142,6 +165,7 @@ export interface InventoryMovement {
     productId: string;
     productName: string;
     productBrand?: string;
+    productCommercialName?: string;
     type: 'IN' | 'OUT' | 'SALE' | 'HARVEST';
     quantity: number;
     unit: Unit;
@@ -152,6 +176,8 @@ export interface InventoryMovement {
     referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image
+    investorName?: string; // Who paid for this
+    sellerName?: string; // Where this was purchased from
     createdBy?: string; // User ID/Name
     createdAt?: string;
     updatedAt?: string;
@@ -166,6 +192,7 @@ export interface InventoryMovement {
     deleted?: boolean;
     deletedAt?: string;
     deletedBy?: string;
+    items?: MovementItem[]; // For consolidated entries
 }
 
 export interface Order {
@@ -200,6 +227,7 @@ export interface Order {
     servicePrice?: number;
     expectedYield?: number; // For sowing orders
     notes?: string;
+    facturaImageUrl?: string;
     createdBy?: string;
 
     // Sync
@@ -211,6 +239,7 @@ export interface Order {
     deletedAt?: string;
     deletedBy?: string;
     sowingOrderId?: string;
+    investorName?: string; // Who is responsible for the service cost
 }
 
 export interface OrderActivity {

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { InventoryMovement } from '@/types';
@@ -152,6 +152,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nombre Comercial</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
@@ -199,7 +200,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     });
 
                                     return groupedMovements.map((m) => {
-                                        const { date, time } = formatDate(m.date);
+                                        const { date, time } = formatDate(m.createdAt || m.date);
+                                        const isConsolidated = m.items && m.items.length > 0;
 
                                         // Determine Label and Tooltip
                                         let label = 'EGRESO-R';
@@ -211,9 +213,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             labelClass = 'bg-indigo-100 text-indigo-800';
                                             tooltip = 'Traslado entre galpones';
                                         } else if (m.type === 'IN') {
-                                            label = 'INGRESO-C';
-                                            labelClass = 'bg-green-100 text-green-800';
-                                            tooltip = 'Compra';
+                                            label = isConsolidated ? 'COMPRA-M' : 'INGRESO-C';
+                                            labelClass = isConsolidated ? 'bg-emerald-100 text-emerald-800' : 'bg-green-100 text-green-800';
+                                            tooltip = isConsolidated ? 'Compra multi-producto' : 'Compra';
                                         } else if (m.type === 'HARVEST') {
                                             label = 'INGRESO-CC';
                                             labelClass = 'bg-lime-100 text-lime-800';
@@ -239,115 +241,173 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         let showValue = false;
 
                                         if (m.type === 'IN' && !m.isTransfer) {
-                                            unitPrice = m.purchasePrice !== undefined ? m.purchasePrice : 0;
-                                            totalValue = unitPrice * m.quantity;
-                                            showValue = true; // Always show even if 0
+                                            if (isConsolidated) {
+                                                totalValue = m.items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * parseFloat(item.quantity)), 0);
+                                            } else {
+                                                unitPrice = m.purchasePrice !== undefined ? m.purchasePrice : 0;
+                                                totalValue = unitPrice * m.quantity;
+                                            }
+                                            showValue = true;
                                         } else if (m.type === 'SALE') {
                                             unitPrice = m.salePrice !== undefined ? m.salePrice : 0;
                                             totalValue = unitPrice * m.quantity;
-                                            showValue = true; // Always show even if 0
-                                        } else if (m.type === 'HARVEST') {
-                                            // Optional: if you want to show 0 for harvest too
-                                            unitPrice = 0;
-                                            totalValue = 0;
-                                            showValue = false; // Usually harvest doesn't have a "price" here, it's just production
+                                            showValue = true;
                                         }
 
                                         const priceLabel = m.type === 'IN' ? 'Precio de compra' : 'Precio de venta';
-                                        const valueTooltip = `${priceLabel}: $${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${m.unit}`;
+                                        const valueTooltip = isConsolidated
+                                            ? 'Total de la compra consolidada'
+                                            : `${priceLabel}: USD ${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${m.unit}`;
 
                                         return (
-                                            <tr key={m.id} className="hover:bg-slate-50 group">
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-slate-900">{date}</div>
-                                                    <div className="text-xs text-slate-400">{time}</div>
-                                                </td>
-                                                <td className="px-6 py-4 font-medium text-slate-800">
-                                                    {m.productName}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                    <span
-                                                        title={tooltip}
-                                                        className={`px-2 py-1 rounded-full text-[10px] font-bold ${labelClass}`}
-                                                    >
-                                                        {label}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
-                                                    {(m.type === 'IN' || m.type === 'HARVEST' || m.isTransfer) ? '+' : '-'}{m.quantity} {m.unit}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-600">
-                                                    {showValue ? (
-                                                        <span title={valueTooltip}>
-                                                            ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                            {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-300">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
-                                                    {m.notes}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-slate-400 italic">
-                                                    {m.createdBy || 'Sistema'}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {m.isTransfer ? (
-                                                        <div className="flex items-center gap-1 text-xs">
-                                                            <span className="font-bold text-slate-900">{m.originName}</span>
-                                                            <span className="text-slate-300">→</span>
-                                                            <span className="font-bold text-emerald-600">{m.destName}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-slate-900">{warehousesKey[m.warehouseId || ''] || '-'}</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {m.type !== 'HARVEST' && (
-                                                            m.facturaImageUrl ? (
-                                                                <a
-                                                                    href={m.facturaImageUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    title="Ver factura"
-                                                                    className="inline-block"
-                                                                >
-                                                                    <button
-                                                                        className="w-6 h-6 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded text-xs font-bold transition-colors flex items-center justify-center"
-                                                                    >
-                                                                        F
-                                                                    </button>
-                                                                </a>
-                                                            ) : (
-                                                                <div className="inline-block relative">
-                                                                    <input
-                                                                        type="file"
-                                                                        accept="image/*,application/pdf"
-                                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
-                                                                        onChange={(e) => handleFileUpload(e, m.id)}
-                                                                        disabled={uploadingId === m.id}
-                                                                        title="Subir factura faltante"
-                                                                    />
-                                                                    <button
-                                                                        className={`w-6 h-6 bg-white border border-red-200 text-red-500 rounded text-xs font-bold flex items-center justify-center ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
-                                                                    >
-                                                                        {uploadingId === m.id ? '...' : 'F'}
-                                                                    </button>
-                                                                </div>
-                                                            )
-                                                        )}
-                                                        <button
-                                                            onClick={() => handleDeleteMovement(m.id, m.partnerId)}
-                                                            className="w-6 h-6 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
-                                                            title="Eliminar movimiento"
+                                            <React.Fragment key={m.id}>
+                                                <tr className={`hover:bg-slate-50 group transition-colors ${isConsolidated ? 'border-l-4 border-l-emerald-500' : ''}`}>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="text-slate-900 font-medium">{date}</div>
+                                                        <div className="text-[10px] text-slate-400 font-mono uppercase tracking-tighter">{time}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 font-bold text-slate-900">
+                                                        {isConsolidated ? (
+                                                            <div className="flex flex-col">
+                                                                <span className="text-emerald-700">Compra de insumos</span>
+                                                                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-widest">{m.items.length} productos</span>
+                                                            </div>
+                                                        ) : m.productName}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm text-slate-500">
+                                                        {isConsolidated ? '-' : (m.productCommercialName || '-')}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                        <span
+                                                            title={tooltip}
+                                                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${labelClass}`}
                                                         >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                            {label}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-slate-700">
+                                                        {isConsolidated ? (
+                                                            <span className="text-slate-300">---</span>
+                                                        ) : (
+                                                            <>
+                                                                {(m.type === 'IN' || m.type === 'HARVEST' || m.isTransfer) ? '+' : '-'}{m.quantity} <span className="text-[10px] text-slate-400 font-normal uppercase">{m.unit}</span>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-900 font-bold">
+                                                        {showValue ? (
+                                                            <span title={valueTooltip} className={isConsolidated ? 'text-emerald-600' : ''}>
+                                                                USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-300">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
+                                                        {m.notes || '-'}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-slate-400 font-medium text-[11px] tracking-tight">
+                                                        {m.createdBy || 'Sistema'}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        {m.isTransfer ? (
+                                                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-tight">
+                                                                <span className="text-slate-500">{m.originName}</span>
+                                                                <span className="text-slate-300">→</span>
+                                                                <span className="text-emerald-600">{m.destName}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-600 text-[11px] font-medium">{warehousesKey[m.warehouseId || ''] || '-'}</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            {m.type !== 'HARVEST' && (
+                                                                m.facturaImageUrl ? (
+                                                                    <a
+                                                                        href={m.facturaImageUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        title="Ver factura"
+                                                                        className="inline-block"
+                                                                    >
+                                                                        <button
+                                                                            className="w-8 h-8 bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all flex items-center justify-center shadow-sm"
+                                                                        >
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                                                        </button>
+                                                                    </a>
+                                                                ) : (
+                                                                    <div className="inline-block relative">
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="image/*,application/pdf"
+                                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+                                                                            onChange={(e) => handleFileUpload(e, m.id)}
+                                                                            disabled={uploadingId === m.id}
+                                                                            title="Subir factura faltante"
+                                                                        />
+                                                                        <button
+                                                                            className={`w-8 h-8 bg-white border border-slate-200 text-slate-400 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-slate-50 hover:border-emerald-200 hover:text-emerald-500'}`}
+                                                                        >
+                                                                            {uploadingId === m.id ? '...' : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>}
+                                                                        </button>
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleDeleteMovement(m.id, m.partnerId)}
+                                                                className="w-8 h-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-2"
+                                                                title="Eliminar movimiento"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {isConsolidated && (
+                                                    <tr className="bg-slate-50 border-emerald-100">
+                                                        <td colSpan={9} className="px-6 py-0">
+                                                            <div className="overflow-hidden">
+                                                                <table className="min-w-full my-3 border-l-2 border-emerald-500 bg-white shadow-sm rounded-r-lg">
+                                                                    <thead className="bg-emerald-50/50">
+                                                                        <tr>
+                                                                            <th className="px-4 py-2 text-left text-[9px] font-black text-emerald-700 uppercase tracking-widest">P.A. / Cultivo</th>
+                                                                            <th className="px-4 py-2 text-left text-[9px] font-black text-emerald-700 uppercase tracking-widest">Nombre Comercial</th>
+                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">Cantidad</th>
+                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">P. Unitario</th>
+                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">Subtotal</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-emerald-50">
+                                                                        {m.items.map((it: any, i: number) => {
+                                                                            const prod = productsKey[it.productId] || {}; // wait productsKey only has price
+                                                                            // Actually we need the product name from DB or we can pass it in handleStockSubmit
+                                                                            // Let's assume for now productName is included in the item or we look it up.
+                                                                            // In handleStockSubmit I didn't include productName in items. 
+                                                                            // BUT availableProducts is not available here.
+                                                                            // I should have included productName in each item.
+                                                                            // For now, I'll use the ID or try to find it if I had products loaded.
+                                                                            // Wait, I have `allProducts` in `loadData` but it's not in state.
+                                                                            // I should put allProducts in state.
+                                                                            return (
+                                                                                <tr key={i}>
+                                                                                    <td className="px-4 py-2 text-[11px] font-bold text-slate-700">{it.productName || 'Producto'} <span className="text-slate-400 font-normal">({it.tempBrand || '-'})</span></td>
+                                                                                    <td className="px-4 py-2 text-[11px] text-slate-500">{it.productCommercialName || '-'}</td>
+                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono font-bold text-slate-600">{it.quantity}</td>
+                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString()}</td>
+                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono font-bold text-emerald-600">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString()}</td>
+                                                                                </tr>
+                                                                            );
+                                                                        })}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
                                         );
                                     });
                                 })()}

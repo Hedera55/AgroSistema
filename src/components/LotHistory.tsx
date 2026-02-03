@@ -130,6 +130,7 @@ export function LotHistory({ clientId, lotId }: LotHistoryProps) {
                                         {event.items?.map((item: any, i: number) => (
                                             <div key={i} className="text-slate-600">
                                                 <span className="font-semibold">{item.productName}</span>
+                                                {item.commercialName && <span className="text-[10px] text-slate-400 ml-1">({item.commercialName})</span>}
                                                 <span className="text-slate-400 text-xs ml-2">
                                                     ({item.plantingDensity ? `${item.plantingDensity} ${item.plantingDensityUnit}` : `${item.totalQuantity} ${item.unit}`})
                                                 </span>

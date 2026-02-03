@@ -12,7 +12,7 @@ export function useFarms(clientId: string) {
         setLoading(true);
         try {
             const allFarms = await db.getAll('farms');
-            const clientFarms = allFarms.filter((f: Farm) => f.clientId === clientId);
+            const clientFarms = allFarms.filter((f: Farm) => f.clientId === clientId && !f.deleted);
             setFarms(clientFarms);
         } catch (error) {
             console.error(error);
@@ -48,8 +48,37 @@ export function useFarms(clientId: string) {
         syncService.pushChanges();
     };
 
-    const deleteFarm = async (id: string) => {
-        await db.delete('farms', id);
+    const deleteFarm = async (id: string, deletedBy?: string) => {
+        const existing = await db.get('farms', id);
+        if (!existing) return;
+
+        const timestamp = new Date().toISOString();
+        const user = deletedBy || 'Sistema';
+
+        // 1. Soft-delete the farm
+        await db.put('farms', {
+            ...existing,
+            deleted: true,
+            deletedAt: timestamp,
+            deletedBy: user,
+            synced: false,
+            updatedAt: timestamp
+        });
+
+        // 2. Soft-delete associated lots
+        const allLots = await db.getAll('lots');
+        const farmLots = allLots.filter((l: Lot) => l.farmId === id);
+        for (const lot of farmLots) {
+            await db.put('lots', {
+                ...lot,
+                deleted: true,
+                deletedAt: timestamp,
+                deletedBy: user,
+                synced: false,
+                updatedAt: timestamp
+            });
+        }
+
         await refresh();
         syncService.pushChanges();
     };
@@ -69,7 +98,7 @@ export function useLots(farmId: string) {
         setLoading(true);
         try {
             const allLots = await db.getAll('lots');
-            const farmLots = allLots.filter((l: Lot) => l.farmId === farmId);
+            const farmLots = allLots.filter((l: Lot) => l.farmId === farmId && !l.deleted);
             setLots(farmLots);
         } catch (error) {
             console.error(error);
@@ -105,8 +134,18 @@ export function useLots(farmId: string) {
         syncService.pushChanges();
     };
 
-    const deleteLot = async (id: string) => {
-        await db.delete('lots', id);
+    const deleteLot = async (id: string, deletedBy?: string) => {
+        const existing = await db.get('lots', id);
+        if (!existing) return;
+
+        await db.put('lots', {
+            ...existing,
+            deleted: true,
+            deletedAt: new Date().toISOString(),
+            deletedBy: deletedBy || 'Sistema',
+            synced: false,
+            updatedAt: new Date().toISOString()
+        });
         await refresh();
         syncService.pushChanges();
     };
