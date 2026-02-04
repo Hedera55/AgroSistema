@@ -75,7 +75,13 @@ export default function ClientsPage() {
         return [];
     }, [clients, isMaster, showAll, profile]);
 
-    const [newClient, setNewClient] = useState({ name: '', cuit: '' });
+    const [newClient, setNewClient] = useState<{ name: string; cuit: string; partners: { name: string; cuit: string }[] }>({
+        name: '',
+        cuit: '',
+        partners: []
+    });
+    const [activePartner, setActivePartner] = useState({ name: '', cuit: '' });
+    const [showPartnerRibbon, setShowPartnerRibbon] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -87,8 +93,7 @@ export default function ClientsPage() {
                 id: isEditing ? editingClientId! : generateId(),
                 name: newClient.name,
                 cuit: newClient.cuit,
-                // Inherit or keep empty investors; they are managed in the Investors tab now
-                investors: isEditing ? clients.find(c => c.id === editingClientId)?.investors || [] : []
+                partners: newClient.partners
             };
 
             if (isEditing) {
@@ -99,7 +104,7 @@ export default function ClientsPage() {
             setShowForm(false);
             setIsEditing(false);
             setEditingClientId(null);
-            setNewClient({ name: '', cuit: '' });
+            setNewClient({ name: '', cuit: '', partners: [] });
         } finally {
             setIsSubmitting(false);
         }
@@ -126,7 +131,7 @@ export default function ClientsPage() {
                             if (!showForm) {
                                 setIsEditing(false);
                                 setEditingClientId(null);
-                                setNewClient({ name: '', cuit: '' });
+                                setNewClient({ name: '', cuit: '', partners: [] });
                             }
                             setShowForm(!showForm);
                         }}>
@@ -142,7 +147,7 @@ export default function ClientsPage() {
                         onClick={() => {
                             setIsEditing(false);
                             setEditingClientId(null);
-                            setNewClient({ name: '', cuit: '' });
+                            setNewClient({ name: '', cuit: '', partners: [] });
                             setShowForm(false);
                         }}
                         className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -153,7 +158,7 @@ export default function ClientsPage() {
 
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-slate-800">
-                            {isEditing ? 'Editar Empresa' : 'Nueva Empresa'}
+                            {isEditing ? `Editar empresa ${newClient.name}` : 'Nueva Empresa'}
                         </h2>
                         {isEditing && (
                             <button
@@ -164,36 +169,161 @@ export default function ClientsPage() {
                                         setShowForm(false);
                                         setIsEditing(false);
                                         setEditingClientId(null);
-                                        setNewClient({ name: '', cuit: '' });
+                                        setNewClient({ name: '', cuit: '', partners: [] });
                                     }
                                 }}
                                 className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors mr-6"
                             >
-                                🗑️ Eliminar Empresa
+                                ✕ Eliminar Empresa
                             </button>
                         )}
                     </div>
-                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                        <Input
-                            label="Nombre"
-                            placeholder="ej. Estancia La Paz"
-                            value={newClient.name}
-                            onChange={e => setNewClient({ ...newClient, name: e.target.value })}
-                            required
-                        />
-                        <Input
-                            label="CUIT"
-                            type="text"
-                            placeholder="ej. 30-12345678-9"
-                            value={newClient.cuit}
-                            onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
-                        />
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Nombre de la Empresa"
+                                placeholder="ej. Estancia La Paz"
+                                value={newClient.name}
+                                onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                                required
+                            />
+                            <Input
+                                label="CUIT de la Empresa"
+                                type="text"
+                                placeholder="ej. 30-12345678-9"
+                                value={newClient.cuit}
+                                onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
+                            />
+                        </div>
 
-                        {/* Investors section removed here - managed in Investors tab */}
+                        <div className="pt-4 border-t border-slate-100">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold text-slate-900">Inversores</h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPartnerRibbon(!showPartnerRibbon)}
+                                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest transition-colors"
+                                >
+                                    {showPartnerRibbon ? 'Cancelar' : '+ Agregar Inversor'}
+                                </button>
+                            </div>
 
-                        <Button type="submit" isLoading={isSubmitting} className="md:col-start-3">
-                            {isEditing ? 'Actualizar Empresa' : 'Guardar Empresa'}
-                        </Button>
+                            {/* Active Ribbon */}
+                            {showPartnerRibbon && (
+                                <div className="flex flex-col md:flex-row gap-3 items-end mb-6 animate-fadeIn bg-slate-50/50 p-4 rounded-xl border border-slate-100/50">
+                                    <div className="flex-1 w-full">
+                                        <Input
+                                            label="Nombre Inversor"
+                                            placeholder="ej. Juan Pérez"
+                                            value={activePartner.name}
+                                            onChange={e => setActivePartner({ ...activePartner, name: e.target.value })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' && activePartner.name) {
+                                                    setNewClient({
+                                                        ...newClient,
+                                                        partners: [...newClient.partners, { ...activePartner }]
+                                                    });
+                                                    setActivePartner({ name: '', cuit: '' });
+                                                    setShowPartnerRibbon(false);
+                                                }
+                                            }}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="flex-[0.7] w-full">
+                                        <Input
+                                            label="CUIT"
+                                            placeholder="20-12345678-9"
+                                            value={activePartner.cuit}
+                                            onChange={e => setActivePartner({ ...activePartner, cuit: e.target.value })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' && activePartner.name) {
+                                                    setNewClient({
+                                                        ...newClient,
+                                                        partners: [...newClient.partners, { ...activePartner }]
+                                                    });
+                                                    setActivePartner({ name: '', cuit: '' });
+                                                    setShowPartnerRibbon(false);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (activePartner.name) {
+                                                    setNewClient({
+                                                        ...newClient,
+                                                        partners: [...newClient.partners, { ...activePartner }]
+                                                    });
+                                                    setActivePartner({ name: '', cuit: '' });
+                                                    setShowPartnerRibbon(false);
+                                                }
+                                            }}
+                                            className={`h-10 w-10 flex items-center justify-center rounded-lg shadow-sm transition-all ${activePartner.name ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
+                                            title="Agregar a la lista"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPartnerRibbon(false)}
+                                            className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg transition-colors shadow-sm"
+                                            title="Cerrar"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Growing List */}
+                            {newClient.partners.length === 0 ? (
+                                <p className="text-sm text-slate-400 italic py-4">No ha agregado inversores para esta empresa.</p>
+                            ) : (
+                                <div className="space-y-2 mb-6 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {newClient.partners.map((partner, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-emerald-200 transition-all group animate-fadeIn">
+                                            <div className="flex-1">
+                                                <div className="font-bold text-slate-900 text-sm">{partner.name}</div>
+                                                {partner.cuit && <div className="text-[10px] text-slate-400 font-mono tracking-wider">{partner.cuit}</div>}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const p = newClient.partners.filter((_, i) => i !== idx);
+                                                    setNewClient({ ...newClient, partners: p });
+                                                }}
+                                                className="text-slate-300 hover:text-red-500 p-2 transition-colors"
+                                                title="Eliminar Inversor"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setIsEditing(false);
+                                    setEditingClientId(null);
+                                    setNewClient({ name: '', cuit: '', partners: [] });
+                                    setShowForm(false);
+                                    setShowPartnerRibbon(false);
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button type="submit" isLoading={isSubmitting} className="min-w-[200px]">
+                                {isEditing ? 'Confirmar' : 'Guardar Empresa'}
+                            </Button>
+                        </div>
                     </form>
                 </div>
             )}
@@ -248,8 +378,10 @@ export default function ClientsPage() {
                                                         e.stopPropagation();
                                                         setNewClient({
                                                             name: client.name,
-                                                            cuit: client.cuit || ''
+                                                            cuit: client.cuit || '',
+                                                            partners: (client.partners || []).map(p => ({ name: p.name, cuit: p.cuit || '' }))
                                                         });
+                                                        setShowPartnerRibbon(false);
                                                         setEditingClientId(client.id);
                                                         setIsEditing(true);
                                                         setShowForm(true);
@@ -273,16 +405,18 @@ export default function ClientsPage() {
                 )}
             </div>
 
-            {(isMaster || role === 'ADMIN') && !loading && (
-                <div className="flex justify-end pt-2">
-                    <button
-                        onClick={() => setShowAll(!showAll)}
-                        className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-slate-600 hover:bg-white transition-all"
-                    >
-                        {showAll ? 'Ver Mis Asignados' : 'Ver Todas las Empresas'}
-                    </button>
-                </div>
-            )}
-        </div>
+            {
+                (isMaster || role === 'ADMIN') && !loading && (
+                    <div className="flex justify-end pt-2">
+                        <button
+                            onClick={() => setShowAll(!showAll)}
+                            className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-slate-600 hover:bg-white transition-all"
+                        >
+                            {showAll ? 'Ver Mis Asignados' : 'Ver Todas las Empresas'}
+                        </button>
+                    </div>
+                )
+            }
+        </div >
     );
 }

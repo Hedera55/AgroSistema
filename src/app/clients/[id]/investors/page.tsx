@@ -538,6 +538,15 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     </tbody>
                 </table>
             </div>
+            <div className="flex justify-center pt-4">
+                <Link
+                    href={`/clients/${id}/investors/details`}
+                    className="group flex items-center gap-2 bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm hover:border-emerald-500 hover:shadow-md transition-all"
+                >
+                    <span className="text-sm font-bold text-slate-600 group-hover:text-emerald-700 uppercase tracking-widest">Más detalle</span>
+                    <span className="text-emerald-500 group-hover:translate-x-1 transition-transform">→</span>
+                </Link>
+            </div>
         </div>
     );
 }
