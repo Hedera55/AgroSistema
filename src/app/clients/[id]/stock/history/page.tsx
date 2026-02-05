@@ -150,16 +150,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nombre Comercial</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase"></th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Marca</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nombre Comercial</th>
+                                    <th className="px-6 py-2 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">P. Unitario</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase"></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200 text-sm">
@@ -213,8 +215,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             labelClass = 'bg-indigo-100 text-indigo-800';
                                             tooltip = 'Traslado entre galpones';
                                         } else if (m.type === 'IN') {
-                                            label = isConsolidated ? 'COMPRA-M' : 'INGRESO-C';
-                                            labelClass = isConsolidated ? 'bg-emerald-100 text-emerald-800' : 'bg-green-100 text-green-800';
+                                            label = 'INGRESO-C';
+                                            labelClass = 'bg-orange-100 text-orange-800';
                                             tooltip = isConsolidated ? 'Compra multi-producto' : 'Compra';
                                         } else if (m.type === 'HARVEST') {
                                             label = 'INGRESO-CC';
@@ -261,23 +263,26 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
                                         return (
                                             <React.Fragment key={m.id}>
-                                                <tr className={`hover:bg-slate-50 group transition-colors ${isConsolidated ? 'border-l-4 border-l-emerald-500' : ''}`}>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                <tr className="hover:bg-slate-50 group transition-colors">
+                                                    <td className="px-6 py-2 whitespace-nowrap">
                                                         <div className="text-slate-900 font-medium">{date}</div>
                                                         <div className="text-[10px] text-slate-400 font-mono uppercase tracking-tighter">{time}</div>
                                                     </td>
-                                                    <td className="px-6 py-4 font-bold text-slate-900">
+                                                    <td className="px-6 py-2 font-bold text-slate-900">
                                                         {isConsolidated ? (
-                                                            <div className="flex flex-col">
-                                                                <span className="text-emerald-700">Compra de insumos</span>
-                                                                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-widest">{m.items.length} productos</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={m.type === 'IN' ? 'text-red-700' : 'text-emerald-700'}>Varios</span>
+                                                                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter whitespace-nowrap">({m.items.length} prod)</span>
                                                             </div>
                                                         ) : m.productName}
                                                     </td>
-                                                    <td className="px-6 py-4 text-sm text-slate-500">
+                                                    <td className="px-6 py-2 text-sm text-slate-500">
+                                                        {isConsolidated ? '-' : (m.productBrand || '-')}
+                                                    </td>
+                                                    <td className="px-6 py-2 text-sm text-slate-500">
                                                         {isConsolidated ? '-' : (m.productCommercialName || '-')}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    <td className="px-6 py-2 whitespace-nowrap text-center">
                                                         <span
                                                             title={tooltip}
                                                             className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${labelClass}`}
@@ -285,7 +290,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             {label}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-slate-700">
+                                                    <td className="px-6 py-2 whitespace-nowrap text-right font-mono font-bold text-slate-700">
                                                         {isConsolidated ? (
                                                             <span className="text-slate-300">---</span>
                                                         ) : (
@@ -294,9 +299,16 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             </>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-900 font-bold">
+                                                    <td className="px-6 py-2 whitespace-nowrap text-right font-mono text-slate-600">
+                                                        {(!isConsolidated && showValue) ? (
+                                                            <>USD {unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                                                        ) : (
+                                                            <span className="text-slate-300">---</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-2 whitespace-nowrap text-right font-mono text-slate-900 font-bold">
                                                         {showValue ? (
-                                                            <span title={valueTooltip} className={isConsolidated ? 'text-emerald-600' : ''}>
+                                                            <span title={valueTooltip} className={m.type === 'IN' ? 'text-red-500' : (m.type === 'SALE' ? 'text-emerald-600' : '')}>
                                                                 USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                 {isEstimate && <span className="text-slate-400 text-[10px] ml-1">*</span>}
                                                             </span>
@@ -304,13 +316,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-300">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
+                                                    <td className="px-6 py-2 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
                                                         {m.notes || '-'}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-slate-400 font-medium text-[11px] tracking-tight">
+                                                    <td className="px-6 py-2 whitespace-nowrap text-slate-400 font-medium text-[11px] tracking-tight">
                                                         {m.createdBy || 'Sistema'}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="px-6 py-2 whitespace-nowrap">
                                                         {m.isTransfer ? (
                                                             <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-tight">
                                                                 <span className="text-slate-500">{m.originName}</span>
@@ -321,7 +333,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-600 text-[11px] font-medium">{warehousesKey[m.warehouseId || ''] || '-'}</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                    <td className="px-6 py-2 whitespace-nowrap text-right">
                                                         <div className="flex items-center justify-end gap-2">
                                                             {m.type !== 'HARVEST' && (
                                                                 m.facturaImageUrl ? (
@@ -366,47 +378,30 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {isConsolidated && (
-                                                    <tr className="bg-slate-50 border-emerald-100">
-                                                        <td colSpan={9} className="px-6 py-0">
-                                                            <div className="overflow-hidden">
-                                                                <table className="min-w-full my-3 border-l-2 border-emerald-500 bg-white shadow-sm rounded-r-lg">
-                                                                    <thead className="bg-emerald-50/50">
-                                                                        <tr>
-                                                                            <th className="px-4 py-2 text-left text-[9px] font-black text-emerald-700 uppercase tracking-widest">P.A. / Cultivo</th>
-                                                                            <th className="px-4 py-2 text-left text-[9px] font-black text-emerald-700 uppercase tracking-widest">Nombre Comercial</th>
-                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">Cantidad</th>
-                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">P. Unitario</th>
-                                                                            <th className="px-4 py-2 text-right text-[9px] font-black text-emerald-700 uppercase tracking-widest">Subtotal</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-emerald-50">
-                                                                        {m.items.map((it: any, i: number) => {
-                                                                            const prod = productsKey[it.productId] || {}; // wait productsKey only has price
-                                                                            // Actually we need the product name from DB or we can pass it in handleStockSubmit
-                                                                            // Let's assume for now productName is included in the item or we look it up.
-                                                                            // In handleStockSubmit I didn't include productName in items. 
-                                                                            // BUT availableProducts is not available here.
-                                                                            // I should have included productName in each item.
-                                                                            // For now, I'll use the ID or try to find it if I had products loaded.
-                                                                            // Wait, I have `allProducts` in `loadData` but it's not in state.
-                                                                            // I should put allProducts in state.
-                                                                            return (
-                                                                                <tr key={i}>
-                                                                                    <td className="px-4 py-2 text-[11px] font-bold text-slate-700">{it.productName || 'Producto'} <span className="text-slate-400 font-normal">({it.tempBrand || '-'})</span></td>
-                                                                                    <td className="px-4 py-2 text-[11px] text-slate-500">{it.productCommercialName || '-'}</td>
-                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono font-bold text-slate-600">{it.quantity}</td>
-                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString()}</td>
-                                                                                    <td className="px-4 py-2 text-right text-[11px] font-mono font-bold text-emerald-600">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString()}</td>
-                                                                                </tr>
-                                                                            );
-                                                                        })}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
+                                                {isConsolidated && m.items.map((it: any, i: number) => (
+                                                    <tr key={`${m.id}-item-${i}`} className="bg-slate-50/30 hover:bg-slate-100/50 transition-colors border-l-4 border-l-emerald-500/30">
+                                                        <td className="px-6 py-1 whitespace-nowrap"></td>
+                                                        <td className="px-6 py-1 text-[11px] font-bold text-slate-600 relative pl-10">
+                                                            <div className="absolute left-6 top-0 h-1/2 w-px bg-slate-200"></div>
+                                                            <div className="absolute left-6 top-1/2 w-2 h-px bg-slate-200"></div>
+                                                            {i < m.items.length - 1 && <div className="absolute left-6 top-1/2 bottom-0 w-px bg-slate-200"></div>}
+                                                            {it.productName}
                                                         </td>
+                                                        <td className="px-6 py-1 text-[11px] text-slate-400">{it.productBrand || '-'}</td>
+                                                        <td className="px-6 py-1 text-[11px] text-slate-500">{it.productCommercialName || '-'}</td>
+                                                        <td className="px-6 py-1"></td>
+                                                        <td className="px-6 py-1 text-right font-mono text-[11px] text-slate-500">
+                                                            {it.quantity} <span className="text-[9px] text-slate-400 font-normal uppercase">{it.unit || m.unit}</span>
+                                                        </td>
+                                                        <td className="px-6 py-1 text-right font-mono text-[11px] text-slate-500">
+                                                            USD {parseFloat(it.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td className={`px-6 py-1 text-right font-mono text-[11px] font-bold ${m.type === 'IN' ? 'text-red-500/80' : 'text-emerald-600/80'}`}>
+                                                            USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td className="px-6 py-1" colSpan={4}></td>
                                                     </tr>
-                                                )}
+                                                ))}
                                             </React.Fragment>
                                         );
                                     });

@@ -202,7 +202,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 });
 
                 // Trigger refresh 
-                await fetchSowingDetails(lot.id);
                 await refreshOrders();
                 setIsHarvesting(false);
                 setObservedYield('');
@@ -357,6 +356,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 });
             }
 
+            await refreshOrders(); // Fixed: ensuring state refresh
             syncService.pushChanges();
             setIsHarvesting(false);
             setObservedYield('');
@@ -368,6 +368,72 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         } catch (error) {
             console.error('Error marking harvested:', error);
             alert('Error al registrar la cosecha.');
+        }
+    };
+
+    const handleCancelHarvest = async (lot: Lot) => {
+        if (!confirm('¿Está seguro de cancelar la cosecha de este lote? El lote volverá al estado "Sembrado" y se restará el stock de granos.')) return;
+
+        try {
+            // 1. Revert Lot Status to SOWED
+            await updateLot({
+                ...lot,
+                status: 'SOWED',
+                observedYield: undefined,
+                lastUpdatedBy: displayName || 'Sistema'
+            });
+
+            // 2. Find and delete Movements
+            const allMovements = await db.getAll('movements') as InventoryMovement[];
+            const harvestMovements = allMovements.filter(m => m.referenceId === lot.id && m.type === 'HARVEST' && !m.deleted);
+
+            let totalYieldToSubtract = 0;
+            let harvestWarehouseId = '';
+            let productId = '';
+
+            for (const m of harvestMovements) {
+                totalYieldToSubtract += m.quantity;
+                harvestWarehouseId = m.warehouseId || harvestWarehouseId;
+                productId = m.productId || productId;
+                // Soft delete movement
+                await db.put('movements', { ...m, deleted: true, updatedAt: new Date().toISOString(), synced: false });
+            }
+
+            // Also delete OUT movement for harvest labor if any
+            const outMovements = allMovements.filter(m => m.referenceId === lot.id && m.type === 'OUT' && (m.notes?.includes('Labor de cosecha') || m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') && !m.deleted);
+            for (const m of outMovements) {
+                await db.put('movements', { ...m, deleted: true, updatedAt: new Date().toISOString(), synced: false });
+            }
+
+            // 3. Subtract Stock
+            if (harvestWarehouseId && productId) {
+                const allStock = await db.getAll('stock') as ClientStock[];
+                const existingStock = allStock.find(s => s.productId === productId && s.warehouseId === harvestWarehouseId);
+                if (existingStock) {
+                    await updateStock({
+                        ...existingStock,
+                        quantity: existingStock.quantity - totalYieldToSubtract,
+                        lastUpdated: new Date().toISOString()
+                    });
+                }
+            }
+
+            // 4. Update Order (Mark HARVEST order as DRAFT or revert it)
+            const allOrders = await db.getAll('orders') as Order[];
+            const harvestOrders = allOrders.filter(o => o.lotId === lot.id && o.type === 'HARVEST' && o.status === 'DONE' && !o.deleted);
+            for (const o of harvestOrders) {
+                // Option A: Soft delete the order
+                await db.put('orders', { ...o, deleted: true, updatedAt: new Date().toISOString(), synced: false });
+                // Option B: Revert to CONFIRMED (if it was a plan)
+                // Actually best is to just soft-delete so it can be re-planned
+            }
+
+            await refreshOrders();
+            syncService.pushChanges();
+            alert('Cosecha cancelada correctamente.');
+        } catch (error) {
+            console.error('Error cancelling harvest:', error);
+            alert('Error al cancelar la cosecha.');
         }
     };
 
@@ -1040,16 +1106,29 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             lot.status === 'HARVESTED' ? 'C' :
                                                                                                 lot.status === 'NOT_SOWED' ? 'A' : 'V'}
                                                                                     </span>
-                                                                                    {lot.status === 'HARVESTED' && (
-                                                                                        <button
-                                                                                            onClick={(e) => {
-                                                                                                e.stopPropagation();
-                                                                                                handleClearCrop(lot);
-                                                                                            }}
-                                                                                            className="text-[10px] font-bold text-red-400 hover:text-red-600 bg-white px-2 py-0.5 rounded border border-slate-200 hover:border-red-200 transition-colors uppercase tracking-tight"
-                                                                                        >
-                                                                                            Reiniciar
-                                                                                        </button>
+                                                                                    {(lot.status === 'HARVESTED' || lot.status === 'SOWED') && (
+                                                                                        <div className="flex gap-1">
+                                                                                            {lot.status === 'HARVESTED' && (
+                                                                                                <button
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        handleCancelHarvest(lot);
+                                                                                                    }}
+                                                                                                    className="text-[10px] font-bold text-orange-500 hover:text-orange-700 bg-white px-2 py-0.5 rounded border border-slate-200 hover:border-orange-200 transition-colors uppercase tracking-tight"
+                                                                                                >
+                                                                                                    Cancelar Cosecha
+                                                                                                </button>
+                                                                                            )}
+                                                                                            <button
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    handleClearCrop(lot);
+                                                                                                }}
+                                                                                                className="text-[10px] font-bold text-red-500 hover:text-red-700 bg-white px-2 py-0.5 rounded border border-slate-200 hover:border-red-200 transition-colors uppercase tracking-tight"
+                                                                                            >
+                                                                                                Reiniciar Lote
+                                                                                            </button>
+                                                                                        </div>
                                                                                     )}
                                                                                 </div>
                                                                             )}

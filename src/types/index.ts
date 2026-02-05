@@ -144,6 +144,8 @@ export interface OrderItem {
     plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
     plantingSpacing?: number;
     expectedYield?: number;
+    warehouseId?: string; // Origin warehouse for this specific item
+    warehouseName?: string; // Cached name
 }
 
 export interface MovementItem {

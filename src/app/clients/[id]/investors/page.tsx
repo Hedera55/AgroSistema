@@ -158,26 +158,43 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         }[] = [];
 
         movements.forEach(m => {
-            const product = products.find(p => p.id === m.productId);
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+            if (isTransfer) return;
 
-            if (m.type === 'IN' && !isTransfer) {
-                const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
-                history.push({
-                    id: m.id,
-                    date: m.date,
-                    type: 'PURCHASE',
-                    description: `Compra: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
-                    amount: m.quantity * purchasePrice,
-                    detail: `${m.quantity} ${product?.unit || 'u.'} @ USD ${purchasePrice.toLocaleString()} / ${product?.unit || 'u.'}`
-                });
+            const movementDate = m.date.includes('T') ? m.date : `${m.date}T${m.time || '00:00'}:00`;
+
+            if (m.type === 'IN') {
+                if (m.items && m.items.length > 0) {
+                    const totalAmount = m.items.reduce((sum: number, item: any) => sum + (item.quantity * (item.price || 0)), 0);
+                    const desc = m.items.length > 1 ? 'Varios' : m.items[0].productName;
+                    history.push({
+                        id: m.id,
+                        date: movementDate,
+                        type: 'PURCHASE',
+                        description: `Compra: ${desc}`,
+                        amount: totalAmount,
+                        detail: m.items.map((i: any) => `${i.productName}: ${i.quantity} x USD ${i.price}`).join(', ')
+                    });
+                } else {
+                    const product = products.find(p => p.id === m.productId);
+                    const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
+                    history.push({
+                        id: m.id,
+                        date: movementDate,
+                        type: 'PURCHASE',
+                        description: `Compra: ${product?.name || 'Insumo'}`,
+                        amount: m.quantity * purchasePrice,
+                        detail: `${m.quantity} ${product?.unit || 'u.'} @ USD ${purchasePrice.toLocaleString()} / ${product?.unit || 'u.'}`
+                    });
+                }
             } else if (m.type === 'SALE') {
+                const product = products.find(p => p.id === m.productId);
                 const salePrice = m.salePrice || 0;
                 history.push({
                     id: m.id,
-                    date: m.date,
+                    date: movementDate,
                     type: 'SALE',
-                    description: `Venta: ${product?.name || 'Insumo'} (${m.quantity} ${product?.unit || 'u.'})`,
+                    description: `Venta: ${product?.name || 'Insumo'}`,
                     amount: m.quantity * salePrice,
                     detail: `${m.quantity} ${product?.unit || 'u.'} @ USD ${salePrice.toLocaleString()} / ${product?.unit || 'u.'}`
                 });
@@ -186,13 +203,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         orders.forEach(o => {
             if (o.servicePrice && o.servicePrice > 0) {
+                const orderDate = o.date.includes('T') ? o.date : `${o.date}T${o.time || '00:00'}:00`;
                 history.push({
                     id: o.id,
-                    date: o.date,
+                    date: orderDate,
                     type: 'SERVICE',
                     description: o.type === 'HARVEST' ? 'Servicio de cosecha' :
                         (o.type === 'SOWING' ? 'Siembra' : 'Pulverización') +
-                        `: Orden Nro ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
+                        `: Orden No ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
                     amount: o.servicePrice * o.treatedArea,
                     detail: `${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()} / ha`
                 });
@@ -294,7 +312,12 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 financialHistory.slice(0, historyLimit).map((item) => (
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
-                                            {item.date}
+                                            <div className="flex flex-col">
+                                                <span>{item.date.split('T')[0]}</span>
+                                                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter">
+                                                    {new Date(item.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase().replace(' am', ' a.m.').replace(' pm', ' p.m.')}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' :

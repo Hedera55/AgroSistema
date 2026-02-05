@@ -95,9 +95,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [facturaUploading, setFacturaUploading] = useState(false);
 
     // New Sale Fields
+    const [saleDestination, setSaleDestination] = useState('');
     const [saleTruckDriver, setSaleTruckDriver] = useState('');
     const [salePlateNumber, setSalePlateNumber] = useState('');
-    const [saleDestination, setSaleDestination] = useState('');
+    const [selectedSeller, setSelectedSeller] = useState('');
     const [client, setClient] = useState<any>(null);
 
     // Success Ribbon State
@@ -427,6 +428,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setNewProductCommercialName('');
             setNewProductPA('');
             setNewProductPrice('');
+            setNewProductBrand(''); // Added reset
+            setNewProductCommercialName(''); // Added reset
             setEditingProductId(null);
             setIsEditingProduct(false);
             setShowProductForm(false);
@@ -485,7 +488,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     clientId: id,
                     warehouseId: selectedWarehouseId || undefined,
                     productId: item.productId,
-                    productBrand: item.tempBrand || product?.brandName || '-',
+                    productBrand: item.tempBrand || '-',
                     quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
                         ? existingItem.quantity + qtyNum
                         : qtyNum,
@@ -498,12 +501,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     id: generateId(),
                     productId: item.productId,
                     productName: product?.name || 'Unknown',
-                    productCommercialName: product?.commercialName || '',
-                    productBrand: item.tempBrand || product?.brandName || '-',
+                    productCommercialName: product?.commercialName || '-',
+                    productBrand: item.tempBrand || '-',
                     quantity: qtyNum,
                     unit: product?.unit || 'L',
                     price: priceNum,
-                    sellerName: item.seller || undefined
+                    sellerName: selectedSeller || undefined
                 });
             }
 
@@ -525,7 +528,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdAt: now.toISOString(),
                 synced: false,
                 investorName: selectedInvestor || undefined,
-                sellerName: validItems.length === 1 ? validItems[0].seller : undefined, // Save seller at top level if only one item
+                sellerName: selectedSeller || undefined,
                 items: movementItems
             };
 
@@ -544,6 +547,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setShowNote(false);
             setFacturaFile(null);
             setSelectedInvestor('');
+            setSelectedSeller('');
             setShowStockForm(false);
         } catch (error) {
             console.error(error);
@@ -1032,7 +1036,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                     {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (pesos)</th>
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (USD)</th>
                                     )}
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Actual</th>
                                 </tr>
@@ -1043,14 +1047,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         <tr
                                             key={item.id}
                                             onClick={(e) => toggleStockSelection(item.id, e)}
-                                            className={`transition-colors cursor-pointer ${selectedStockIds.includes(item.id) ? 'bg-emerald-50 border-emerald-200' : 'hover:bg-slate-50'}`}
+                                            className={`transition-colors cursor-pointer group ${selectedStockIds.includes(item.id) ? 'bg-blue-50/80' : 'hover:bg-slate-50'}`}
                                         >
                                             <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">
-
                                                 {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
                                             </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
+                                                {item.productCommercialName || '-'}
+                                            </td>
                                             <td
-                                                className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium hover:bg-slate-100 transition-colors"
+                                                className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 hover:bg-slate-100 transition-colors"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleEditBrand(item.id, item.productBrand || '');
@@ -1874,13 +1880,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         {stockItems.map((item, idx) => {
                                             const product = availableProducts.find(p => p.id === item.productId);
                                             return (
-                                                <div key={idx} className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors">
+                                                <div key={idx} className="flex items-center justify-between p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-sm font-bold text-slate-800 truncate">
                                                             {product?.activeIngredient || product?.name || 'Insumo desconocido'}
                                                         </div>
                                                         <div className="text-[10px] text-slate-400 uppercase font-medium flex gap-2">
-                                                            <span>{item.seller || 'Sin vendedor'}</span>
+                                                            <span>{product?.commercialName || '-'}</span>
                                                             <span className="text-slate-300">•</span>
                                                             <span>{item.quantity} {product?.unit || 'u.'}</span>
                                                             <span className="text-slate-300">•</span>
@@ -1913,7 +1919,92 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vendedor</label>
+                                <div className="relative">
+                                    <select
+                                        className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
+                                        value={selectedSeller}
+                                        onChange={e => {
+                                            if (e.target.value === 'ADD_NEW') {
+                                                setShowSellerInput(true);
+                                            } else if (e.target.value === 'DELETE') {
+                                                setShowSellerDelete(true);
+                                            } else {
+                                                setSelectedSeller(e.target.value);
+                                            }
+                                        }}
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        {availableSellers.map(s => <option key={s} value={s}>{s}</option>)}
+                                        <option value="ADD_NEW">+ vendedor</option>
+                                        {availableSellers.length > 0 && <option value="DELETE">- vendedor</option>}
+                                    </select>
+
+                                    {showSellerInput && (
+                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2">
+                                            <input
+                                                type="text"
+                                                className="flex-1 rounded border-slate-300 text-[10px] focus:ring-emerald-500 focus:border-emerald-500"
+                                                placeholder="NUEVO VENDEDOR..."
+                                                value={sellerInputValue}
+                                                onChange={e => setSellerInputValue(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddSeller();
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleAddSeller()}
+                                                className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
+                                            >
+                                                +
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSellerInput(false)}
+                                                className="text-slate-400 p-1 hover:text-slate-600"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {showSellerDelete && (
+                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSellerDelete(false)}
+                                                className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
+                                            >
+                                                ✕
+                                            </button>
+                                            <p className="text-[10px] text-slate-500 mb-2 font-medium">Eliminar vendedor:</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {availableSellers.map(s => (
+                                                    <button
+                                                        key={s}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newSellers = availableSellers.filter(seller => seller !== s);
+                                                            setAvailableSellers(newSellers);
+                                                            saveClientSellers(newSellers);
+                                                        }}
+                                                        className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
+                                                    >
+                                                        {s} ✕
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Inversor / Pagado por</label>
                                 <select
