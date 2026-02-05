@@ -80,8 +80,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
     // Multi-product entry state
-    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
-    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; seller: string }[]>([]);
+    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '' });
+    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string }[]>([]);
 
     // Factura upload state
     const [sellingStockId, setSellingStockId] = useState<string | null>(null);
@@ -488,7 +488,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     clientId: id,
                     warehouseId: selectedWarehouseId || undefined,
                     productId: item.productId,
-                    productBrand: item.tempBrand || '-',
+                    productBrand: item.tempBrand || product?.brandName || '',
                     quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
                         ? existingItem.quantity + qtyNum
                         : qtyNum,
@@ -502,7 +502,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     productId: item.productId,
                     productName: product?.name || 'Unknown',
                     productCommercialName: product?.commercialName || '-',
-                    productBrand: item.tempBrand || '-',
+                    productBrand: item.tempBrand || product?.brandName || '',
                     quantity: qtyNum,
                     unit: product?.unit || 'L',
                     price: priceNum,
@@ -540,7 +540,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             // Reset
             setStockItems([]);
-            setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
+            setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
             setSelectedWarehouseId('');
             setNote('');
             setNoteConfirmed(false);
@@ -832,7 +832,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const addStockToBatch = () => {
         if (!activeStockItem.productId || !activeStockItem.quantity) return;
         setStockItems([...stockItems, { ...activeStockItem }]);
-        setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', seller: '' });
+        setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
     };
 
     const removeBatchItem = (idx: number) => {
@@ -1543,6 +1543,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                         <form onSubmit={handleProductSubmit} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Tipo first */}
+                                <div className="w-full">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+                                    <select
+                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                        value={newProductType}
+                                        onChange={e => setNewProductType(e.target.value as ProductType)}
+                                    >
+                                        {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+                                    </select>
+                                </div>
                                 <Input
                                     label={newProductType === 'SEED' ? 'Cultivo' : 'P.A. (Principio Activo)'}
                                     placeholder={newProductType === 'SEED' ? 'ej. Soja, Maíz...' : 'ej. Glifosato 48%'}
@@ -1568,16 +1579,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                     onChange={e => setNewProductBrand(e.target.value)}
                                     className="h-[42px]"
                                 />
-                                <div className="w-full">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                                    <select
-                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                        value={newProductType}
-                                        onChange={e => setNewProductType(e.target.value as ProductType)}
-                                    >
-                                        {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
-                                    </select>
-                                </div>
                                 <div className="w-full relative">
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
                                     <select
@@ -1706,7 +1707,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         <button
                             onClick={() => {
                                 setShowStockForm(false);
-                                setStockItems([{ productId: '', quantity: '', price: '', tempBrand: '', seller: '' }]);
+                                setStockItems([{ productId: '', quantity: '', price: '', tempBrand: '' }]);
                             }}
                             className="text-slate-400 hover:text-slate-600 p-1"
                         >
@@ -1721,9 +1722,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         <div className="space-y-4 mb-4">
                             {/* Active Entry Area - Removed box styles for a 'free' look */}
                             <div className="relative animate-fadeIn">
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                    {/* Row 1: Insumo (8), Vendedor (2), Cantidad (2) */}
-                                    <div className="md:col-span-8">
+                                {/* Unified Row: Insumo (5), Cantidad (2), Precio (3), Button (2) */}
+                                <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                                    <div className="md:col-span-5">
                                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo / Producto</label>
                                         <select
                                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
@@ -1745,127 +1746,50 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                 ))}
                                         </select>
                                     </div>
+
                                     <div className="md:col-span-2">
-                                        <div className="relative">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vendedor</label>
-                                            <select
-                                                className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-[10px] h-10"
-                                                value={activeStockItem.seller}
-                                                onChange={e => {
-                                                    if (e.target.value === 'ADD_NEW') {
-                                                        setShowSellerInput(true);
-                                                    } else if (e.target.value === 'DELETE') {
-                                                        setShowSellerDelete(true);
-                                                    } else {
-                                                        updateActiveStockItem('seller', e.target.value);
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">Seleccione...</option>
-                                                {availableSellers.map(s => <option key={s} value={s}>{s}</option>)}
-                                                <option value="ADD_NEW">+ vendedor</option>
-                                                {availableSellers.length > 0 && <option value="DELETE">- vendedor</option>}
-                                            </select>
-
-                                            {showSellerInput && (
-                                                <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        className="flex-1 rounded border-slate-300 text-[10px] focus:ring-emerald-500 focus:border-emerald-500"
-                                                        placeholder="NUEVO VENDEDOR..."
-                                                        value={sellerInputValue}
-                                                        onChange={e => setSellerInputValue(e.target.value)}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                handleAddSeller();
-                                                            }
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleAddSeller()}
-                                                        className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
-                                                    >
-                                                        +
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowSellerInput(false)}
-                                                        className="text-slate-400 p-1 hover:text-slate-600"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {showSellerDelete && (
-                                                <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowSellerDelete(false)}
-                                                        className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                    <p className="text-[10px] text-slate-500 mb-2 font-medium">Eliminar vendedor:</p>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {availableSellers.map(s => (
-                                                            <button
-                                                                key={s}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const newSellers = availableSellers.filter(seller => seller !== s);
-                                                                    setAvailableSellers(newSellers);
-                                                                    saveClientSellers(newSellers);
-                                                                }}
-                                                                className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
-                                                            >
-                                                                {s} ✕
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                        <div className="w-full">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cantidad</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    required={stockItems.length === 0}
+                                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
+                                                    value={activeStockItem.quantity}
+                                                    onChange={e => updateActiveStockItem('quantity', e.target.value)}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="md:col-span-2">
-                                        <Input
-                                            label="Cantidad"
-                                            labelClassName="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                                            type="number"
-                                            step="0.01"
-                                            value={activeStockItem.quantity}
-                                            onChange={e => updateActiveStockItem('quantity', e.target.value)}
-                                            className="h-10 border-slate-200 text-sm"
-                                            required={stockItems.length === 0}
-                                        />
+
+                                    <div className="md:col-span-3">
+                                        <div className="w-full">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                                Precio USD/{availableProducts.find(p => p.id === activeStockItem.productId)?.unit || 'u.'}
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
+                                                    value={activeStockItem.price}
+                                                    onChange={e => updateActiveStockItem('price', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {/* Row 2: Precio (2), Empty (9), Green Box (1) */}
-                                    <div className="md:col-span-2 mt-4 md:mt-2">
-                                        <Input
-                                            label={`Precio USD/${availableProducts.find(p => p.id === activeStockItem.productId)?.unit || 'u.'}`}
-                                            labelClassName="block text-[10px] font-bold text-slate-400 uppercase mb-1"
-                                            type="number"
-                                            step="0.01"
-                                            value={activeStockItem.price}
-                                            onChange={e => updateActiveStockItem('price', e.target.value)}
-                                            className="h-10 border-slate-200 text-sm"
-                                        />
-                                    </div>
-                                    <div className="hidden md:block md:col-span-9"></div>
-                                    <div className="md:col-span-1 flex justify-end">
+                                    <div className="md:col-span-2 flex justify-end items-end">
                                         <button
                                             type="button"
                                             onClick={addStockToBatch}
                                             className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm"
                                             title="Agregar a la lista"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                                <polyline points="12 5 19 12 12 19"></polyline>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M5 12h14" />
+                                                <path d="M12 5v14" />
                                             </svg>
                                         </button>
                                     </div>
@@ -2038,9 +1962,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 <button
                                     type="button"
                                     onClick={() => setShowNote(!showNote)}
-                                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
+                                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-2"
                                 >
-                                    {showNote ? '× Quitar Nota' : '+ Agregar nota'}
+                                    {showNote ? '× Quitar Nota' : (note ? 'Editar nota' : '+ Agregar nota')}
                                 </button>
 
                                 <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
@@ -2076,19 +2000,35 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
 
                         {showNote && (
-                            <div className="pt-2">
+                            <div className="pt-2 flex gap-2 animate-fadeIn">
                                 <textarea
-                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4 animate-fadeIn"
+                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4"
                                     rows={2}
                                     placeholder="ej. Factura #0001-12345678, observaciones adicionales..."
                                     value={note}
                                     onChange={e => setNote(e.target.value)}
+                                    autoFocus
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setNoteConfirmed(true);
+                                        setShowNote(false);
+                                    }}
+                                    className="h-[68px] w-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
+                                    title="Confirmar nota"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        <polyline points="12 5 19 12 12 19"></polyline>
+                                    </svg>
+                                </button>
                             </div>
                         )}
                     </form>
-                </div>
-            )}
-        </div>
+                </div >
+            )
+            }
+        </div >
     );
 }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { db } from '@/services/db';
 
 export default function ClientsPage() {
     const { role, isMaster, profile, assignedId } = useAuth();
@@ -89,16 +90,23 @@ export default function ClientsPage() {
 
         setIsSubmitting(true);
         try {
-            const clientData = {
-                id: isEditing ? editingClientId! : generateId(),
-                name: newClient.name,
-                cuit: newClient.cuit,
-                partners: newClient.partners
-            };
-
-            if (isEditing) {
-                await updateClient(clientData as Client);
+            if (isEditing && editingClientId) {
+                // Fetch existing client to preserve fields like enabledSellers, enabledUnits, etc.
+                const existingClient = await db.get('clients', editingClientId);
+                const mergedClient = {
+                    ...existingClient,
+                    name: newClient.name,
+                    cuit: newClient.cuit,
+                    partners: newClient.partners
+                };
+                await updateClient(mergedClient as Client);
             } else {
+                const clientData = {
+                    id: generateId(),
+                    name: newClient.name,
+                    cuit: newClient.cuit,
+                    partners: newClient.partners
+                };
                 await addClient(clientData);
             }
             setShowForm(false);
@@ -132,6 +140,9 @@ export default function ClientsPage() {
                                 setIsEditing(false);
                                 setEditingClientId(null);
                                 setNewClient({ name: '', cuit: '', partners: [] });
+                                setTimeout(() => {
+                                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                }, 100);
                             }
                             setShowForm(!showForm);
                         }}>
@@ -139,6 +150,84 @@ export default function ClientsPage() {
                         </Button>
                     )}
                 </div>
+            </div>
+
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {loading ? (
+                    <div className="col-span-full text-center py-12 text-slate-500">Cargando clientes...</div>
+                ) : filteredClients.length === 0 ? (
+                    <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
+                        <div className="text-4xl mb-2">👥</div>
+                        <h3 className="text-lg font-medium text-slate-900">No hay empresas aún</h3>
+                        <p className="text-slate-500">
+                            {isMaster
+                                ? "Agregue una empresa para comenzar a gestionar sus campos y stock."
+                                : "No tiene empresas asignadas. Contacte al administrador Master."}
+                        </p>
+                    </div>
+                ) : (
+                    filteredClients.map(client => {
+                        const isSelected = client.id === selectedId;
+                        return (
+                            <div
+                                key={client.id}
+                                onClick={() => {
+                                    if (isSelected) {
+                                        router.push(`/clients/${client.id}`);
+                                    } else {
+                                        localStorage.setItem('lastSelectedClientId', client.id);
+                                        setSelectedId(client.id);
+                                        window.dispatchEvent(new CustomEvent('clientSelectionChanged'));
+                                    }
+                                }}
+                                className={`group relative bg-white p-6 rounded-xl shadow-sm border transition-all cursor-pointer ${isSelected
+                                    ? 'border-emerald-500 ring-2 ring-emerald-500/10 shadow-md transform scale-[1.02]'
+                                    : 'border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                                    }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="pr-8">
+                                        <h3 className={`text-lg font-bold transition-colors ${isSelected ? 'text-emerald-700' : 'text-slate-900 group-hover:text-emerald-700'}`}>
+                                            {client.name}
+                                        </h3>
+                                        <div className="mt-2 space-y-1 text-sm text-slate-500">
+                                            {/* Extra info removed as per user request */}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {isMaster && (
+                                            <>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setNewClient({
+                                                            name: client.name,
+                                                            cuit: client.cuit || '',
+                                                            partners: (client.partners || []).map(p => ({ name: p.name, cuit: p.cuit || '' }))
+                                                        });
+                                                        setShowPartnerRibbon(false);
+                                                        setEditingClientId(client.id);
+                                                        setIsEditing(true);
+                                                        setShowForm(true);
+                                                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                                    }}
+                                                    className="h-8 w-8 rounded-full flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors z-10"
+                                                    title="Editar Empresa"
+                                                >
+                                                    ✏️
+                                                </button>
+                                            </>
+                                        )}
+                                        <div className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 group-hover:bg-emerald-100 group-hover:text-emerald-600'}`}>
+                                            →
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
 
             {showForm && (
@@ -150,7 +239,7 @@ export default function ClientsPage() {
                             setNewClient({ name: '', cuit: '', partners: [] });
                             setShowForm(false);
                         }}
-                        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+                        className="absolute top-1 right-4 text-slate-400 hover:text-slate-600 transition-colors"
                         title="Cancelar"
                     >
                         ✕
@@ -166,13 +255,19 @@ export default function ClientsPage() {
                                 onClick={() => {
                                     if (confirm(`¿Eliminar empresa "${newClient.name}"? Esto no se puede deshacer.`)) {
                                         deleteClient(editingClientId!);
+                                        // If we're deleting the currently active empresa, clear the selection
+                                        if (editingClientId === localStorage.getItem('lastSelectedClientId')) {
+                                            localStorage.removeItem('lastSelectedClientId');
+                                            setSelectedId(null);
+                                            window.dispatchEvent(new CustomEvent('clientSelectionChanged'));
+                                        }
                                         setShowForm(false);
                                         setIsEditing(false);
                                         setEditingClientId(null);
                                         setNewClient({ name: '', cuit: '', partners: [] });
                                     }
                                 }}
-                                className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors mr-6"
+                                className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors"
                             >
                                 ✕ Eliminar Empresa
                             </button>
@@ -327,83 +422,6 @@ export default function ClientsPage() {
                     </form>
                 </div>
             )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {loading ? (
-                    <div className="col-span-full text-center py-12 text-slate-500">Cargando clientes...</div>
-                ) : filteredClients.length === 0 ? (
-                    <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
-                        <div className="text-4xl mb-2">👥</div>
-                        <h3 className="text-lg font-medium text-slate-900">No hay empresas aún</h3>
-                        <p className="text-slate-500">
-                            {isMaster
-                                ? "Agregue una empresa para comenzar a gestionar sus campos y stock."
-                                : "No tiene empresas asignadas. Contacte al administrador Master."}
-                        </p>
-                    </div>
-                ) : (
-                    filteredClients.map(client => {
-                        const isSelected = client.id === selectedId;
-                        return (
-                            <div
-                                key={client.id}
-                                onClick={() => {
-                                    if (isSelected) {
-                                        router.push(`/clients/${client.id}`);
-                                    } else {
-                                        localStorage.setItem('lastSelectedClientId', client.id);
-                                        setSelectedId(client.id);
-                                        window.dispatchEvent(new CustomEvent('clientSelectionChanged'));
-                                    }
-                                }}
-                                className={`group relative bg-white p-6 rounded-xl shadow-sm border transition-all cursor-pointer ${isSelected
-                                    ? 'border-emerald-500 ring-2 ring-emerald-500/10 shadow-md transform scale-[1.02]'
-                                    : 'border-slate-200 hover:border-emerald-300 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="flex justify-between items-start">
-                                    <div className="pr-8">
-                                        <h3 className={`text-lg font-bold transition-colors ${isSelected ? 'text-emerald-700' : 'text-slate-900 group-hover:text-emerald-700'}`}>
-                                            {client.name}
-                                        </h3>
-                                        <div className="mt-2 space-y-1 text-sm text-slate-500">
-                                            {/* Extra info removed as per user request */}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {isMaster && (
-                                            <>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setNewClient({
-                                                            name: client.name,
-                                                            cuit: client.cuit || '',
-                                                            partners: (client.partners || []).map(p => ({ name: p.name, cuit: p.cuit || '' }))
-                                                        });
-                                                        setShowPartnerRibbon(false);
-                                                        setEditingClientId(client.id);
-                                                        setIsEditing(true);
-                                                        setShowForm(true);
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                    }}
-                                                    className="h-8 w-8 rounded-full flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors z-10"
-                                                    title="Editar Empresa"
-                                                >
-                                                    ✏️
-                                                </button>
-                                            </>
-                                        )}
-                                        <div className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 group-hover:bg-emerald-100 group-hover:text-emerald-600'}`}>
-                                            →
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })
-                )}
-            </div>
 
             {
                 (isMaster || role === 'ADMIN') && !loading && (

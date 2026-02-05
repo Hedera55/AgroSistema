@@ -503,10 +503,30 @@ export class SyncService {
 
         for (const item of unsyncedItems) {
             try {
+                // Skip client-less products
                 if (tableName === 'products' && !(item as Product).clientId) continue;
 
+                // Skip UI-only "CONSOLIDATED" movements
+                if ((item as any).productId === 'CONSOLIDATED' || (item as any).id === 'CONSOLIDATED') {
+                    console.log(`Skipping UI-only item ${item.id} (CONSOLIDATED)`);
+                    await db.markSynced(localStoreName, item.id); // Mark as synced so we don't retry
+                    continue;
+                }
+
                 const payload = mapper(item);
-                const { error } = await supabase.from(tableName).upsert(payload);
+
+                // Specific handling for Stock to avoid unique constraint violations
+                // Constraint: stock_client_product_warehouse_key
+                let query = supabase.from(tableName).upsert(payload);
+
+                if (tableName === 'stock') {
+                    query = supabase.from(tableName).upsert(payload, {
+                        onConflict: 'client_id,product_id,warehouse_id',
+                        ignoreDuplicates: false
+                    });
+                }
+
+                const { error } = await query;
 
                 if (error) {
                     if (error.message.includes("schema cache") || error.message.includes("column")) {
@@ -514,23 +534,28 @@ export class SyncService {
                     } else {
                         console.error(`Failed to push ${localStoreName}/${item.id}:`, error.message);
 
-                        // Auto-fix for legacy grain IDs or references that are not UUIDs
-                        if (error.message.includes('invalid input syntax for type uuid') &&
-                            (
-                                (item.id as string).startsWith('grain-') ||
-                                // Check potential UUID fields for legacy/invalid values
-                                ['productId', 'product_id', 'referenceId', 'reference_id'].some(key => {
-                                    const val = (item as any)[key];
-                                    return typeof val === 'string' && (val.startsWith('grain-') || val.startsWith('SERVICE-'));
-                                })
-                            )
+                        // Auto-fix for legacy/invalid IDs or UUID syntax errors
+                        const isInvalidUuid = error.message.includes('invalid input syntax for type uuid');
+                        const isDuplicateKey = error.message.includes('duplicate key value violates unique constraint');
+
+                        if (isInvalidUuid ||
+                            (isDuplicateKey && tableName !== 'stock') // If duplicate key on non-stock, might be bad ID
                         ) {
-                            console.warn(`🗑️ Auto-deleting item with invalid UUID reference: ${item.id}`);
-                            try {
-                                await db.delete(localStoreName, item.id);
-                                console.log(`✅ Deleted invalid item ${item.id}. Sync should recover on next retry.`);
-                            } catch (delError) {
-                                console.error(`Failed to auto-delete invalid item ${item.id}`, delError);
+                            // Check for known bad patterns or just brute force clean up blocking items
+                            const id = item.id as string;
+                            if (
+                                id.startsWith('grain-') ||
+                                id.includes('CONSOLIDATED') ||
+                                error.message.includes('CONSOLIDATED') ||
+                                isInvalidUuid // Aggressive cleanup for any UUID syntax error to unblock sync
+                            ) {
+                                console.warn(`🗑️ Auto-deleting item with invalid UUID/Data: ${item.id}`);
+                                try {
+                                    await db.delete(localStoreName, item.id);
+                                    console.log(`✅ Deleted invalid item ${item.id}.`);
+                                } catch (delError) {
+                                    console.error(`Failed to auto-delete invalid item ${item.id}`, delError);
+                                }
                             }
                         }
                     }

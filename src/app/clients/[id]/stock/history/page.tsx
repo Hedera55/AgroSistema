@@ -156,8 +156,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nombre Comercial</th>
                                     <th className="px-6 py-2 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
-                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">P. Unitario</th>
-                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">P. Unitario</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Monto Total</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
@@ -203,7 +203,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
                                     return groupedMovements.map((m) => {
                                         const { date, time } = formatDate(m.createdAt || m.date);
-                                        const isConsolidated = m.items && m.items.length > 0;
+                                        const isConsolidated = m.items && m.items.length > 1;
+                                        const isSingleItemConsolidated = m.items && m.items.length === 1;
+                                        const singleItem = isSingleItemConsolidated ? m.items[0] : null;
 
                                         // Determine Label and Tooltip
                                         let label = 'EGRESO-R';
@@ -274,13 +276,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 <span className={m.type === 'IN' ? 'text-red-700' : 'text-emerald-700'}>Varios</span>
                                                                 <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter whitespace-nowrap">({m.items.length} prod)</span>
                                                             </div>
-                                                        ) : m.productName}
+                                                        ) : (isSingleItemConsolidated ? singleItem.productName : m.productName)}
                                                     </td>
                                                     <td className="px-6 py-2 text-sm text-slate-500">
-                                                        {isConsolidated ? '-' : (m.productBrand || '-')}
+                                                        {isConsolidated ? '-' : (isSingleItemConsolidated ? (singleItem.productBrand || '-') : (m.productBrand || '-'))}
                                                     </td>
                                                     <td className="px-6 py-2 text-sm text-slate-500">
-                                                        {isConsolidated ? '-' : (m.productCommercialName || '-')}
+                                                        {isConsolidated ? '-' : (isSingleItemConsolidated ? (singleItem.productCommercialName || '-') : (m.productCommercialName || '-'))}
                                                     </td>
                                                     <td className="px-6 py-2 whitespace-nowrap text-center">
                                                         <span
@@ -295,7 +297,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-300">---</span>
                                                         ) : (
                                                             <>
-                                                                {(m.type === 'IN' || m.type === 'HARVEST' || m.isTransfer) ? '+' : '-'}{m.quantity} <span className="text-[10px] text-slate-400 font-normal uppercase">{m.unit}</span>
+                                                                {(m.type === 'IN' || m.type === 'HARVEST' || m.isTransfer) ? '+' : '-'}{isSingleItemConsolidated ? singleItem.quantity : m.quantity} <span className="text-[10px] text-slate-400 font-normal uppercase">{isSingleItemConsolidated ? (singleItem.unit || m.unit) : m.unit}</span>
                                                             </>
                                                         )}
                                                     </td>
