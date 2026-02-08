@@ -119,6 +119,13 @@ export function ObservationsSection({
         setIsAdding(true); // Reuse the add form UI
     }
 
+    function formatDate(dateStr: string) {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+
     function resetForm() {
         setEditingId(null);
         setFormDate(new Date().toISOString().split('T')[0]);
@@ -187,7 +194,7 @@ export function ObservationsSection({
                                 <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
                                     {obs.userName}
                                     <span className="text-slate-400 font-normal">•</span>
-                                    <span className="text-slate-500 font-mono font-normal">{obs.date}</span>
+                                    <span className="text-slate-500 font-mono font-normal">{formatDate(obs.date)}</span>
                                 </div>
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                     <button

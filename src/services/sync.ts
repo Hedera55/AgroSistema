@@ -56,7 +56,7 @@ const mappers = {
             brand_name: p.brandName,
             commercial_name: p.commercialName,
             active_ingredient: p.activeIngredient,
-            type: p.type,
+            type: (p.type as string) === 'GRAIN' ? 'SEED' : p.type,
             unit: p.unit,
             price: p.price || 0,
             created_at: p.createdAt || new Date().toISOString(),
@@ -106,30 +106,36 @@ const mappers = {
         sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null,
         investor_name: o.investorName || null
     }),
-    movement: (m: InventoryMovement) => ({
-        id: m.id,
-        client_id: m.clientId,
-        warehouse_id: (m.warehouseId && m.warehouseId !== '') ? m.warehouseId : null,
-        product_id: m.productId,
-        product_name: m.productName,
-        product_brand: m.productBrand,
-        type: m.type,
-        quantity: m.quantity,
-        unit: m.unit,
-        date: m.date,
-        time: m.time,
-        sale_price: m.salePrice || 0,
-        purchase_price: m.purchasePrice || 0,
-        reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
-        notes: m.notes,
-        factura_image_url: m.facturaImageUrl,
-        investor_name: m.investorName || null,
-        created_by: m.createdBy,
-        created_at: m.createdAt || new Date(m.date).toISOString(),
-        deleted: m.deleted || false,
-        deleted_at: m.deletedAt || null,
-        deleted_by: m.deletedBy || null
-    }),
+    movement: (m: InventoryMovement) => {
+        let mappedType = m.type;
+        if (m.type === 'HARVEST') mappedType = 'IN';
+        if (m.type === 'SALE') mappedType = 'OUT';
+
+        return {
+            id: m.id,
+            client_id: m.clientId,
+            warehouse_id: (m.warehouseId && m.warehouseId !== '') ? m.warehouseId : null,
+            product_id: m.productId,
+            product_name: m.productName,
+            product_brand: m.productBrand,
+            type: mappedType,
+            quantity: m.quantity,
+            unit: m.unit,
+            date: m.date,
+            time: m.time,
+            sale_price: m.salePrice || 0,
+            purchase_price: m.purchasePrice || 0,
+            reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
+            notes: m.notes,
+            factura_image_url: m.facturaImageUrl,
+            investor_name: m.investorName || null,
+            created_by: m.createdBy,
+            created_at: m.createdAt || new Date(m.date).toISOString(),
+            deleted: m.deleted || false,
+            deleted_at: m.deletedAt || null,
+            deleted_by: m.deletedBy || null
+        };
+    },
     activity: (a: OrderActivity) => ({
         id: a.id,
         order_id: a.orderId,
@@ -531,6 +537,32 @@ export class SyncService {
                 if (error) {
                     if (error.message.includes("schema cache") || error.message.includes("column")) {
                         console.error(`⚠️ Schema mismatch on ${tableName}: ${error.message}. Please ensure migrations are run.`);
+                    } else if (tableName === 'stock' && (error.message.includes('stock_pkey') || error.message.includes('duplicate key'))) {
+                        // Specific fix for Stock PKEY / Unique constraint mixup
+                        console.warn(`🔄 Natural key conflict on Stock for ${item.id}. Reconciling with remote...`);
+                        const { id: _, ...payloadWithoutId } = payload;
+                        const { data: retryData, error: retryError } = await supabase
+                            .from(tableName)
+                            .upsert(payloadWithoutId, {
+                                onConflict: 'client_id,product_id,warehouse_id',
+                                ignoreDuplicates: false
+                            })
+                            .select('id')
+                            .single();
+
+                        if (retryError) {
+                            console.error(`❌ Reconciliation failed for ${item.id}:`, retryError.message);
+                        } else if (retryData) {
+                            console.log(`✅ Stock reconciled. Remote ID: ${retryData.id}`);
+                            // IMPORTANT: Update local ID to match remote ID to avoid future conflicts
+                            if (retryData.id !== item.id) {
+                                await db.delete(localStoreName, item.id);
+                                await db.put(localStoreName, { ...item, id: retryData.id, synced: true });
+                            } else {
+                                await db.markSynced(localStoreName, item.id);
+                            }
+                            continue; // Use continue instead of return to process other items!
+                        }
                     } else {
                         console.error(`Failed to push ${localStoreName}/${item.id}:`, error.message);
 

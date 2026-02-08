@@ -34,6 +34,7 @@ export default function ClientsPage() {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editingClientId, setEditingClientId] = useState<string | null>(null);
+    const [isCuitSettled, setIsCuitSettled] = useState(false);
 
     const handleDeselect = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -113,6 +114,7 @@ export default function ClientsPage() {
             setIsEditing(false);
             setEditingClientId(null);
             setNewClient({ name: '', cuit: '', partners: [] });
+            setIsCuitSettled(false);
         } finally {
             setIsSubmitting(false);
         }
@@ -140,6 +142,7 @@ export default function ClientsPage() {
                                 setIsEditing(false);
                                 setEditingClientId(null);
                                 setNewClient({ name: '', cuit: '', partners: [] });
+                                setIsCuitSettled(false);
                                 setTimeout(() => {
                                     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                                 }, 100);
@@ -209,6 +212,7 @@ export default function ClientsPage() {
                                                         setShowPartnerRibbon(false);
                                                         setEditingClientId(client.id);
                                                         setIsEditing(true);
+                                                        setIsCuitSettled(!!client.cuit);
                                                         setShowForm(true);
                                                         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                                                     }}
@@ -237,6 +241,7 @@ export default function ClientsPage() {
                             setIsEditing(false);
                             setEditingClientId(null);
                             setNewClient({ name: '', cuit: '', partners: [] });
+                            setIsCuitSettled(false);
                             setShowForm(false);
                         }}
                         className="absolute top-1 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -265,6 +270,7 @@ export default function ClientsPage() {
                                         setIsEditing(false);
                                         setEditingClientId(null);
                                         setNewClient({ name: '', cuit: '', partners: [] });
+                                        setIsCuitSettled(false);
                                     }
                                 }}
                                 className="text-xs font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors"
@@ -282,13 +288,42 @@ export default function ClientsPage() {
                                 onChange={e => setNewClient({ ...newClient, name: e.target.value })}
                                 required
                             />
-                            <Input
-                                label="CUIT de la Empresa"
-                                type="text"
-                                placeholder="ej. 30-12345678-9"
-                                value={newClient.cuit}
-                                onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
-                            />
+                            {!isCuitSettled ? (
+                                <Input
+                                    label="CUIT de la Empresa"
+                                    type="text"
+                                    placeholder="ej. 30-12345678-9"
+                                    value={newClient.cuit}
+                                    onChange={e => setNewClient({ ...newClient, cuit: e.target.value })}
+                                    suffix={
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCuitSettled(true)}
+                                            className="text-emerald-600 hover:text-emerald-700 font-bold text-xl"
+                                            title="Confirmar CUIT"
+                                        >
+                                            →
+                                        </button>
+                                    }
+                                />
+                            ) : (
+                                <div className="space-y-1">
+                                    <label className="block text-sm font-medium text-slate-700">CUIT de la Empresa</label>
+                                    <div className="flex items-center gap-2 text-slate-900 font-medium h-6 px-2 bg-slate-50 rounded-lg border border-slate-200 text-sm shadow-sm">
+                                        {newClient.cuit || 'Sin CUIT'}
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCuitSettled(false)}
+                                            className="ml-auto p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all"
+                                            title="Editar CUIT"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-4 border-t border-slate-100">

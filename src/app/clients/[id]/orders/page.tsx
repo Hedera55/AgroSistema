@@ -11,6 +11,8 @@ import { usePDF } from '@/hooks/usePDF';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrders } from '@/hooks/useOrders';
 import { useFarms } from '@/hooks/useLocations';
+import { supabase } from '@/lib/supabase';
+import { OrderDetailView } from '@/components/OrderDetailView';
 
 export default function OrdersPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -22,6 +24,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
     // Local state for lots (since useLots is farm-specific)
     const [lots, setLots] = useState<Lot[]>([]);
+    const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
     const [dataLoading, setDataLoading] = useState(true);
     const scrollRef = useHorizontalScroll();
     const [client, setClient] = useState<Client | null>(null);
@@ -42,12 +46,16 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     // Load lots and client separately
     useEffect(() => {
         async function loadExtras() {
-            const [allLots, clientData] = await Promise.all([
+            const [allLots, clientData, allWarehouses, profileData] = await Promise.all([
                 db.getAll('lots'),
-                db.get('clients', id)
+                db.get('clients', id),
+                db.getAll('warehouses'),
+                supabase.from('profiles').select('id, username').eq('role', 'CONTRATISTA')
             ]);
             setLots(allLots);
             setClient(clientData || null);
+            setWarehouses(allWarehouses || []);
+            if (profileData.data) setContractors(profileData.data);
             setDataLoading(false);
         }
         loadExtras();
@@ -97,7 +105,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             ...o,
             farmName: farms.find(f => f.id === o.farmId)?.name || 'Unknown Farm',
             lotName: lots.find(l => l.id === o.lotId)?.name || 'Unknown Lot',
-            hectares: lots.find(l => l.id === o.lotId)?.hectares || 0
+            hectares: lots.find(l => l.id === o.lotId)?.hectares || 0,
+            contractorName: o.contractorName || o.applicatorName || contractors.find(c => c.id === o.applicatorId)?.username
         })); // The hook already sorts by date
     }, [rawOrders, farms, lots, loading, role, profile]);
 
@@ -140,7 +149,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         try {
             const auditData = nextStatus === 'DONE' ? {
                 appliedBy: displayName || 'Sistema',
-                appliedAt: new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
+                appliedAt: new Date().toISOString()
             } : {
                 appliedBy: undefined,
                 appliedAt: undefined
@@ -182,7 +191,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             if (isApplyingFromStatus) {
                 const auditData = {
                     appliedBy: displayName || 'Sistema',
-                    appliedAt: new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
+                    appliedAt: new Date().toISOString()
                 };
                 // Capture investor name in the update
                 const orderWithInvestor = { ...priceModalOrder, investorName: tempInvestor };
@@ -227,6 +236,42 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         setIsApplyingFromStatus(false);
     };
 
+    const formatAppliedAt = (dateStr?: string) => {
+        if (!dateStr) return null;
+        if (dateStr === '---' || dateStr.length < 5) return dateStr;
+
+        // If it's ISO format (contains T)
+        if (dateStr.includes('T')) {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+
+            const d = date.getDate().toString().padStart(2, '0');
+            const mo = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear();
+            const h = date.getHours().toString().padStart(2, '0');
+            const min = date.getMinutes().toString().padStart(2, '0');
+
+            return (
+                <div>
+                    <div>{`${d}-${mo}-${y}`}</div>
+                    <div className="text-xs text-slate-400 font-normal">{`${h}:${min} hs`}</div>
+                </div>
+            );
+        }
+
+        // If it's YYYY-MM-DD
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [y, m, d] = dateStr.split('-');
+            return (
+                <div>
+                    <div>{`${d}-${m}-${y}`}</div>
+                </div>
+            );
+        }
+
+        return dateStr;
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -247,10 +292,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 )}
             </div>
 
-            <div
-                ref={scrollRef}
-                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto"
-            >
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {loading ? (
                     <div className="p-8 text-center text-slate-500">Cargando órdenes...</div>
                 ) : orders.length === 0 ? (
@@ -260,150 +302,155 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         <p className="text-slate-500">Cree la primera orden de aplicación para este cliente.</p>
                     </div>
                 ) : (
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nro de orden</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Emisión</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Aplicación</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ubicación</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Tipo</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Estado</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Autor</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
-                            {orders.slice(0, ordersLimit).map(order => (
-                                <tr
-                                    key={order.id}
-                                    className={`hover:bg-slate-50 border-b border-slate-100 transition-colors group cursor-pointer ${selectedOrderDetailOrder?.id === order.id ? 'bg-emerald-50/50 hover:bg-emerald-50' : ''}`}
-                                    onClick={() => setSelectedOrderDetailOrder(order)}
-                                >
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                                        {order.orderNumber || '---'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                        <div>{order.date}</div>
-                                        <div className="text-xs text-slate-400 font-normal">{order.time || '--:--'}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium italic">
-                                        {order.appliedAt || <span className="text-slate-300 font-normal">---</span>}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                        <div className="font-medium text-slate-800">{order.lotName} ({order.hectares} ha)</div>
-                                        <div className="text-xs text-slate-400">{order.farmName}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        {order.type === 'SOWING' ? (
-                                            <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
-                                        ) : order.type === 'HARVEST' ? (
-                                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Cosecha</span>
-                                        ) : (
-                                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
-                                        <button
-                                            onClick={() => (!isReadOnly || role === 'CONTRATISTA') && handleToggleStatus(order.id)}
-                                            className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${(!isReadOnly || role === 'CONTRATISTA') ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
-                                         ${order.status === 'DONE' ? 'bg-green-100 text-green-800' :
-                                                    (order.status === 'PENDING' && isExpired(order.date)) ? 'bg-red-100 text-red-800' :
-                                                        order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                                            'bg-gray-100 text-gray-800'}`}
-                                            title={isReadOnly ? '' : "Click para cambiar estado"}
-                                        >
-                                            {order.status === 'DONE' ? (order.type === 'HARVEST' ? 'COSECHADA' : 'APLICADA') :
-                                                (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
-                                                    order.status === 'PENDING' ? 'PENDIENTE' :
-                                                        order.status === 'CONFIRMED' ? 'PLANIFICADA' :
-                                                            order.status}
-                                        </button>
-                                    </td>
-                                    <td
-                                        className="px-6 py-4 whitespace-nowrap text-right font-mono cursor-pointer hover:bg-slate-100 transition-colors"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleEditPrice(order.id, order.servicePrice);
-                                        }}
-                                    >
-                                        {order.servicePrice && order.servicePrice > 0 ? (
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-slate-900 font-bold text-sm">
-                                                    USD {(order.servicePrice * order.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </span>
-                                            </div>
-                                        ) : order.status === 'DONE' ? (
-                                            <span className="text-red-500 italic text-[10px] font-bold hover:underline">Falta el costo</span>
-                                        ) : (
-                                            <span className="text-slate-300">---</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
-                                        {order.createdBy || 'Sistema'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
-                                        <div className="flex justify-end gap-2">
-                                            <div className="relative group/tooltip">
-                                                <button
-                                                    onClick={() => handleDownload(order)}
-                                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest transition-colors"
-                                                >
-                                                    pdf
-                                                </button>
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                    descargar pdf
-                                                </div>
-                                            </div>
-
-                                            <div className="relative group/tooltip">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedOrderDetailOrder(order);
-                                                    }}
-                                                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-500 text-red-500 hover:bg-red-50'}`}
-                                                >
-                                                    F
-                                                </button>
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                    {order.facturaImageUrl ? 'Factura Adjunta' : 'Falta Factura'}
-                                                </div>
-                                            </div>
-
-                                            {!isReadOnly && (
-                                                <button
-                                                    onClick={() => handleDeleteOrder(order.id)}
-                                                    className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                                                    title="Eliminar Orden"
-                                                >
-                                                    Elim.
-                                                </button>
-                                            )}
-                                        </div>
-                                    </td>
+                    <div
+                        ref={scrollRef}
+                        className="overflow-x-auto"
+                    >
+                        <table className="min-w-full divide-y divide-slate-200">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nro de orden</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Emisión</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Aplicación</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ubicación</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Tipo</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Estado</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Autor</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                                {orders.slice(0, ordersLimit).map(order => (
+                                    <tr
+                                        key={order.id}
+                                        className={`hover:bg-slate-50 border-b border-slate-100 transition-colors group cursor-pointer ${selectedOrderDetailOrder?.id === order.id ? 'bg-emerald-50/50 hover:bg-emerald-50' : ''}`}
+                                        onClick={() => setSelectedOrderDetailOrder(order)}
+                                    >
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
+                                            {order.orderNumber || '---'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
+                                            <div>{order.date}</div>
+                                            <div className="text-xs text-slate-400 font-normal">{order.time || '--:--'}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
+                                            {formatAppliedAt(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                                            <div className="font-medium text-slate-800">{order.lotName} ({order.hectares} ha)</div>
+                                            <div className="text-xs text-slate-400">{order.farmName}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            {order.type === 'SOWING' ? (
+                                                <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
+                                            ) : order.type === 'HARVEST' ? (
+                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Cosecha</span>
+                                            ) : (
+                                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
+                                            <button
+                                                onClick={() => (!isReadOnly || role === 'CONTRATISTA') && handleToggleStatus(order.id)}
+                                                className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${(!isReadOnly || role === 'CONTRATISTA') ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
+                                         ${order.status === 'DONE' ? 'bg-green-100 text-green-800' :
+                                                        (order.status === 'PENDING' && isExpired(order.date)) ? 'bg-red-100 text-red-800' :
+                                                            order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                                                'bg-gray-100 text-gray-800'}`}
+                                                title={isReadOnly ? '' : "Click para cambiar estado"}
+                                            >
+                                                {order.status === 'DONE' ? (order.type === 'HARVEST' ? 'COSECHADA' : 'APLICADA') :
+                                                    (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
+                                                        order.status === 'PENDING' ? 'PENDIENTE' :
+                                                            order.status === 'CONFIRMED' ? 'PLANIFICADA' :
+                                                                order.status}
+                                            </button>
+                                        </td>
+                                        <td
+                                            className="px-6 py-4 whitespace-nowrap text-right font-mono cursor-pointer hover:bg-slate-100 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEditPrice(order.id, order.servicePrice);
+                                            }}
+                                        >
+                                            {order.servicePrice && order.servicePrice > 0 ? (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-slate-900 font-bold text-sm">
+                                                        USD {(order.servicePrice * order.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
+                                                </div>
+                                            ) : order.status === 'DONE' ? (
+                                                <span className="text-red-500 italic text-[10px] font-bold hover:underline">Falta el costo</span>
+                                            ) : (
+                                                <span className="text-slate-300">---</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
+                                            {order.createdBy || 'Sistema'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
+                                            <div className="flex justify-end gap-2">
+                                                <div className="relative group/tooltip">
+                                                    <button
+                                                        onClick={() => handleDownload(order)}
+                                                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest transition-colors"
+                                                    >
+                                                        pdf
+                                                    </button>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        descargar pdf
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative group/tooltip">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedOrderDetailOrder(order);
+                                                        }}
+                                                        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-500 text-red-500 hover:bg-red-50'}`}
+                                                    >
+                                                        F
+                                                    </button>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        {order.facturaImageUrl ? 'Factura Adjunta' : 'Falta Factura'}
+                                                    </div>
+                                                </div>
+
+                                                {!isReadOnly && (
+                                                    <button
+                                                        onClick={() => handleDeleteOrder(order.id)}
+                                                        className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                                                        title="Eliminar Orden"
+                                                    >
+                                                        Elim.
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
                 {(orders.length > ordersLimit || ordersLimit > 16) && (
-                    <div className="p-2 bg-slate-50 border-t border-slate-100 text-center flex justify-center gap-4">
+                    <div className="flex bg-slate-50 border-t border-slate-100 divide-x divide-slate-200">
                         {orders.length > ordersLimit && (
                             <button
                                 onClick={() => setOrdersLimit(prev => prev + 10)}
-                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
+                                className="flex-1 py-4 hover:bg-slate-100 transition-colors flex items-center justify-center active:bg-slate-200"
                             >
-                                Cargar 10 más
+                                <span className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em]">Cargar 10 más</span>
                             </button>
                         )}
                         {ordersLimit > 16 && (
                             <button
                                 onClick={() => setOrdersLimit(prev => Math.max(16, prev - 10))}
-                                className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+                                className="flex-1 py-4 hover:bg-slate-100 transition-colors flex items-center justify-center active:bg-slate-200"
                             >
-                                Cargar 10 menos
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Ver menos</span>
                             </button>
                         )}
                     </div>
@@ -454,7 +501,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                 >
                                     <option value="">Seleccione un socio...</option>
                                     {client?.partners?.map((p: any) => (
-                                        <option key={p.name} value={p.name}>{p.name} {p.cuit ? `(CUIT: ${p.cuit})` : ''}</option>
+                                        <option key={p.name} value={p.name}>{p.name}</option>
                                     ))}
                                     {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
                                         <option key={inv.name} value={inv.name}>{inv.name}</option>
@@ -474,157 +521,12 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             {/* Order Detail View (Inline) */}
             <div ref={detailsRef} className="transition-all duration-500 ease-in-out">
                 {selectedOrderDetailOrder && (
-                    <div className="mt-8 bg-white rounded-3xl shadow-xl border border-slate-200 w-full overflow-hidden animate-slideUp flex flex-col border-t-4 border-t-emerald-500 max-h-[800px]">
-                        {/* Header */}
-                        <div className="bg-slate-50 px-8 py-6 border-b border-slate-200 flex justify-between items-center">
-                            <div>
-                                <div className="flex items-center gap-3 mb-1">
-                                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${selectedOrderDetailOrder.type === 'SOWING' ? 'bg-emerald-100 text-emerald-700' :
-                                        selectedOrderDetailOrder.type === 'HARVEST' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                                        }`}>
-                                        {selectedOrderDetailOrder.type === 'SOWING' ? 'Siembra' : selectedOrderDetailOrder.type === 'HARVEST' ? 'Cosecha' : 'Pulverización'}
-                                    </span>
-                                    <h3 className="font-bold text-slate-900 text-lg">Orden #{selectedOrderDetailOrder.orderNumber || '---'}</h3>
-                                </div>
-                                <p className="text-sm text-slate-500 font-medium">{selectedOrderDetailOrder.date} {selectedOrderDetailOrder.time ? `@ ${selectedOrderDetailOrder.time}` : ''}</p>
-                            </div>
-                            <button onClick={() => setSelectedOrderDetailOrder(null)} className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors" title="Cerrar detalles">✕</button>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                            {/* Location Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Establecimiento</label>
-                                    <p className="text-slate-800 font-bold">{(selectedOrderDetailOrder as any).farmName}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lote / Superficie</label>
-                                    <p className="text-slate-800 font-bold">{(selectedOrderDetailOrder as any).lotName} ({(selectedOrderDetailOrder as any).hectares} ha)</p>
-                                </div>
-                            </div>
-
-                            {/* Technical Specs */}
-                            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">Especificaciones Técnicas</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {selectedOrderDetailOrder.type === 'SOWING' && (
-                                        <>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Densidad</label>
-                                                <p className="text-sm font-bold text-slate-700">{selectedOrderDetailOrder.plantingDensity || '---'} {selectedOrderDetailOrder.plantingDensityUnit === 'KG_HA' ? 'kg/ha' : 'pl/ha'}</p>
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Espaciamiento</label>
-                                                <p className="text-sm font-bold text-slate-700">{selectedOrderDetailOrder.plantingSpacing || '---'} cm</p>
-                                            </div>
-                                        </>
-                                    )}
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Contratista</label>
-                                        <p className="text-sm font-bold text-slate-700">{selectedOrderDetailOrder.contractorName || selectedOrderDetailOrder.applicatorName || '---'}</p>
-                                    </div>
-                                    {selectedOrderDetailOrder.type === 'HARVEST' && selectedOrderDetailOrder.expectedYield && (
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Planeado</label>
-                                            <p className="text-sm font-bold text-slate-700">{selectedOrderDetailOrder.expectedYield.toLocaleString()} kg</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Items Table */}
-                            {selectedOrderDetailOrder.items && selectedOrderDetailOrder.items.length > 0 && (
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Insumos Planeados / Utilizados</h4>
-                                    <div className="border border-slate-100 rounded-xl overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-slate-100">
-                                            <thead className="bg-slate-50">
-                                                <tr>
-                                                    <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase">P.A. / Cultivo</th>
-                                                    <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase">Nombre Com.</th>
-                                                    <th className="px-4 py-2 text-right text-[10px] font-black text-slate-400 uppercase">Dosis</th>
-                                                    <th className="px-4 py-2 text-right text-[10px] font-black text-slate-400 uppercase">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {selectedOrderDetailOrder.items.map((item, i) => (
-                                                    <tr key={i}>
-                                                        <td className="px-4 py-3 text-sm font-bold text-slate-700">
-                                                            {item.loadingOrder && <span className="text-emerald-500 mr-2">[{item.loadingOrder}]</span>}
-                                                            {item.productName}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm text-slate-500">{item.commercialName || '-'}</td>
-                                                        <td className="px-4 py-3 text-right text-sm font-mono text-slate-600">{item.dosage} {item.unit}</td>
-                                                        <td className="px-4 py-3 text-right text-sm font-mono font-bold text-slate-900">{item.totalQuantity.toLocaleString()} {item.unit}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Notes and Invoice */}
-                            {(selectedOrderDetailOrder.notes || selectedOrderDetailOrder.facturaImageUrl) && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100">
-                                    {selectedOrderDetailOrder.notes && (
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observaciones</label>
-                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-600 italic">
-                                                "{selectedOrderDetailOrder.notes}"
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedOrderDetailOrder.facturaImageUrl && (
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Factura</label>
-                                            <div className="relative group cursor-zoom-in rounded-xl overflow-hidden border border-slate-200 shadow-sm aspect-video bg-slate-100">
-                                                <img
-                                                    src={selectedOrderDetailOrder.facturaImageUrl}
-                                                    alt="Factura"
-                                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                                                    onClick={() => window.open(selectedOrderDetailOrder.facturaImageUrl, '_blank')}
-                                                />
-                                                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-colors flex items-center justify-center">
-                                                    <span className="bg-white/90 px-3 py-1.5 rounded-full text-[10px] font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">Ver en tamaño completo</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Financial/Footer */}
-                            <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div className="flex flex-col">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Costo de Labor</label>
-                                    <p className="text-lg font-black text-emerald-600">
-                                        USD {(selectedOrderDetailOrder.servicePrice || 0).toLocaleString()} <span className="text-xs font-bold text-slate-400">/ ha</span>
-                                        <span className="ml-2 text-slate-900">(USD {((selectedOrderDetailOrder.servicePrice || 0) * (selectedOrderDetailOrder.treatedArea || 0)).toLocaleString()})</span>
-                                    </p>
-                                </div>
-                                {selectedOrderDetailOrder.investorName && (
-                                    <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-                                        <label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest block">Pagado por</label>
-                                        <p className="text-emerald-900 font-bold">{selectedOrderDetailOrder.investorName}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Status Footer */}
-                        <div className="bg-slate-50 px-8 py-4 border-t border-slate-200 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full ${selectedOrderDetailOrder.status === 'DONE' ? 'bg-emerald-500' : 'bg-yellow-500'}`}></div>
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{selectedOrderDetailOrder.status}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-medium">
-                                Creado por {selectedOrderDetailOrder.createdBy || 'Sistema'}
-                            </div>
-                        </div>
-                    </div>
+                    <OrderDetailView
+                        order={selectedOrderDetailOrder}
+                        onClose={() => setSelectedOrderDetailOrder(null)}
+                        createdBy={selectedOrderDetailOrder.createdBy}
+                        warehouses={warehouses}
+                    />
                 )}
             </div>
         </div>

@@ -91,6 +91,51 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
         return map;
     }, [movements, products]);
 
+    const formatLedgerDate = (dateStr: string, timeStr?: string) => {
+        if (!dateStr) return { date: '-', time: '-' };
+
+        let day = '-', month = '-', year = '-';
+        let formattedTime = '-';
+
+        const dateObj = new Date(dateStr);
+        if (!isNaN(dateObj.getTime())) {
+            day = String(dateObj.getDate()).padStart(2, '0');
+            month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            year = String(dateObj.getFullYear());
+
+            if (!timeStr && dateStr.includes('T')) {
+                const h = dateObj.getHours();
+                const m = String(dateObj.getMinutes()).padStart(2, '0');
+                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = h % 12 || 12;
+                formattedTime = `${displayHours}:${m} ${ampm}`;
+            }
+        } else if (dateStr.includes('-')) {
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                year = parts[0];
+                month = parts[1];
+                day = parts[2];
+            }
+        }
+
+        if (timeStr) {
+            const timePart = timeStr.split(' ')[0];
+            const [h, m] = timePart.split(':');
+            if (h && m) {
+                const hours = parseInt(h);
+                const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = hours % 12 || 12;
+                formattedTime = `${displayHours}:${m} ${ampm}`;
+            }
+        }
+
+        return {
+            date: day !== '-' ? `${day}-${month}-${year}` : dateStr,
+            time: formattedTime
+        };
+    };
+
     const requestReferencePrice = (crop: string) => {
         if (referencePrices[crop] !== undefined) return;
 
@@ -113,26 +158,43 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                 const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
 
                 if (m.type === 'IN' && !isTransfer) {
-                    const price = m.purchasePrice ?? product?.price ?? 0;
+                    let amount = 0;
+                    let concept = '';
+                    let detail = '';
+
+                    if (m.productId === 'CONSOLIDATED' && m.items) {
+                        amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                        concept = 'Compra de insumos (Consolidada)';
+                        detail = `Inversión: ${m.items.length} productos`;
+                    } else {
+                        const price = m.purchasePrice ?? product?.price ?? 0;
+                        amount = m.quantity * price;
+                        concept = `Compra: ${product?.name || 'Insumo'}`;
+                        detail = `Inversión: ${m.quantity} ${product?.unit || 'u.'} @ USD ${price.toLocaleString()}`;
+                    }
+
                     data.push({
                         id: m.id,
-                        date: m.date,
-                        concept: `Compra: ${product?.name || 'Insumo'}`,
+                        rawDate: m.date,
+                        date: formatLedgerDate(m.date, m.time),
+                        concept,
                         category: product?.type || 'OTROS',
                         lote: '-',
                         crop: '-',
                         seller: m.sellerName || 'Directo',
-                        amount: m.quantity * price,
-                        detail: `Inversión: ${m.quantity} ${product?.unit || 'u.'} @ USD ${price.toLocaleString()}`
+                        amount,
+                        detail
                     });
                 } else if (m.type === 'SALE') {
                     const product = products.find(p => p.id === m.productId);
+                    const lot = lots.find(l => l.id === m.lotId);
                     data.push({
                         id: m.id,
-                        date: m.date,
+                        rawDate: m.date,
+                        date: formatLedgerDate(m.date, m.time),
                         concept: `Venta: ${product?.name || 'Grano'}`,
                         category: 'INGRESO',
-                        lote: '-',
+                        lote: lot?.name || '-',
                         crop: m.crop || '-',
                         seller: m.sellerName || '-',
                         amount: -(m.quantity * (m.salePrice || 0)),
@@ -147,14 +209,15 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                 if (o.servicePrice && o.servicePrice > 0) {
                     data.push({
                         id: `${o.id}-labor-company`,
-                        date: o.appliedAt || o.date,
+                        rawDate: o.appliedAt || o.date,
+                        date: formatLedgerDate(o.appliedAt || o.date, o.time),
                         concept: `Servicio: ${o.type === 'HARVEST' ? 'Cosecha' : (o.type === 'SOWING' ? 'Siembra' : 'Pulverización')}`,
                         category: 'LABOR',
-                        lote: '-',
-                        crop: '-',
+                        lote: lot?.name || '-',
+                        crop: lot?.cropSpecies || '-',
                         seller: o.applicatorName || '-',
                         amount: o.servicePrice * o.treatedArea,
-                        detail: `Orden #${o.orderNumber} - Lote: ${lot?.name || 'N/A'}. ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`
+                        detail: `Orden #${o.orderNumber}. ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`
                     });
                 }
             });
@@ -169,7 +232,8 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                 if (o.servicePrice && o.servicePrice > 0) {
                     data.push({
                         id: `${o.id}-labor-lot`,
-                        date: o.appliedAt || o.date,
+                        rawDate: o.appliedAt || o.date,
+                        date: formatLedgerDate(o.appliedAt || o.date, o.time),
                         concept: `Labor: ${o.type === 'HARVEST' ? 'Cosecha' : (o.type === 'SOWING' ? 'Siembra' : 'Pulverización')}`,
                         category: 'LABOR',
                         lote: lot?.name || 'Varios',
@@ -188,7 +252,8 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
 
                     data.push({
                         id: `${o.id}-item-${idx}`,
-                        date: o.appliedAt || o.date,
+                        rawDate: o.appliedAt || o.date,
+                        date: formatLedgerDate(o.appliedAt || o.date, o.time),
                         concept: `${conceptPrefix}: ${product?.name || item.productName}`,
                         category: product?.type || 'OTROS',
                         lote: lot?.name || 'Varios',
@@ -217,7 +282,8 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
 
                     data.push({
                         id: `${m.id}-production`,
-                        date: m.date,
+                        rawDate: m.date,
+                        date: formatLedgerDate(m.date, m.time),
                         concept: `Cosecha: ${crop}`,
                         category: 'INGRESO',
                         lote: lot?.name || '-',
@@ -230,7 +296,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
             });
         }
 
-        return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return data.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
     }, [reportType, movements, orders, products, lots, pppPurchaseMap, avgSalePriceMap, referencePrices]);
 
     // Unique options for dropdown filters
@@ -285,7 +351,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
 
     const exportToCSV = () => {
         const headers = reportType === 'COMPANY'
-            ? ['Fecha', 'Concepto', 'Rubro', 'Proveedor/Comprador', 'Monto USD', 'Observaciones']
+            ? ['Fecha', 'Concepto', 'Rubro', 'Socio/Comprador', 'Monto USD', 'Observaciones']
             : ['Fecha', 'Concepto', 'Rubro', 'Lote', 'Cultivo', 'Monto USD', 'Observaciones'];
 
         const rows = filteredLedger.map(item => {
@@ -429,7 +495,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                                     <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Lote / Cultivo</th>
                                 )}
                                 {reportType === 'COMPANY' && (
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Proveedor / Comprador</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Socio / Comprador</th>
                                 )}
                                 <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto USD</th>
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Observaciones</th>
@@ -447,7 +513,12 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                                 filteredLedger.map((item) => (
                                     <tr key={item.id} className="hover:bg-slate-50/80 transition-all border-l-4 border-transparent hover:border-emerald-400 group text-sm">
                                         <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-slate-400">
-                                            {item.date}
+                                            <div className="flex flex-col">
+                                                <span>{item.date.date}</span>
+                                                <span className="text-[10px] text-slate-300 font-normal uppercase tracking-tighter">
+                                                    {item.date.time}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="font-bold text-slate-900">{item.concept}</div>

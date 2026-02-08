@@ -66,6 +66,8 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
   But in the stock list, we see how much stock of a product we have, and that is accounted with the reference price
   I hope the difference is being understood.
 
+- **Technical context.md path**: C:\Users\franc\.gemini\antigravity\brain\d13ab6d8-92a1-4e16-86f2-644793823ba2
+
 + . + . + . + . + . + . +
 
 

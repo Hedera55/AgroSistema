@@ -114,8 +114,13 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
 
             if (m.type === 'IN' && !isTransfer) {
-                const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
-                const amount = m.quantity * purchasePrice;
+                let amount = 0;
+                if (m.productId === 'CONSOLIDATED' && m.items) {
+                    amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                } else {
+                    const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
+                    amount = m.quantity * purchasePrice;
+                }
                 investedMovements += amount;
 
                 const pName = m.investorName || 'Sin Asignar';
@@ -147,10 +152,60 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         };
     }, [movements, products, orders]);
 
+    const formatLedgerDate = (dateStr: string, timeStr?: string) => {
+        if (!dateStr) return { date: '-', time: '-' };
+
+        // Handle parts directly to avoid parsing errors
+        let day = '-', month = '-', year = '-';
+        let formattedTime = '-';
+
+        // If it's an ISO string or similar
+        const dateObj = new Date(dateStr);
+        if (!isNaN(dateObj.getTime())) {
+            day = String(dateObj.getDate()).padStart(2, '0');
+            month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            year = String(dateObj.getFullYear());
+
+            if (!timeStr && dateStr.includes('T')) {
+                const h = dateObj.getHours();
+                const m = String(dateObj.getMinutes()).padStart(2, '0');
+                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = h % 12 || 12;
+                formattedTime = `${displayHours}:${m} ${ampm}`;
+            }
+        } else if (dateStr.includes('-')) {
+            // Fallback for YYYY-MM-DD
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                year = parts[0];
+                month = parts[1];
+                day = parts[2];
+            }
+        }
+
+        if (timeStr) {
+            // Clean timeStr (might have extras)
+            const timePart = timeStr.split(' ')[0]; // Grab HH:mm
+            const [h, m] = timePart.split(':');
+            if (h && m) {
+                const hours = parseInt(h);
+                const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = hours % 12 || 12;
+                formattedTime = `${displayHours}:${m.split(' ')[0]} ${ampm}`;
+            }
+        }
+
+        return {
+            date: day !== '-' ? `${day}-${month}-${year}` : dateStr,
+            time: formattedTime
+        };
+    };
+
     const financialHistory = useMemo(() => {
         const history: {
             id: string,
             date: string,
+            time?: string,
             type: 'PURCHASE' | 'SALE' | 'SERVICE',
             description: string,
             amount: number,
@@ -161,7 +216,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
 
-            const movementDate = m.date.includes('T') ? m.date : `${m.date}T${m.time || '00:00'}:00`;
+            const movementDate = m.date;
+            const movementTime = m.time || (m.date.includes('T') ? undefined : '00:00');
 
             if (m.type === 'IN') {
                 if (m.items && m.items.length > 0) {
@@ -170,6 +226,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     history.push({
                         id: m.id,
                         date: movementDate,
+                        time: movementTime,
                         type: 'PURCHASE',
                         description: `Compra: ${desc}`,
                         amount: totalAmount,
@@ -181,6 +238,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     history.push({
                         id: m.id,
                         date: movementDate,
+                        time: movementTime,
                         type: 'PURCHASE',
                         description: `Compra: ${product?.name || 'Insumo'}`,
                         amount: m.quantity * purchasePrice,
@@ -193,6 +251,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 history.push({
                     id: m.id,
                     date: movementDate,
+                    time: movementTime,
                     type: 'SALE',
                     description: `Venta: ${product?.name || 'Insumo'}`,
                     amount: m.quantity * salePrice,
@@ -203,10 +262,12 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         orders.forEach(o => {
             if (o.servicePrice && o.servicePrice > 0) {
-                const orderDate = o.date.includes('T') ? o.date : `${o.date}T${o.time || '00:00'}:00`;
+                const orderDate = o.appliedAt || o.date;
+                const orderTime = o.time || (orderDate.includes('T') ? undefined : '00:00');
                 history.push({
                     id: o.id,
                     date: orderDate,
+                    time: orderTime,
                     type: 'SERVICE',
                     description: o.type === 'HARVEST' ? 'Servicio de cosecha' :
                         (o.type === 'SOWING' ? 'Siembra' : 'Pulverización') +
@@ -217,7 +278,11 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             }
         });
 
-        return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return history.sort((a, b) => {
+            const timeA = new Date(a.date).getTime();
+            const timeB = new Date(b.date).getTime();
+            return timeB - timeA;
+        });
     }, [movements, products, orders]);
 
     const investorBreakdown = useMemo(() => {
@@ -313,9 +378,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
                                             <div className="flex flex-col">
-                                                <span>{item.date.split('T')[0]}</span>
+                                                <span>{formatLedgerDate(item.date, item.time).date}</span>
                                                 <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter">
-                                                    {new Date(item.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase().replace(' am', ' a.m.').replace(' pm', ' p.m.')}
+                                                    {formatLedgerDate(item.date, item.time).time}
                                                 </span>
                                             </div>
                                         </td>
@@ -367,13 +432,13 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             {/* Investors Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Inversor</h3>
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Socio</h3>
                     {isMaster && (
                         <button
                             onClick={() => setShowEditInvestors(!showEditInvestors)}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
                         >
-                            {showEditInvestors ? 'Cerrar' : '✏️ Gestionar Inversores'}
+                            {showEditInvestors ? 'Cerrar' : '✏️ Gestionar Socios'}
                         </button>
                     )}
                 </div>
@@ -486,7 +551,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inversor</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación en la inversión</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación saldo de la empresa</th>
@@ -570,6 +635,6 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     <span className="text-emerald-500 group-hover:translate-x-1 transition-transform">→</span>
                 </Link>
             </div>
-        </div>
+        </div >
     );
 }

@@ -174,7 +174,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <button
                         onClick={async () => {
                             await supabase.auth.signOut();
-                            router.push('/login');
                         }}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                     >
@@ -205,47 +204,49 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         )}
                     </button>
                 </div>
-            </aside>
+            </aside >
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0">
+            < div className="flex-1 flex flex-col min-w-0" >
                 {/* Mobile Header */}
-                <header className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center">
+                < header className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center" >
                     <span className="font-bold text-emerald-600">AgroSistema</span>
                     <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-slate-600">
                         Menu
                     </button>
-                </header>
+                </header >
 
                 {/* Mobile Menu */}
-                {isMobileMenuOpen && (
-                    <div className="md:hidden bg-slate-900 text-white p-4 space-y-2 border-t border-slate-800">
-                        {currentClientName && showClientMenu && (
-                            <Link
-                                href={`/clients/${effectiveId}`}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="block py-2 text-emerald-500 font-medium border-b border-slate-800 mb-2"
-                            >
-                                {currentClientName}
-                            </Link>
-                        )}
-                        {navigation.map((item) => (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="block py-2 text-slate-300 hover:text-white"
-                            >
-                                {item.name}
-                            </Link>
-                        ))}
-                    </div>
-                )}
+                {
+                    isMobileMenuOpen && (
+                        <div className="md:hidden bg-slate-900 text-white p-4 space-y-2 border-t border-slate-800">
+                            {currentClientName && showClientMenu && (
+                                <Link
+                                    href={`/clients/${effectiveId}`}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="block py-2 text-emerald-500 font-medium border-b border-slate-800 mb-2"
+                                >
+                                    {currentClientName}
+                                </Link>
+                            )}
+                            {navigation.map((item) => (
+                                <Link
+                                    key={item.name}
+                                    href={item.href}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="block py-2 text-slate-300 hover:text-white"
+                                >
+                                    {item.name}
+                                </Link>
+                            ))}
+                        </div>
+                    )
+                }
 
                 <main className="p-6 md:p-8 max-w-7xl mx-auto w-full">
                     {children}
                 </main>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

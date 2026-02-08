@@ -12,14 +12,14 @@ export function useInventory() {
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const [allProducts, allClients] = await Promise.all([
+            const [productsData, clientsData] = await Promise.all([
                 db.getAll('products'),
                 db.getAll('clients')
             ]);
-            setProducts(allProducts.filter((p: Product) => !p.deleted));
-            setClients(allClients.filter((c: Client) => !c.deleted));
+            setProducts(productsData.filter((p: any) => !p.deleted));
+            setClients(clientsData.filter((c: any) => !c.deleted));
         } catch (error) {
-            console.error("Failed to fetch inventory data", error);
+            console.error('Error loading inventory:', error);
         } finally {
             setLoading(false);
         }
@@ -64,6 +64,19 @@ export function useInventory() {
             updatedAt: new Date().toISOString()
         } as Client;
         await db.put('clients', finalClient);
+
+        // Auto-create default Harvest Warehouse
+        const warehouseData = {
+            id: generateId(),
+            clientId: finalClient.id,
+            name: 'Acopio de Granos',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            synced: false,
+            deleted: false
+        };
+        await db.put('warehouses', warehouseData);
+
         await refresh();
         syncService.pushChanges();
         return finalClient;
@@ -119,7 +132,10 @@ export function useClientStock(clientId: string) {
     const [loading, setLoading] = useState(true);
 
     const refresh = useCallback(async () => {
-        if (!clientId) return;
+        if (!clientId) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         try {
             const allStock = await db.getAll('stock');

@@ -184,8 +184,8 @@ export default function MapPage({ params }: { params: Promise<{ id: string }> })
                     onClick={handleDownloadKml}
                     disabled={!hasDownloadableKml}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${hasDownloadableKml
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md'
-                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                         }`}
                     title={hasDownloadableKml ? 'Descargar KML de capas seleccionadas' : 'No hay KML disponible'}
                 >

@@ -3,20 +3,28 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { OrderActivity, Order } from '@/types';
+import { OrderActivity, Order, Farm, Lot } from '@/types';
+import { OrderDetailView } from '@/components/OrderDetailView';
 
 export default function OrderHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
     const [activities, setActivities] = useState<OrderActivity[]>([]);
     const [orders, setOrders] = useState<Record<string, Order>>({});
+    const [farms, setFarms] = useState<Farm[]>([]);
+    const [lots, setLots] = useState<Lot[]>([]);
+    const [warehouses, setWarehouses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activitiesLimit, setActivitiesLimit] = useState(20);
+    const [selectedOrder, setSelectedOrder] = useState<(Order & { farmName?: string; lotName?: string; hectares?: number }) | null>(null);
 
     useEffect(() => {
         async function loadData() {
-            const [allActivities, allOrders] = await Promise.all([
+            const [allActivities, allOrders, allFarms, allLots, allWarehouses] = await Promise.all([
                 db.getAll('order_activities'),
-                db.getAll('orders')
+                db.getAll('orders'),
+                db.getAll('farms'),
+                db.getAll('lots'),
+                db.getAll('warehouses')
             ]);
 
             const clientActivities = allActivities
@@ -30,6 +38,9 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
 
             setActivities(clientActivities);
             setOrders(ordersMap);
+            setFarms(allFarms);
+            setLots(allLots);
+            setWarehouses(allWarehouses);
             setLoading(false);
         }
         loadData();
@@ -88,8 +99,25 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                                     const { date, time } = formatDate(a.timestamp);
                                     const order = orders[a.orderId];
                                     const displayNum = a.orderNumber || order?.orderNumber || '---';
+
+                                    const handleRowClick = () => {
+                                        if (!order) return;
+                                        const farm = farms.find(f => f.id === order.farmId);
+                                        const lot = lots.find(l => l.id === order.lotId);
+                                        setSelectedOrder({
+                                            ...order,
+                                            farmName: farm?.name,
+                                            lotName: lot?.name,
+                                            hectares: lot?.hectares
+                                        });
+                                    };
+
                                     return (
-                                        <tr key={a.id} className="hover:bg-slate-50">
+                                        <tr
+                                            key={a.id}
+                                            className={`hover:bg-slate-50 transition-colors cursor-pointer ${selectedOrder?.id === a.orderId ? 'bg-emerald-50' : ''}`}
+                                            onClick={handleRowClick}
+                                        >
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-slate-900 font-medium">{date}</div>
                                                 <div className="text-xs text-slate-400">{time}</div>
@@ -142,6 +170,16 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                     </div>
                 )}
             </div>
+
+            {selectedOrder && (
+                <div className="mt-8 animate-fadeIn">
+                    <OrderDetailView
+                        order={selectedOrder}
+                        onClose={() => setSelectedOrder(null)}
+                        warehouses={warehouses}
+                    />
+                </div>
+            )}
         </div>
     );
 }

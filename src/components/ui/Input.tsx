@@ -5,10 +5,11 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
     labelClassName?: string;
     error?: string;
     prefix?: string;
+    suffix?: React.ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-    ({ label, labelClassName, error, prefix, className = '', ...props }, ref) => {
+    ({ label, labelClassName, error, prefix, suffix, className = '', ...props }, ref) => {
         return (
             <div className="w-full">
                 {label && (
@@ -31,11 +32,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               placeholder:text-slate-400
               transition-colors duration-200
               ${prefix ? 'pl-7' : ''}
+              ${suffix ? 'pr-10' : ''}
               ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}
               ${className}
             `}
                         {...props}
                     />
+                    {suffix && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center z-10">
+                            {suffix}
+                        </div>
+                    )}
                 </div>
                 {error && (
                     <p className="mt-1 text-sm text-red-600 animate-fadeIn">{error}</p>

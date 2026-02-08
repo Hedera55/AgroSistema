@@ -2,7 +2,7 @@
 
 import React, { use, useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useClientStock, useInventory } from '@/hooks/useInventory';
+import { useClientStock, useInventory, useClientMovements } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -32,6 +32,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const { stock, updateStock, deleteStock, loading: stockLoading } = useClientStock(id);
     const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse, loading: warehousesLoading } = useWarehouses(id);
     const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
+    const { movements, loading: movementsLoading } = useClientMovements(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -350,8 +351,42 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         setIsDuplicate(!!duplicate);
     }, [newProductPA, newProductBrand, availableProducts, showProductForm, editingProductId]);
 
-    // Enrich stock data with product details (name, unit, type)
+    // Enrich stock data with product details (name, unit, type) and weighted average price
     const enrichedStock = useMemo<EnrichedStockItem[]>(() => {
+        // 1. Group movements to calculate weighted averages
+        // key: productId_brand
+        const purchasePricing = new Map<string, { totalVal: number; totalQty: number }>();
+        const salePricing = new Map<string, { totalVal: number; totalQty: number }>();
+
+        movements.forEach(m => {
+            const brand = (m.productBrand || '').toLowerCase().trim();
+
+            if (m.type === 'IN') {
+                if (m.productId === 'CONSOLIDATED' && m.items) {
+                    m.items.forEach(item => {
+                        const itemBrand = (item.productBrand || '').toLowerCase().trim();
+                        const key = `${item.productId}_${itemBrand}`;
+                        const entry = purchasePricing.get(key) || { totalVal: 0, totalQty: 0 };
+                        entry.totalVal += (item.quantity * (item.price || 0));
+                        entry.totalQty += item.quantity;
+                        purchasePricing.set(key, entry);
+                    });
+                } else {
+                    const key = `${m.productId}_${brand}`;
+                    const entry = purchasePricing.get(key) || { totalVal: 0, totalQty: 0 };
+                    entry.totalVal += (m.quantity * (m.price || 0));
+                    entry.totalQty += m.quantity;
+                    purchasePricing.set(key, entry);
+                }
+            } else if (m.type === 'SALE') {
+                const key = `${m.productId}_${brand}`;
+                const entry = salePricing.get(key) || { totalVal: 0, totalQty: 0 };
+                entry.totalVal += (m.quantity * (m.salePrice || 0));
+                entry.totalQty += m.quantity;
+                salePricing.set(key, entry);
+            }
+        });
+
         const firstId = warehouses[0]?.id;
         const filteredStock = stock.filter((item: ClientStock) => {
             // Match current active warehouse
@@ -363,19 +398,54 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         return filteredStock.map((item: ClientStock) => {
             const product = products.find(p => p.id === item.productId);
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
+            const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
+            const key = `${item.productId}_${brand}`;
+
+            let avgPrice = 0;
+
+            if (brand === 'propia') {
+                const saleData = salePricing.get(key);
+                if (saleData && saleData.totalQty > 0) {
+                    avgPrice = saleData.totalVal / saleData.totalQty;
+                } else {
+                    // Fallback to purchase avg of other brands
+                    let otherVal = 0;
+                    let otherQty = 0;
+                    purchasePricing.forEach((val, pKey) => {
+                        if (pKey.startsWith(`${item.productId}_`) && !pKey.endsWith('_propia')) {
+                            otherVal += val.totalVal;
+                            otherQty += val.totalQty;
+                        }
+                    });
+
+                    if (otherQty > 0) {
+                        avgPrice = otherVal / otherQty;
+                    } else {
+                        avgPrice = product?.price || 0;
+                    }
+                }
+            } else {
+                const purchaseData = purchasePricing.get(key);
+                if (purchaseData && purchaseData.totalQty > 0) {
+                    avgPrice = purchaseData.totalVal / purchaseData.totalQty;
+                } else {
+                    avgPrice = product?.price || 0;
+                }
+            }
+
             return {
                 ...item,
                 productName: product?.name || 'Producto Desconocido',
                 warehouseName: warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón'),
                 productType: product?.type || 'OTHER',
                 unit: product?.unit || 'UNIT',
-                price: product?.price || 0,
+                price: avgPrice,
                 productBrand: item.productBrand || product?.brandName || '',
-                productCommercialName: product?.commercialName || '',
+                productCommercialName: product?.commercialName || (brand === 'propia' ? 'Propia' : ''),
                 hasProduct: !!product
             };
         }).filter(item => item.hasProduct);
-    }, [stock, products, warehouses, activeWarehouseId]);
+    }, [stock, products, warehouses, activeWarehouseId, movements]);
 
     // Auto-update Sale Note with pricing details
     useEffect(() => {
@@ -394,6 +464,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const handleProductSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newProductName) return;
+
+        if (newProductBrand && newProductBrand.toLowerCase().trim() === 'propia') {
+            alert('La marca "Propia" está reservada para semillas de cosecha propia y no puede usarse manualmente.');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             if (editingProductId) {
@@ -406,7 +482,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
-                    price: parseFloat(newProductPrice) || 0,
+                    price: parseFloat(newProductPrice.replace(',', '.')) || 0,
                     clientId: id
                 });
             } else {
@@ -418,7 +494,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
-                    price: parseFloat(newProductPrice) || 0,
+                    price: parseFloat(newProductPrice.replace(',', '.')) || 0,
                     clientId: id
                 });
             }
@@ -468,20 +544,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             const movementItems: MovementItem[] = [];
+            let currentStockState = [...stock];
 
             for (const item of validItems) {
                 const product = availableProducts.find((p: Product) => p.id === item.productId);
-                const qtyNum = parseFloat(item.quantity);
-                const priceNum = parseFloat(item.price) || 0;
+                const qtyNum = parseFloat(item.quantity.replace(',', '.'));
+                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : (product?.price || 0);
 
-                const existingItem = stock.find((s: ClientStock) =>
+                // Find existing item, but also account for items already processed in this loop
+                const existingInLoop = currentStockState.find((s: ClientStock) =>
                     s.productId === item.productId &&
                     s.warehouseId === (selectedWarehouseId || undefined)
                 );
 
-                const stockId = (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
-                    ? existingItem.id
-                    : generateId();
+                const stockId = existingInLoop ? existingInLoop.id : generateId();
 
                 const newItem = {
                     id: stockId,
@@ -489,11 +565,19 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     warehouseId: selectedWarehouseId || undefined,
                     productId: item.productId,
                     productBrand: item.tempBrand || product?.brandName || '',
-                    quantity: (existingItem && (!selectedWarehouseId || existingItem.warehouseId === selectedWarehouseId))
-                        ? existingItem.quantity + qtyNum
+                    quantity: existingInLoop
+                        ? existingInLoop.quantity + qtyNum
                         : qtyNum,
-                    lastUpdated: now.toISOString()
+                    lastUpdated: now.toISOString(),
+                    updatedAt: now.toISOString()
                 };
+
+                // Update intermediate state for the next iteration in this loop
+                if (existingInLoop) {
+                    currentStockState = currentStockState.map(s => s.id === stockId ? newItem : s);
+                } else {
+                    currentStockState.push(newItem);
+                }
 
                 await updateStock(newItem);
 
@@ -565,8 +649,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const stockItem = enrichedStock.find(s => s.id === sellingStockId);
             if (!stockItem) return;
 
-            const qtyNum = parseFloat(saleQuantity);
-            const priceNum = parseFloat(salePrice);
+            const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
+            const priceNum = parseFloat(salePrice.replace(',', '.'));
 
             // Record Movement
             const movementId = generateId();
@@ -797,6 +881,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         const newBrand = prompt('Editar Marca:', currentBrand);
         if (newBrand === null || newBrand === currentBrand) return;
 
+        if (newBrand.toLowerCase().trim() === 'propia') {
+            alert('La marca "Propia" está reservada para semillas de cosecha propia y no puede usarse manualmente.');
+            return;
+        }
+
         const item = stock.find(s => s.id === stockId);
         if (!item) return;
 
@@ -831,7 +920,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     const addStockToBatch = () => {
         if (!activeStockItem.productId || !activeStockItem.quantity) return;
-        setStockItems([...stockItems, { ...activeStockItem }]);
+
+        // Normalize commas to dots before adding to batch
+        const normalizedItem = {
+            ...activeStockItem,
+            quantity: activeStockItem.quantity.replace(',', '.'),
+            price: activeStockItem.price.replace(',', '.')
+        };
+
+        setStockItems([...stockItems, { ...normalizedItem }]);
         setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
     };
 
@@ -1084,8 +1181,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                             <div className="flex-1 min-w-[120px]">
                                                                 <Input
                                                                     label="Cantidad a Vender"
-                                                                    type="number"
-                                                                    step="0.01"
+                                                                    type="text"
+                                                                    inputMode="decimal"
                                                                     value={saleQuantity}
                                                                     onChange={e => setSaleQuantity(e.target.value)}
                                                                     required
@@ -1094,8 +1191,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                             <div className="flex-1 min-w-[120px]">
                                                                 <Input
                                                                     label={`Precio de Venta (USD/${item.unit})`}
-                                                                    type="number"
-                                                                    step="0.01"
+                                                                    type="text"
+                                                                    inputMode="decimal"
                                                                     value={salePrice}
                                                                     onChange={e => setSalePrice(e.target.value)}
                                                                     required
@@ -1752,8 +1849,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cantidad</label>
                                             <div className="relative">
                                                 <input
-                                                    type="number"
-                                                    step="0.01"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     required={stockItems.length === 0}
                                                     className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
                                                     value={activeStockItem.quantity}
@@ -1770,8 +1867,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             </label>
                                             <div className="relative">
                                                 <input
-                                                    type="number"
-                                                    step="0.01"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
                                                     value={activeStockItem.price}
                                                     onChange={e => updateActiveStockItem('price', e.target.value)}
@@ -1938,7 +2035,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 >
                                     <option value="">Seleccione un socio...</option>
                                     {client?.partners?.map((p: any) => (
-                                        <option key={p.name} value={p.name}>{p.name} {p.cuit ? `(CUIT: ${p.cuit})` : ''}</option>
+                                        <option key={p.name} value={p.name}>{p.name}</option>
+                                    ))}
+                                    {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
+                                        <option key={inv.name} value={inv.name}>{inv.name}</option>
                                     ))}
                                 </select>
                             </div>
@@ -1968,7 +2068,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 </button>
 
                                 <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
-                                    <label htmlFor="factura-upload-stock" className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2">
+                                    <label
+                                        htmlFor="factura-upload-stock"
+                                        className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 focus:outline-none focus:underline"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                document.getElementById('factura-upload-stock')?.click();
+                                            }
+                                        }}
+                                    >
                                         {facturaFile ? (
                                             <span className="text-emerald-700 font-bold truncate max-w-[200px]">{facturaFile.name}</span>
                                         ) : (

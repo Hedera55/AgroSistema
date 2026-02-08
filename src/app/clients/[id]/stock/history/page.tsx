@@ -3,7 +3,9 @@
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { InventoryMovement } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse } from '@/types';
+import { OrderDetailView } from '@/components/OrderDetailView';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 
@@ -14,25 +16,40 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
     const scrollRef = useHorizontalScroll();
+    const [movementsLimit, setMovementsLimit] = useState(10);
+    const [productsData, setProductsData] = useState<Record<string, Product>>({});
     const [ordersKey, setOrdersKey] = useState<Record<string, string>>({});
+    const [ordersData, setOrdersData] = useState<Order[]>([]);
+    const [farms, setFarms] = useState<any[]>([]);
+    const [lots, setLots] = useState<any[]>([]);
     const [warehousesKey, setWarehousesKey] = useState<Record<string, string>>({});
+    const [warehousesFull, setWarehousesFull] = useState<any[]>([]);
+    const [selectedOrder, setSelectedOrder] = useState<(Order & { farmName?: string; lotName?: string; hectares?: number }) | null>(null);
+    const { displayName } = useAuth();
 
     async function loadData() {
-        const [allMovements, allProducts, allOrders, allWarehouses] = await Promise.all([
+        const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots] = await Promise.all([
             db.getAll('movements'),
             db.getAll('products'),
             db.getAll('orders'),
-            db.getAll('warehouses')
+            db.getAll('warehouses'),
+            db.getAll('farms'),
+            db.getAll('lots')
         ]);
 
         const clientMovements = allMovements
-            .filter((m: InventoryMovement) => m.clientId === clientId)
+            .filter((m: InventoryMovement) =>
+                m.clientId === clientId &&
+                !m.notes?.toLowerCase().includes('labor de cosecha') // Filter out irrelevant labor entries
+            )
             .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-        // Map product prices for easier lookup
+        // Map products for brand lookup and prices
         const priceMap: Record<string, number> = {};
+        const pMap: Record<string, Product> = {};
         allProducts.forEach((p: any) => {
             if (p.price) priceMap[p.id] = p.price;
+            pMap[p.id] = p;
         });
 
         // Map orders to identify Sowing types
@@ -49,8 +66,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
         setMovements(clientMovements);
         setProductsKey(priceMap);
+        setProductsData(pMap);
         setOrdersKey(orderTypeMap);
+        setOrdersData(allOrders);
+        setFarms(allFarms);
+        setLots(allLots);
         setWarehousesKey(wMap);
+        setWarehousesFull(allWarehouses);
         setLoading(false);
     }
 
@@ -112,14 +134,48 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         }
     };
 
-    const formatDate = (isoString: string) => {
-        const date = new Date(isoString);
+    const formatDate = (dateStr: string, timeStr?: string) => {
+        if (!dateStr) return { date: '-', time: '-' };
+
+        let day = '-', month = '-', year = '-';
+        let formattedTime = '-';
+
+        const dateObj = new Date(dateStr);
+        if (!isNaN(dateObj.getTime())) {
+            day = String(dateObj.getDate()).padStart(2, '0');
+            month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            year = String(dateObj.getFullYear());
+
+            if (!timeStr && dateStr.includes('T')) {
+                const h = dateObj.getHours();
+                const m = String(dateObj.getMinutes()).padStart(2, '0');
+                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = h % 12 || 12;
+                formattedTime = `${displayHours}:${m} ${ampm}`;
+            }
+        } else if (dateStr.includes('-')) {
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                year = parts[0];
+                month = parts[1];
+                day = parts[2];
+            }
+        }
+
+        if (timeStr) {
+            const timePart = timeStr.split(' ')[0];
+            const [h, m] = timePart.split(':');
+            if (h && m) {
+                const hours = parseInt(h);
+                const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
+                const displayHours = hours % 12 || 12;
+                formattedTime = `${displayHours}:${m} ${ampm}`;
+            }
+        }
+
         return {
-            date: date.toLocaleDateString('es-AR'),
-            time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-                .toLowerCase()
-                .replace(' am', ' a.m.')
-                .replace(' pm', ' p.m.')
+            date: day !== '-' ? `${day}-${month}-${year}` : dateStr,
+            time: formattedTime
         };
     };
 
@@ -153,14 +209,16 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Marca</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nombre Comercial</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Comercial</th>
                                     <th className="px-6 py-2 text-center text-xs font-medium text-slate-500 uppercase">Tipo</th>
-                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
-                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">P. Unitario</th>
-                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Monto Total</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Cant.</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">P. Unit.</th>
+                                    <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Total</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Vendedor</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Socio que pagó</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase"></th>
                                 </tr>
                             </thead>
@@ -202,13 +260,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     });
 
                                     return groupedMovements.map((m) => {
-                                        const { date, time } = formatDate(m.createdAt || m.date);
+                                        const { date, time } = formatDate(m.createdAt || m.date, m.time);
                                         const isConsolidated = m.items && m.items.length > 1;
                                         const isSingleItemConsolidated = m.items && m.items.length === 1;
                                         const singleItem = isSingleItemConsolidated ? m.items[0] : null;
 
                                         // Determine Label and Tooltip
-                                        let label = 'EGRESO-R';
+                                        let label = 'EGRESO';
                                         let labelClass = 'bg-orange-100 text-orange-800';
                                         let tooltip = 'Retiro de stock';
 
@@ -229,12 +287,16 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             labelClass = 'bg-blue-100 text-blue-800';
                                             tooltip = 'Venta';
                                         } else if (m.type === 'OUT') {
-                                            // Check if it's Sowing
+                                            // Check order type
                                             const orderType = ordersKey[m.referenceId];
                                             if (orderType === 'SOWING') {
                                                 label = 'EGRESO-S';
                                                 labelClass = 'bg-emerald-100 text-emerald-800';
                                                 tooltip = 'Siembra';
+                                            } else if (orderType === 'APPLICATION') {
+                                                label = 'EGRESO';
+                                                labelClass = 'bg-orange-100 text-orange-800';
+                                                tooltip = 'Aplicación';
                                             }
                                         }
 
@@ -263,9 +325,41 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             ? 'Total de la compra consolidada'
                                             : `${priceLabel}: USD ${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${m.unit}`;
 
+                                        // Standardize terminology for Soja
+                                        const productObj = productsData[m.productId];
+                                        let displayProductName = isConsolidated ? 'Varios' : (isSingleItemConsolidated ? (singleItem?.productName || 'Producto') : (m.productName || productObj?.name || 'Producto'));
+                                        let displayBrand = isConsolidated ? '-' : (isSingleItemConsolidated ? (singleItem?.productBrand || '-') : (m.productBrand || productObj?.brandName || '-'));
+
+                                        // Aggressive Soja terminology fix: "Granos de soja" -> "Soja"
+                                        if (displayProductName.toLowerCase().includes('soja')) {
+                                            displayProductName = 'Soja';
+                                        }
+
+                                        const order = m.referenceId ? ordersData.find(o => o.id === m.referenceId) : null;
+                                        const isClickable = !!order && !m.isTransfer;
+
+                                        const handleRowClick = () => {
+                                            if (!isClickable) return;
+
+                                            if (order) {
+                                                // Enrich order with farm and lot names for OrderDetailView
+                                                const farm = farms.find(f => f.id === order.farmId);
+                                                const lot = lots.find(l => l.id === order.lotId);
+                                                setSelectedOrder({
+                                                    ...order,
+                                                    farmName: farm?.name || 'Desconocido',
+                                                    lotName: lot?.name || 'Desconocido',
+                                                    hectares: lot?.hectares || 0
+                                                });
+                                            }
+                                        };
+
                                         return (
                                             <React.Fragment key={m.id}>
-                                                <tr className="hover:bg-slate-50 group transition-colors">
+                                                <tr
+                                                    className={`hover:bg-slate-50 group transition-colors ${isClickable ? 'cursor-pointer' : ''}`}
+                                                    onClick={handleRowClick}
+                                                >
                                                     <td className="px-6 py-2 whitespace-nowrap">
                                                         <div className="text-slate-900 font-medium">{date}</div>
                                                         <div className="text-[10px] text-slate-400 font-mono uppercase tracking-tighter">{time}</div>
@@ -276,10 +370,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 <span className={m.type === 'IN' ? 'text-red-700' : 'text-emerald-700'}>Varios</span>
                                                                 <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter whitespace-nowrap">({m.items.length} prod)</span>
                                                             </div>
-                                                        ) : (isSingleItemConsolidated ? singleItem.productName : m.productName)}
+                                                        ) : displayProductName}
                                                     </td>
                                                     <td className="px-6 py-2 text-sm text-slate-500">
-                                                        {isConsolidated ? '-' : (isSingleItemConsolidated ? (singleItem.productBrand || '-') : (m.productBrand || '-'))}
+                                                        {displayBrand}
                                                     </td>
                                                     <td className="px-6 py-2 text-sm text-slate-500">
                                                         {isConsolidated ? '-' : (isSingleItemConsolidated ? (singleItem.productCommercialName || '-') : (m.productCommercialName || '-'))}
@@ -318,11 +412,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-300">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-2 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
-                                                        {m.notes || '-'}
+                                                    <td className={`px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px] ${m.sellerName ? 'text-blue-600' : ''}`}>
+                                                        {m.sellerName || '-'}
                                                     </td>
-                                                    <td className="px-6 py-2 whitespace-nowrap text-slate-400 font-medium text-[11px] tracking-tight">
-                                                        {m.createdBy || 'Sistema'}
+                                                    <td className={`px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[100px] ${m.investorName ? 'text-indigo-600' : ''}`}>
+                                                        {m.investorName || '-'}
                                                     </td>
                                                     <td className="px-6 py-2 whitespace-nowrap">
                                                         {m.isTransfer ? (
@@ -335,25 +429,32 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-600 text-[11px] font-medium">{warehousesKey[m.warehouseId || ''] || '-'}</span>
                                                         )}
                                                     </td>
+                                                    <td className="px-6 py-2 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
+                                                        {m.notes || '-'}
+                                                    </td>
+                                                    <td className="px-6 py-2 whitespace-nowrap text-slate-400 font-medium text-[11px] tracking-tight">
+                                                        {m.createdBy || 'Sistema'}
+                                                    </td>
                                                     <td className="px-6 py-2 whitespace-nowrap text-right">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            {m.type !== 'HARVEST' && (
-                                                                m.facturaImageUrl ? (
-                                                                    <a
-                                                                        href={m.facturaImageUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        title="Ver factura"
-                                                                        className="inline-block"
+                                                        <div className="flex items-center justify-end gap-2 text-right">
+                                                            {m.facturaImageUrl ? (
+                                                                <a
+                                                                    href={m.facturaImageUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    title="Ver factura"
+                                                                    className="inline-block"
+                                                                    onClick={e => e.stopPropagation()}
+                                                                >
+                                                                    <button
+                                                                        className="w-7 h-7 bg-white border border-emerald-500 text-emerald-500 hover:bg-emerald-50 rounded-md text-[11px] font-black transition-all flex items-center justify-center shadow-sm"
                                                                     >
-                                                                        <button
-                                                                            className="w-8 h-8 bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all flex items-center justify-center shadow-sm"
-                                                                        >
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                                                                        </button>
-                                                                    </a>
-                                                                ) : (
-                                                                    <div className="inline-block relative">
+                                                                        F
+                                                                    </button>
+                                                                </a>
+                                                            ) : (
+                                                                m.type !== 'HARVEST' && (
+                                                                    <div className="inline-block relative" onClick={e => e.stopPropagation()}>
                                                                         <input
                                                                             type="file"
                                                                             accept="image/*,application/pdf"
@@ -363,15 +464,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                             title="Subir factura faltante"
                                                                         />
                                                                         <button
-                                                                            className={`w-8 h-8 bg-white border border-slate-200 text-slate-400 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-slate-50 hover:border-emerald-200 hover:text-emerald-500'}`}
+                                                                            className={`w-7 h-7 bg-white border border-red-500 text-red-500 rounded-md text-[11px] font-black flex items-center justify-center transition-all ${uploadingId === m.id ? 'opacity-50 cursor-wait' : 'hover:bg-red-50'}`}
                                                                         >
-                                                                            {uploadingId === m.id ? '...' : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>}
+                                                                            {uploadingId === m.id ? '...' : 'F'}
                                                                         </button>
                                                                     </div>
                                                                 )
                                                             )}
                                                             <button
-                                                                onClick={() => handleDeleteMovement(m.id, m.partnerId)}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteMovement(m.id, m.partnerId);
+                                                                }}
                                                                 className="w-8 h-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-2"
                                                                 title="Eliminar movimiento"
                                                             >
@@ -406,14 +510,50 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 ))}
                                             </React.Fragment>
                                         );
-                                    });
+                                    }).slice(0, movementsLimit);
                                 })()}
                             </tbody>
                         </table>
                     </div>
                 )}
+                {(movements.length > movementsLimit || movementsLimit > 10) && (
+                    <div className="flex bg-slate-50 border-t border-slate-100 divide-x divide-slate-200">
+                        {movements.length > movementsLimit && (
+                            <button
+                                onClick={() => setMovementsLimit(prev => prev + 10)}
+                                className="flex-1 py-4 hover:bg-slate-100 transition-colors flex items-center justify-center gap-3 active:bg-slate-200 group/btn"
+                            >
+                                <span className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em]">Cargar 10 más</span>
+                            </button>
+                        )}
+                        {movementsLimit > 10 && (
+                            <button
+                                onClick={() => setMovementsLimit(prev => Math.max(10, prev - 10))}
+                                className="flex-1 py-4 hover:bg-slate-100 transition-colors flex items-center justify-center gap-3 active:bg-slate-200 group/btn"
+                            >
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Ver menos</span>
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
-            <div className="flex justify-end pr-2 pb-4">
+
+            {selectedOrder && (
+                <div className="mt-4 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-slideUp">
+                    <div className="bg-emerald-600 px-6 py-2 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-emerald-500">
+                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Detalle de la Orden selecionada</span>
+                        <button onClick={() => setSelectedOrder(null)} className="text-white/80 hover:text-white text-xs font-bold">Cerrar ✕</button>
+                    </div>
+                    <OrderDetailView
+                        order={selectedOrder}
+                        onClose={() => setSelectedOrder(null)}
+                        warehouses={warehousesFull}
+                        createdBy={displayName || 'Sistema'}
+                    />
+                </div>
+            )}
+
+            <div className="flex justify-end pr-2 pb-4 mt-6">
                 <Link
                     href={`/clients/${clientId}/stock`}
                     className="bg-slate-50 text-slate-500 text-xs px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-emerald-600 hover:bg-white transition-all font-medium"

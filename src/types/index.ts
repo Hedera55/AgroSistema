@@ -146,6 +146,7 @@ export interface OrderItem {
     expectedYield?: number;
     warehouseId?: string; // Origin warehouse for this specific item
     warehouseName?: string; // Cached name
+    productType?: ProductType;
 }
 
 export interface MovementItem {

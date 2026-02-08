@@ -113,51 +113,54 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
         // Auto-shifting logic for loading order
         const requestedOrder = currLoadingOrder ? parseInt(currLoadingOrder) : undefined;
-        let updatedItems = [...items];
+        let otherItems = items.filter(i => i.id !== editingItemId);
 
         if (requestedOrder !== undefined) {
-            // Check if any existing item has this order
-            const existingIndex = updatedItems.findIndex(i => i.loadingOrder === requestedOrder);
-            if (existingIndex !== -1) {
-                // Shift all items from this order onwards
-                updatedItems = updatedItems.map(i => (i.loadingOrder !== undefined && i.loadingOrder >= requestedOrder)
-                    ? { ...i, loadingOrder: i.loadingOrder + 1 }
-                    : i
-                );
+            // Check if any existing item (excluding current) has this order
+            const collision = otherItems.some(i => i.loadingOrder === requestedOrder);
+
+            if (collision) {
+                // Strict Shift: Bump ALL items with order >= requestedOrder to make room
+                otherItems = otherItems.map(i => {
+                    if (i.loadingOrder !== undefined && i.loadingOrder >= requestedOrder) {
+                        return { ...i, loadingOrder: i.loadingOrder + 1 };
+                    }
+                    return i;
+                });
             }
         }
 
         const item: OrderItem = {
-            id: generateId(),
+            id: editingItemId || generateId(),
             productId: isMechanicalLabor ? 'LABOREO_MECANICO' : currProdId,
             productName: isMechanicalLabor ? mechanicalLaborName : (product?.name || ''),
             brandName: product?.brandName,
             commercialName: product?.commercialName,
             activeIngredient: product?.activeIngredient,
-            dosage: parseFloat(currDosage || '0'),
+            dosage: isMechanicalLabor ? 1 : parseFloat(currDosage || '0'),
             unit: product?.unit || 'ha',
-            totalQuantity: parseFloat(currDosage || '0') * (selectedLot?.hectares || 0),
+            totalQuantity: isMechanicalLabor
+                ? (selectedLot?.hectares || 0)
+                : parseFloat(currDosage || '0') * (selectedLot?.hectares || 0),
             loadingOrder: requestedOrder,
             plantingDensity: product?.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
             plantingDensityUnit: product?.type === 'SEED' ? 'KG_HA' : undefined,
             plantingSpacing: product?.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
             expectedYield: product?.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
-            warehouseId: currWarehouseId,
-            warehouseName: warehouses.find(w => w.id === currWarehouseId)?.name
+            warehouseId: isMechanicalLabor ? undefined : currWarehouseId,
+            warehouseName: isMechanicalLabor ? undefined : warehouses.find(w => w.id === currWarehouseId)?.name,
+            productType: product?.type
         };
 
-        if (editingItemId) {
-            setItems(items.map(i => i.id === editingItemId ? { ...item, id: editingItemId } : i));
-            setEditingItemId(null);
-        } else {
-            setItems([...updatedItems, item]);
-        }
+        const finalItems = [...otherItems, item].sort((a, b) => (a.loadingOrder || 999) - (b.loadingOrder || 999));
+        setItems(finalItems);
+        setEditingItemId(null);
 
         setCurrProdId('');
         setCurrDosage('');
         setPlantingDensity('');
         setPlantingSpacing('');
-        setExpectedYield(''); // Added reset
+        setExpectedYield('');
         setCurrLoadingOrder('');
         setIsMechanicalLabor(false);
         setMechanicalLaborName('');
@@ -217,7 +220,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             const needed = item.totalQuantity;
             const missing = needed > available ? needed - available : 0;
             return { ...item, available, missing };
-        }).filter(i => i.missing > 0);
+        }).filter(i => i.missing > 0 && i.productId !== 'LABOREO_MECANICO');
     }, [items, stock]);
 
 
@@ -256,7 +259,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 type: containsSeeds ? 'SOWING' : 'APPLICATION',
                 status: 'PENDING',
                 date: date,
-                time: '00:00',
+                time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 applicationStart: appStart,
                 applicationEnd: appEnd,
                 clientId,
@@ -264,6 +267,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 lotId: selectedLotId,
                 // warehouseId: selectedOrderWarehouseId || undefined, // Now per item
                 applicatorId: selectedApplicatorId,
+                applicatorName: contractors.find(c => c.id === selectedApplicatorId)?.username,
                 servicePrice: servicePrice ? parseFloat(servicePrice) : 0,
                 expectedYield: items.find(i => i.expectedYield)?.expectedYield,
                 treatedArea: selectedLot.hectares,
@@ -377,7 +381,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             {/* Input Area */}
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                 <div className="md:col-span-1">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden de Carga</label>
                                     <Input
                                         type="number"
                                         placeholder=""
@@ -409,51 +413,64 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                         <optgroup label="Stock Galpón">
                                             {availableProducts.map(p => (
                                                 <option key={p.id} value={p.id}>
-                                                    {p.activeIngredient || p.name} {p.commercialName ? `| ${p.commercialName}` : ''} ({typeLabels[p.type]})
+                                                    {p.activeIngredient || p.name} {p.commercialName ? `| ${p.commercialName}` : (p.brandName === 'Propia' ? '| Propia' : '')} ({typeLabels[p.type]})
                                                 </option>
                                             ))}
                                         </optgroup>
                                     </select>
                                 </div>
 
-                                <div className="md:col-span-3">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Depósito</label>
-                                    <select
-                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
-                                        value={currWarehouseId}
-                                        onChange={e => setCurrWarehouseId(e.target.value)}
-                                    >
-                                        <option value="">Seleccione...</option>
-                                        {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                    </select>
-                                </div>
+                                {!isMechanicalLabor && (
+                                    <div className="md:col-span-3">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Depósito</label>
+                                        <select
+                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
+                                            value={currWarehouseId}
+                                            onChange={e => setCurrWarehouseId(e.target.value)}
+                                        >
+                                            <option value="">Seleccione...</option>
+                                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
 
-                                <div className="md:col-span-3">
-                                    <div className="flex flex-col">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Dosis</label>
-                                        <div className="relative flex items-center h-[46px]">
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                placeholder={availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? "ej. 80" : "0.00"}
-                                                value={currDosage}
-                                                onChange={e => setCurrDosage(e.target.value)}
-                                                className="h-[46px] pr-12"
-                                            />
-                                            {(currProdId || isMechanicalLabor) && (
-                                                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase">
-                                                        {isMechanicalLabor
-                                                            ? 'ha'
-                                                            : availableProducts.find(p => p.id === currProdId)?.type === 'SEED'
+                                {!isMechanicalLabor ? (
+                                    <div className="md:col-span-3">
+                                        <div className="flex flex-col">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Dosis</label>
+                                            <div className="relative flex items-center h-[46px]">
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    placeholder={availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? "ej. 80" : "0.00"}
+                                                    value={currDosage}
+                                                    onChange={e => setCurrDosage(e.target.value)}
+                                                    className="h-[46px] pr-12"
+                                                />
+                                                {(currProdId) && (
+                                                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase">
+                                                            {availableProducts.find(p => p.id === currProdId)?.type === 'SEED'
                                                                 ? 'KG/ha'
                                                                 : `${availableProducts.find(p => p.id === currProdId)?.unit || 'u'}/ha`}
-                                                    </span>
-                                                </div>
-                                            )}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="md:col-span-6 animate-fadeIn">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Tipo de Laboreo</label>
+                                        <Input
+                                            type="text"
+                                            placeholder="Ej. Cosecha, Siembra, Pulverización..."
+                                            value={mechanicalLaborName}
+                                            onChange={e => setMechanicalLaborName(e.target.value)}
+                                            className="h-[46px]"
+                                        />
+                                    </div>
+                                )}
 
                                 {availableProducts.find(p => p.id === currProdId)?.type === 'SEED' ? (
                                     <>
@@ -505,17 +522,18 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         {/* Items List */}
                         {items.length > 0 && (
                             <div className="space-y-2 pt-4 border-t border-slate-100">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Productos en la Orden</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Productos en la Orden de Carga</label>
                                 <div className="space-y-2">
                                     {[...items].sort((a, b) => (a.loadingOrder || 999) - (b.loadingOrder || 999)).filter(i => i.id !== editingItemId).map((item) => (
-                                        <div key={item.id} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
+                                        <div key={item.id} className="flex justify-between items-center p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
                                             <div>
                                                 <div className="font-bold text-slate-800 text-sm">
-                                                    {item.loadingOrder && <span className="text-emerald-600 mr-2">#{item.loadingOrder}</span>}
-                                                    {item.productName} {item.commercialName ? `| ${item.commercialName}` : ''}
+                                                    {item.productName} {item.commercialName ? `| ${item.commercialName}` : (item.brandName === 'Propia' ? '| Propia' : '')}
                                                 </div>
                                                 <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4 uppercase font-medium">
-                                                    <span>Dosis: {item.dosage} {item.unit}/ha</span>
+                                                    {!item.plantingDensity && item.productId !== 'LABOREO_MECANICO' && (
+                                                        <span>Dosis: {item.dosage} {item.unit}/ha</span>
+                                                    )}
                                                     {item.plantingDensity && (
                                                         <span className="text-blue-600">Densidad: {item.plantingDensity} kg/ha</span>
                                                     )}
@@ -536,8 +554,12 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                                                     <div className="text-[9px] text-slate-400 uppercase font-bold tracking-tighter">Total</div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <button onClick={() => handleEditItem(item)} className="text-slate-300 hover:text-blue-600 transition-colors p-1" title="Editar">✎</button>
-                                                    <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-600 transition-colors p-1" title="Eliminar">✕</button>
+                                                    <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors" title="Editar">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                    </button>
+                                                    <button onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors" title="Eliminar">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -635,7 +657,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     {/* Navigation buttons for Step 2 */}
                     <div className="flex justify-between pt-6 border-t border-slate-100">
                         <Button variant="secondary" onClick={() => setStep(1)}>Volver</Button>
-                        <Button onClick={() => setStep(3)} disabled={items.length === 0}>Confirmar orden</Button>
+                        <Button onClick={() => setStep(3)} disabled={items.length === 0}>Confirmar Orden de Carga</Button>
                     </div>
                 </div>
             )}
@@ -660,7 +682,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     )}
 
                     <div className="bg-white p-6 border border-slate-200 rounded-xl shadow-sm space-y-4">
-                        <h3 className="font-bold text-lg border-b pb-2">Resumen de la Orden</h3>
+                        <h3 className="font-bold text-lg border-b pb-2">Resumen de la Orden de Carga</h3>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div><span className="text-slate-500">Campo/Lote:</span> <span className="font-medium">{farms.find(f => f.id === selectedFarmId)?.name} - {selectedLot?.name}</span></div>
                             <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>
@@ -726,7 +748,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                             onClick={handleSubmit}
                             variant={stockShortages.length > 0 ? 'danger' : 'primary'}
                         >
-                            {stockShortages.length > 0 ? 'Confirmar de todas formas (Saldo Negativo)' : 'Confirmar Orden'}
+                            {stockShortages.length > 0 ? 'Confirmar de todas formas (Saldo Negativo)' : 'Confirmar Orden de Carga'}
                         </Button>
                     </div>
                 </div>

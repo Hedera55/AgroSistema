@@ -66,7 +66,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             handleSession(session);
         });
 
-        return () => subscription.unsubscribe();
+        // Failsafe: If loading takes too long (e.g. Supabase hangs), force stop loading
+        const timeout = setTimeout(() => {
+            setLoading(prev => {
+                if (prev) {
+                    console.warn('Auth loading timed out. Forcing completion.');
+                    return false;
+                }
+                return prev;
+            });
+        }, 5000);
+
+        return () => {
+            subscription.unsubscribe();
+            clearTimeout(timeout);
+        };
     }, []);
 
     const handleSession = async (session: Session | null) => {

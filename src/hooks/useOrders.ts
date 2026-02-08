@@ -57,9 +57,11 @@ export function useOrders(clientId: string) {
             const clientStock = currentStock.filter((s: ClientStock) => s.clientId === clientId);
 
             for (const item of items) {
+                // Fix: Strictly use item-level warehouseId to avoid "phantom" stock rows if order.warehouseId is empty
+                const effectiveWarehouseId = item.warehouseId;
                 const stockItem = clientStock.find((s: ClientStock) =>
                     s.productId === item.productId &&
-                    s.warehouseId === order.warehouseId
+                    s.warehouseId === effectiveWarehouseId
                 );
 
                 if (stockItem) {
@@ -74,7 +76,7 @@ export function useOrders(clientId: string) {
                     await db.put('stock', {
                         id: generateId(),
                         clientId: order.clientId,
-                        warehouseId: order.warehouseId,
+                        warehouseId: effectiveWarehouseId,
                         productId: item.productId,
                         quantity: -item.totalQuantity,
                         updatedAt: new Date().toISOString(),
@@ -87,7 +89,7 @@ export function useOrders(clientId: string) {
                 await db.put('movements', {
                     id: generateId(),
                     clientId: order.clientId,
-                    warehouseId: order.warehouseId,
+                    warehouseId: effectiveWarehouseId,
                     productId: item.productId,
                     productName: item.productName,
                     type: 'OUT',
@@ -142,8 +144,9 @@ export function useOrders(clientId: string) {
             if (order.type === 'SOWING' && newStatus === 'DONE') {
                 const lot = await db.get('lots', order.lotId);
                 if (lot) {
-                    // We assume the first item in a SOWING order is the seed/crop
-                    const sowedCrop = order.items?.[0]?.productName || 'Desconocido';
+                    // Find the seed item in the order
+                    const seedItem = order.items?.find(i => i.productType === 'SEED');
+                    const sowedCrop = seedItem?.productName || order.items?.[0]?.productName || 'Desconocido';
                     await db.put('lots', {
                         ...lot,
                         cropSpecies: sowedCrop,
