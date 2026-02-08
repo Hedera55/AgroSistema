@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState, createContext, useContext, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, UserRole } from '@/types';
 import { User, Session } from '@supabase/supabase-js';
@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
+    const initialized = useRef(false);
 
     const refreshProfile = async () => {
         if (!user) return;
@@ -56,14 +57,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     useEffect(() => {
-        // Get initial session
+        // Get initial session explicitly for faster/more reliable boot
         supabase.auth.getSession().then(({ data: { session } }) => {
-            handleSession(session);
+            if (!initialized.current) {
+                initialized.current = true;
+                handleSession(session);
+            }
         });
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            handleSession(session);
+            // Only process if not already handled by getSession on mount
+            // Subsequent changes (login/logout) should always be processed
+            if (!initialized.current) {
+                initialized.current = true;
+                handleSession(session);
+            } else if (_event !== 'INITIAL_SESSION') {
+                handleSession(session);
+            }
         });
 
         // Failsafe: If loading takes too long (e.g. Supabase hangs), force stop loading

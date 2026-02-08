@@ -18,6 +18,9 @@ import { LotHistory } from '@/components/LotHistory';
 import { db } from '@/services/db';
 import { syncService } from '@/services/sync';
 import { supabase } from '@/lib/supabase';
+import { FarmCard } from './components/FarmCard';
+import { LotCard } from './components/LotCard';
+import { SidePanels } from './components/SidePanels';
 
 export default function FieldsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);

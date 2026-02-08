@@ -14,6 +14,10 @@ import { syncService } from '@/services/sync';
 import { supabase } from '@/lib/supabase';
 import { StockMovementPanel } from '@/components/StockMovementPanel';
 import { usePDF } from '@/hooks/usePDF';
+import { WarehouseManager } from './components/WarehouseManager';
+import { ProductCatalog } from './components/ProductCatalog';
+import { StockEntryForm } from './components/StockEntryForm';
+import { StockTable } from './components/StockTable';
 
 interface EnrichedStockItem extends ClientStock {
     productName: string;
@@ -1096,201 +1100,38 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             {/* Input Form */}
 
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
-                <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
-                        Existencias - {warehouses.find(w => w.id === activeWarehouseId)?.name || 'seleccione un galpón'}
-                    </h3>
-                    {/* removed configuración text */}
-                </div>
-                {!activeWarehouseId ? (
-                    <div className="p-12 text-center text-slate-500">
-                        <h3 className="text-lg font-medium text-slate-900">Seleccione un galpón</h3>
-                        <p>elija un galpón para ver su inventario</p>
-                    </div>
-                ) : stockLoading || productsLoading ? (
-                    <div className="p-8 text-center text-slate-500">Cargando stock...</div>
-                ) : enrichedStock.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500">
-                        <h3 className="text-lg font-medium text-slate-900">Galpón vacío</h3>
-                        <p>No hay productos cargados todavía.</p>
-                    </div>
-                ) : (
-                    <div
-                        className="overflow-x-auto"
-                        onWheel={(e) => {
-                            if (e.deltaY !== 0) {
-                                e.preventDefault();
-                                e.currentTarget.scrollLeft += e.deltaY;
-                            }
-                        }}
-                    >
-                        <table className="min-w-full divide-y divide-slate-200">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
-                                    {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (USD)</th>
-                                    )}
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Actual</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-slate-200">
-                                {enrichedStock.map((item: EnrichedStockItem) => (
-                                    <React.Fragment key={item.id}>
-                                        <tr
-                                            key={item.id}
-                                            onClick={(e) => toggleStockSelection(item.id, e)}
-                                            className={`transition-colors cursor-pointer group ${selectedStockIds.includes(item.id) ? 'bg-blue-50/80' : 'hover:bg-slate-50'}`}
-                                        >
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">
-                                                {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
-                                                {item.productCommercialName || '-'}
-                                            </td>
-                                            <td
-                                                className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 hover:bg-slate-100 transition-colors"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleEditBrand(item.id, item.productBrand || '');
-                                                }}
-                                            >
-                                                {item.productBrand || '-'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                                {typeLabels[item.productType] || item.productType}
-                                            </td>
-                                            {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
-                                                    USD {(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </td>
-                                            )}
-                                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-emerald-600">
-                                                {item.quantity} <span className="text-slate-400 text-xs ml-1 font-normal group-hover:text-emerald-300 transition-colors uppercase tracking-tight">{item.unit}</span>
-                                            </td>
-                                        </tr>
-                                        {sellingStockId === item.id && (
-                                            <tr className="bg-emerald-50/50 animate-fadeIn">
-                                                <td colSpan={6} className="px-6 py-4">
-                                                    <form onSubmit={handleSaleSubmit} className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
-                                                        <div className="flex flex-wrap items-end gap-4">
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <Input
-                                                                    label="Cantidad a Vender"
-                                                                    type="text"
-                                                                    inputMode="decimal"
-                                                                    value={saleQuantity}
-                                                                    onChange={e => setSaleQuantity(e.target.value)}
-                                                                    required
-                                                                />
-                                                            </div>
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <Input
-                                                                    label={`Precio de Venta (USD/${item.unit})`}
-                                                                    type="text"
-                                                                    inputMode="decimal"
-                                                                    value={salePrice}
-                                                                    onChange={e => setSalePrice(e.target.value)}
-                                                                    required
-                                                                />
-                                                            </div>
-                                                            <div className="flex gap-2 mb-1">
-                                                                <Button type="submit" size="sm" disabled={isSubmitting || facturaUploading}>Confirmar Venta</Button>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Transport Info */}
-                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                            <Input
-                                                                label="Chofer (Transportista)"
-                                                                value={saleTruckDriver}
-                                                                onChange={e => setSaleTruckDriver(e.target.value)}
-                                                                placeholder="Nombre Completo"
-                                                                className="bg-white h-9"
-                                                            />
-                                                            <Input
-                                                                label="Patente Camión"
-                                                                value={salePlateNumber}
-                                                                onChange={e => setSalePlateNumber(e.target.value)}
-                                                                placeholder="AAA 123"
-                                                                className="bg-white h-9"
-                                                            />
-                                                            <Input
-                                                                label="Destino / Entrega"
-                                                                value={saleDestination}
-                                                                onChange={e => setSaleDestination(e.target.value)}
-                                                                placeholder="Localidad / Acopio"
-                                                                className="bg-white h-9"
-                                                            />
-                                                        </div>
-
-                                                        {showSaleNote && (
-                                                            <div className="animate-fadeIn w-full mt-2">
-                                                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota de Venta</label>
-                                                                <textarea
-                                                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
-                                                                    rows={2}
-                                                                    placeholder="Escribe una nota para este movimiento..."
-                                                                    value={saleNote}
-                                                                    onChange={(e) => setSaleNote(e.target.value)}
-                                                                />
-                                                            </div>
-                                                        )}
-
-                                                        <div className="flex flex-col sm:flex-row items-center justify-start gap-4 mt-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setShowSaleNote(!showSaleNote)}
-                                                                className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
-                                                            >
-                                                                {showSaleNote ? 'Quitar Nota' : '+ Agregar Nota'}
-                                                            </button>
-
-                                                            <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                                                                <label htmlFor={`factura-upload-sale-${item.id}`} className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
-                                                                    {saleFacturaFile ? (
-                                                                        <span className="text-emerald-700 font-bold truncate max-w-[120px]">{saleFacturaFile.name}</span>
-                                                                    ) : (
-                                                                        <span>+ Adjuntar factura</span>
-                                                                    )}
-                                                                </label>
-                                                                <input
-                                                                    id={`factura-upload-sale-${item.id}`}
-                                                                    type="file"
-                                                                    accept="image/*,application/pdf"
-                                                                    onChange={(e) => {
-                                                                        if (e.target.files && e.target.files[0]) {
-                                                                            setSaleFacturaFile(e.target.files[0]);
-                                                                        }
-                                                                    }}
-                                                                    className="hidden"
-                                                                />
-                                                                {saleFacturaFile && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setSaleFacturaFile(null)}
-                                                                        className="text-red-400 hover:text-red-600 font-bold px-1"
-                                                                    >
-                                                                        ✕
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+            <StockTable
+                activeWarehouseId={activeWarehouseId}
+                warehouses={warehouses}
+                stockLoading={stockLoading}
+                productsLoading={productsLoading}
+                enrichedStock={enrichedStock}
+                toggleStockSelection={toggleStockSelection}
+                selectedStockIds={selectedStockIds}
+                handleEditBrand={handleEditBrand}
+                typeLabels={typeLabels}
+                sellingStockId={sellingStockId}
+                handleSaleSubmit={handleSaleSubmit}
+                saleQuantity={saleQuantity}
+                setSaleQuantity={setSaleQuantity}
+                salePrice={salePrice}
+                setSalePrice={setSalePrice}
+                isSubmitting={isSubmitting}
+                facturaUploading={facturaUploading}
+                saleTruckDriver={saleTruckDriver}
+                setSaleTruckDriver={setSaleTruckDriver}
+                salePlateNumber={salePlateNumber}
+                setSalePlateNumber={setSalePlateNumber}
+                saleDestination={saleDestination}
+                setSaleDestination={setSaleDestination}
+                showSaleNote={showSaleNote}
+                setShowSaleNote={setShowSaleNote}
+                saleNote={saleNote}
+                setSaleNote={setSaleNote}
+                saleFacturaFile={saleFacturaFile}
+                setSaleFacturaFile={setSaleFacturaFile}
+                products={products}
+            />
 
 
             {/* Stock Movement Panel (Moved to bottom) */}
@@ -1328,817 +1169,116 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 </Link>
             </div>
 
-            {/* Warehouse Management View */}
-            {showWarehouses && !isReadOnly && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-semibold text-slate-900">Galpones Disponibles</h3>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => setShowWarehouseForm(!showWarehouseForm)}
-                                className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
-                            >
-                                {showWarehouseForm ? 'Cancelar' : 'Agregar'}
-                            </button>
-                            <button
-                                onClick={() => setShowWarehouses(false)}
-                                className="text-slate-400 hover:text-slate-600 p-1"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
+            <WarehouseManager
+                showWarehouses={showWarehouses}
+                setShowWarehouses={setShowWarehouses}
+                showWarehouseForm={showWarehouseForm}
+                setShowWarehouseForm={setShowWarehouseForm}
+                warehouses={warehouses}
+                addWarehouse={addWarehouse}
+                updateWarehouse={updateWarehouse}
+                deleteWarehouse={deleteWarehouse}
+                activeWarehouseId={activeWarehouseId}
+                setActiveWarehouseId={setActiveWarehouseId}
+                selectedInManagerId={selectedInManagerId}
+                setSelectedInManagerId={setSelectedInManagerId}
+                editingWarehouseId={editingWarehouseId}
+                setEditingWarehouseId={setEditingWarehouseId}
+                editName={editName}
+                setEditName={setEditName}
+                setSelectedStockIds={setSelectedStockIds}
+                setSellingStockId={setSellingStockId}
+                setShowMovePanel={setShowMovePanel}
+                isReadOnly={isReadOnly}
+                warehouseContainerRef={warehouseContainerRef}
+                stock={stock}
+            />
 
-                    {showWarehouseForm && (
-                        <div className="flex items-center gap-2 mb-6 animate-fadeIn">
-                            <div className="flex-1">
-                                <Input
-                                    placeholder="Nombre del nuevo galpón..."
-                                    id="new-warehouse-name"
-                                    className="h-[38px] text-sm"
-                                    onKeyDown={async (e) => {
-                                        if (e.key === 'Enter') {
-                                            const input = e.currentTarget as HTMLInputElement;
-                                            if (input.value) {
-                                                await addWarehouse(input.value);
-                                                input.value = '';
-                                            }
-                                        }
-                                    }}
-                                />
-                            </div>
-                            <Button
-                                onClick={async () => {
-                                    const input = document.getElementById('new-warehouse-name') as HTMLInputElement;
-                                    if (input.value) {
-                                        await addWarehouse(input.value);
-                                        input.value = '';
-                                    }
-                                }}
-                                size="sm"
-                                className="h-[38px] px-6"
-                            >
-                                Agregar
-                            </Button>
-                        </div>
-                    )}
-                    <div className="space-y-3" ref={warehouseContainerRef}>
+            <ProductCatalog
+                showCatalog={showCatalog}
+                setShowCatalog={setShowCatalog}
+                productsLoading={productsLoading}
+                availableProducts={availableProducts}
+                typeLabels={typeLabels}
+                isReadOnly={isReadOnly}
+                setIsEditingProduct={setIsEditingProduct}
+                setEditingProductId={setEditingProductId}
+                setNewProductName={setNewProductName}
+                setNewProductBrand={setNewProductBrand}
+                setNewProductPA={setNewProductPA}
+                setNewProductPrice={setNewProductPrice}
+                setShowProductForm={setShowProductForm}
+                availableUnits={availableUnits}
+                deleteProduct={deleteProduct}
+                setAvailableUnits={setAvailableUnits}
+                saveClientUnits={saveClientUnits}
+                newProductUnit={newProductUnit}
+                setNewProductUnit={setNewProductUnit}
+                showProductForm={showProductForm}
+                editingProductId={editingProductId}
+                handleProductSubmit={handleProductSubmit}
+                newProductType={newProductType}
+                setNewProductType={setNewProductType}
+                productTypes={productTypes}
+                newProductPA={newProductPA}
+                newProductCommercialName={newProductCommercialName}
+                setNewProductCommercialName={setNewProductCommercialName}
+                newProductBrand={newProductBrand}
+                showUnitInput={showUnitInput}
+                setShowUnitInput={setShowUnitInput}
+                unitInputRef={unitInputRef}
+                unitInputValue={unitInputValue}
+                setUnitInputValue={setUnitInputValue}
+                handleAddUnit={handleAddUnit}
+                showUnitDelete={showUnitDelete}
+                setShowUnitDelete={setShowUnitDelete}
+                isDuplicate={isDuplicate}
+                isSubmitting={isSubmitting}
+                setNewProductCommercialName={setNewProductCommercialName}
+            />
 
-                        {warehouses.map(w => (
-                            <div
-                                key={w.id}
-                                onClick={() => {
-                                    if (selectedInManagerId === w.id) {
-                                        // Toggle: if clicking the active one, deactivate it (show all)
-                                        if (activeWarehouseId === w.id) {
-                                            setActiveWarehouseId(null);
-                                            // Reset to default if needed, or null to show all?
-                                            // User request: "make it inactive" -> implies showing all or no filter.
-                                            // Logic at line 289 handles null/undefined as "first warehouse" OR if we want "ALL", we need to adjust filtering.
-                                            // However, line 140 forces a default if none selected. We might need to relax that or handle "null" explicitly in the filter.
-                                            // Let's assume for now "inactive" means clear selection -> effectively null.
-                                            // But the effect at line 138 might re-select the first one immediately.
-                                            // We should check that effect.
-                                        } else {
-                                            setActiveWarehouseId(w.id);
-                                        }
-                                        setSelectedStockIds([]);
-                                        setSellingStockId(null);
-                                        setShowMovePanel(false);
-                                    } else {
-                                        setSelectedInManagerId(w.id);
-                                    }
-                                }}
-                                className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
-                            >
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-3 flex-1">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseId === w.id ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                            📦
-                                        </div>
-                                        <div className="flex-1">
-                                            {editingWarehouseId === w.id ? (
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        autoFocus
-                                                        className="flex-1 text-sm border-2 border-emerald-500 rounded px-2 py-1 outline-none"
-                                                        value={editName}
-                                                        onChange={e => setEditName(e.target.value)}
-                                                        onKeyDown={async e => {
-                                                            if (e.key === 'Enter' && editName) {
-                                                                await updateWarehouse({ ...w, name: editName });
-                                                                setEditingWarehouseId(null);
-                                                            }
-                                                        }}
-                                                    />
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (editName) {
-                                                                await updateWarehouse({ ...w, name: editName });
-                                                                setEditingWarehouseId(null);
-                                                            }
-                                                        }}
-                                                        className="bg-emerald-600 text-white px-3 rounded font-bold text-xs"
-                                                    >
-                                                        Ok
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <span className={`font-bold block ${activeWarehouseId === w.id ? 'text-emerald-900' : 'text-slate-700'}`}>{w.name}</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2 items-center">
-                                        {activeWarehouseId === w.id && editingWarehouseId !== w.id && (
-                                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-2 py-1 bg-emerald-100 rounded border border-emerald-200">Activo</span>
-                                        )}
-                                        {/* Show controls if selected in manager OR if it is the active warehouse */}
-                                        {(selectedInManagerId === w.id || activeWarehouseId === w.id) && (
-                                            <div className="flex gap-2 animate-fadeIn">
-                                                {editingWarehouseId !== w.id && (
-                                                    <>
-                                                        {activeWarehouseId !== w.id && (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    setActiveWarehouseId(w.id);
-                                                                    setSelectedStockIds([]);
-                                                                    setSellingStockId(null);
-                                                                    setShowMovePanel(false);
-                                                                }}
-                                                                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg shadow-sm transition-all"
-                                                            >
-                                                                Abrir
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            onClick={(e) => {
-                                                                setEditingWarehouseId(w.id);
-                                                                setEditName(w.name);
-                                                            }}
-                                                            className="text-xs font-bold text-slate-500 hover:text-emerald-600 px-2 transition-colors"
-                                                        >
-                                                            Editar
-                                                        </button>
-                                                    </>
-                                                )}
-                                                <button
-                                                    onClick={(e) => {
-                                                        if (editingWarehouseId === w.id) {
-                                                            setEditingWarehouseId(null);
-                                                        } else {
-                                                            if (confirm('¿Eliminar galpón?')) deleteWarehouse(w.id);
-                                                        }
-                                                    }}
-                                                    className="text-slate-400 hover:text-red-500 p-2"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {showCatalog && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-semibold text-slate-900">Catálogo de Productos</h2>
-                        <div className="flex items-center gap-4">
-                            {!isReadOnly && (
-                                <button
-                                    onClick={() => {
-                                        setIsEditingProduct(false);
-                                        setEditingProductId(null);
-                                        setNewProductName('');
-                                        setNewProductBrand('');
-                                        setNewProductPA('');
-                                        setNewProductPrice('');
-                                        setShowProductForm(true);
-                                        setTimeout(() => {
-                                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                                        }, 100);
-                                    }}
-                                    className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
-                                >
-                                    Registrar nuevo producto
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setShowCatalog(false)}
-                                className="text-slate-400 hover:text-slate-600 p-1"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    {productsLoading ? (
-                        <div className="p-8 text-center text-slate-500">Cargando catálogo...</div>
-                    ) : availableProducts.length === 0 ? (
-                        <div className="p-12 text-center text-slate-500">
-                            <h3 className="text-lg font-medium text-slate-900">Catálogo vacío</h3>
-                            <p>Agregue productos para comenzar.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200">
-                                <thead className="bg-slate-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Unidad</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-slate-200">
-                                    {availableProducts.map((p) => (
-                                        <tr key={p.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{p.activeIngredient || p.name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.commercialName || '-'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.brandName || '-'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{typeLabels[p.type] || p.type}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.unit}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                {!isReadOnly && (
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                setIsEditingProduct(true);
-                                                                setEditingProductId(p.id);
-                                                                setNewProductName(p.name);
-                                                                setNewProductBrand(p.brandName || '');
-                                                                setNewProductCommercialName(p.commercialName || '');
-                                                                setNewProductPA(p.activeIngredient || '');
-                                                                setNewProductType(p.type);
-                                                                setNewProductUnit(p.unit);
-                                                                setNewProductPrice(p.price?.toString() || '');
-                                                                setShowProductForm(true);
-                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                            }}
-                                                            className="text-slate-400 hover:text-emerald-600 px-2 py-1 transition-colors text-[10px] font-bold uppercase tracking-widest"
-                                                            title="Editar"
-                                                        >
-                                                            Editar
-                                                        </button>
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (confirm('¿Eliminar producto del catálogo?')) await deleteProduct(p.id);
-                                                            }}
-                                                            className="text-slate-400 hover:text-red-900 px-2 py-1 transition-colors text-[10px] font-bold uppercase tracking-widest"
-                                                            title="Eliminar"
-                                                        >
-                                                            Eliminar
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            )
-            }
-            {/* Product Registration/Edition Form */}
-            {
-                showProductForm && (
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-8">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-semibold text-emerald-800">
-                                {editingProductId ? 'Editar Producto' : 'Registrar Nuevo Producto'}
-                            </h2>
-                            <button
-                                onClick={() => {
-                                    setShowProductForm(false);
-                                    setIsEditingProduct(false);
-                                    setEditingProductId(null);
-                                }}
-                                className="text-emerald-500 hover:text-emerald-700 p-1"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleProductSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Tipo first */}
-                                <div className="w-full">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                                    <select
-                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                        value={newProductType}
-                                        onChange={e => setNewProductType(e.target.value as ProductType)}
-                                    >
-                                        {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
-                                    </select>
-                                </div>
-                                <Input
-                                    label={newProductType === 'SEED' ? 'Cultivo' : 'P.A. (Principio Activo)'}
-                                    placeholder={newProductType === 'SEED' ? 'ej. Soja, Maíz...' : 'ej. Glifosato 48%'}
-                                    value={newProductPA}
-                                    onChange={e => {
-                                        setNewProductPA(e.target.value);
-                                        setNewProductName(e.target.value);
-                                    }}
-                                    className="h-[42px]"
-                                    required
-                                />
-                                <Input
-                                    label="Nombre Comercial"
-                                    placeholder="ej. Roundup"
-                                    value={newProductCommercialName}
-                                    onChange={e => setNewProductCommercialName(e.target.value)}
-                                    className="h-[42px]"
-                                />
-                                <Input
-                                    label="Marca"
-                                    placeholder="ej. Bayer"
-                                    value={newProductBrand}
-                                    onChange={e => setNewProductBrand(e.target.value)}
-                                    className="h-[42px]"
-                                />
-                                <div className="w-full relative">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
-                                    <select
-                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                        value={newProductUnit}
-                                        onChange={e => {
-                                            if (e.target.value === 'ADD_NEW') {
-                                                setShowUnitInput(true);
-                                                // Reset to whatever it was (or placeholder) so it doesn't stay on ADD_NEW
-                                                // This allows clicking it again if they close the input without adding
-                                            } else if (e.target.value === 'DELETE_UNIT') {
-                                                setShowUnitDelete(true);
-                                            } else {
-                                                setNewProductUnit(e.target.value);
-                                            }
-                                        }}
-                                    >
-                                        {(!newProductUnit || !availableUnits.includes(newProductUnit)) && (
-                                            <option value="">Seleccionar...</option>
-                                        )}
-                                        {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                        <option value="ADD_NEW">+ unidad</option>
-                                        {availableUnits.length > 0 && (
-                                            <option value="DELETE_UNIT">- unidad</option>
-                                        )}
-                                    </select>
-
-                                    {showUnitInput && (
-                                        <div
-                                            ref={unitInputRef}
-                                            className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2"
-                                        >
-                                            <input
-                                                type="text"
-                                                className="flex-1 rounded border-slate-300 text-xs focus:ring-emerald-500 focus:border-emerald-500"
-                                                placeholder="NUEVA UNIDAD..."
-                                                value={unitInputValue}
-                                                onChange={e => setUnitInputValue(e.target.value.toUpperCase())}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleAddUnit();
-                                                    }
-                                                }}
-                                                autoFocus
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleAddUnit}
-                                                className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
-                                            >
-                                                +
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setShowUnitInput(false);
-                                                    setUnitInputValue('');
-                                                }}
-                                                className="text-slate-400 p-1 hover:text-slate-600"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {showUnitDelete && (
-                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowUnitDelete(false)}
-                                                className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
-                                            >
-                                                ✕
-                                            </button>
-                                            <p className="text-xs text-slate-500 mb-2 font-medium">Eliminar unidad:</p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {availableUnits.map(u => (
-                                                    <button
-                                                        key={u}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const newUnits = availableUnits.filter(unit => unit !== u);
-                                                            setAvailableUnits(newUnits);
-                                                            saveClientUnits(newUnits);
-                                                            if (newProductUnit === u) {
-                                                                setNewProductUnit(newUnits[0] || '');
-                                                            }
-                                                            // Keep box open as requested
-                                                        }}
-                                                        className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
-                                                    >
-                                                        {u} ✕
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
-                                {isDuplicate && (
-                                    <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg animate-fadeIn flex-1 sm:flex-initial">
-                                        <p className="text-xs font-bold text-red-600 uppercase tracking-tight">
-                                            ⚠️ Este producto ya existe en el catálogo
-                                        </p>
-                                    </div>
-                                )}
-                                <div className="flex gap-3">
-                                    <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
-                                        {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
-                                    </Button>
-                                </div>
-                            </div>
-                        </form >
-                    </div>
-                )}
-
-            {/* Stock Entry Form */}
-            {showStockForm && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-semibold text-slate-900">
-                            {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' ? 'Gestión de Galpón (Granos)' : 'Cargar Ingreso de Stock'}
-                        </h2>
-                        <button
-                            onClick={() => {
-                                setShowStockForm(false);
-                                setStockItems([{ productId: '', quantity: '', price: '', tempBrand: '' }]);
-                            }}
-                            className="text-slate-400 hover:text-slate-600 p-1"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleStockSubmit} className="space-y-6">
-                        <div className="space-y-4 mb-4">
-                            {/* Active Entry Area - Removed box styles for a 'free' look */}
-                            <div className="relative animate-fadeIn">
-                                {/* Unified Row: Insumo (5), Cantidad (2), Precio (3), Button (2) */}
-                                <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                    <div className="md:col-span-5">
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo / Producto</label>
-                                        <select
-                                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
-                                            value={activeStockItem.productId}
-                                            onChange={e => updateActiveStockItem('productId', e.target.value)}
-                                            required={stockItems.length === 0}
-                                        >
-                                            <option value="">Seleccione...</option>
-                                            {availableProducts
-                                                .filter(p => {
-                                                    const targetW = warehouses.find(w => w.id === selectedWarehouseId);
-                                                    if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
-                                                    return true;
-                                                })
-                                                .map(p => (
-                                                    <option key={p.id} value={p.id}>
-                                                        {p.activeIngredient || p.name} ({p.commercialName || '-'}) ({p.brandName || '-'})
-                                                    </option>
-                                                ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <div className="w-full">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cantidad</label>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    required={stockItems.length === 0}
-                                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
-                                                    value={activeStockItem.quantity}
-                                                    onChange={e => updateActiveStockItem('quantity', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="md:col-span-3">
-                                        <div className="w-full">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                                Precio USD/{availableProducts.find(p => p.id === activeStockItem.productId)?.unit || 'u.'}
-                                            </label>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-10"
-                                                    value={activeStockItem.price}
-                                                    onChange={e => updateActiveStockItem('price', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="md:col-span-2 flex justify-end items-end">
-                                        <button
-                                            type="button"
-                                            onClick={addStockToBatch}
-                                            className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm"
-                                            title="Agregar a la lista"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M5 12h14" />
-                                                <path d="M12 5v14" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Growing List of Pending Items - Removed box styling */}
-                            {stockItems.length > 0 && (
-                                <div className="space-y-2 pt-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Productos a cargar</label>
-                                    <div className="overflow-hidden divide-y divide-slate-100">
-                                        {stockItems.map((item, idx) => {
-                                            const product = availableProducts.find(p => p.id === item.productId);
-                                            return (
-                                                <div key={idx} className="flex items-center justify-between p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="text-sm font-bold text-slate-800 truncate">
-                                                            {product?.activeIngredient || product?.name || 'Insumo desconocido'}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-400 uppercase font-medium flex gap-2">
-                                                            <span>{product?.commercialName || '-'}</span>
-                                                            <span className="text-slate-300">•</span>
-                                                            <span>{item.quantity} {product?.unit || 'u.'}</span>
-                                                            <span className="text-slate-300">•</span>
-                                                            <span>USD {item.price ? (parseFloat(item.price) * parseFloat(item.quantity)).toFixed(2) : '0.00'}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 ml-4">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => editBatchItem(idx)}
-                                                            className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors"
-                                                            title="Editar"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeBatchItem(idx)}
-                                                            className="p-1.5 text-slate-300 hover:text-red-400 transition-colors"
-                                                            title="Eliminar"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vendedor</label>
-                                <div className="relative">
-                                    <select
-                                        className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                                        value={selectedSeller}
-                                        onChange={e => {
-                                            if (e.target.value === 'ADD_NEW') {
-                                                setShowSellerInput(true);
-                                            } else if (e.target.value === 'DELETE') {
-                                                setShowSellerDelete(true);
-                                            } else {
-                                                setSelectedSeller(e.target.value);
-                                            }
-                                        }}
-                                    >
-                                        <option value="">Seleccione...</option>
-                                        {availableSellers.map(s => <option key={s} value={s}>{s}</option>)}
-                                        <option value="ADD_NEW">+ vendedor</option>
-                                        {availableSellers.length > 0 && <option value="DELETE">- vendedor</option>}
-                                    </select>
-
-                                    {showSellerInput && (
-                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn flex gap-2">
-                                            <input
-                                                type="text"
-                                                className="flex-1 rounded border-slate-300 text-[10px] focus:ring-emerald-500 focus:border-emerald-500"
-                                                placeholder="NUEVO VENDEDOR..."
-                                                value={sellerInputValue}
-                                                onChange={e => setSellerInputValue(e.target.value)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleAddSeller();
-                                                    }
-                                                }}
-                                                autoFocus
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => handleAddSeller()}
-                                                className="bg-emerald-500 text-white rounded px-2 py-1 text-xs font-bold hover:bg-emerald-600"
-                                            >
-                                                +
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowSellerInput(false)}
-                                                className="text-slate-400 p-1 hover:text-slate-600"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {showSellerDelete && (
-                                        <div className="absolute top-0 right-0 left-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-30 animate-fadeIn pr-6">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowSellerDelete(false)}
-                                                className="absolute top-1 right-1 text-slate-400 hover:text-slate-600 p-1"
-                                            >
-                                                ✕
-                                            </button>
-                                            <p className="text-[10px] text-slate-500 mb-2 font-medium">Eliminar vendedor:</p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {availableSellers.map(s => (
-                                                    <button
-                                                        key={s}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const newSellers = availableSellers.filter(seller => seller !== s);
-                                                            setAvailableSellers(newSellers);
-                                                            saveClientSellers(newSellers);
-                                                        }}
-                                                        className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase border border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors"
-                                                    >
-                                                        {s} ✕
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Inversor / Pagado por</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                                    value={selectedInvestor}
-                                    onChange={e => setSelectedInvestor(e.target.value)}
-                                >
-                                    <option value="">Seleccione un socio...</option>
-                                    {client?.partners?.map((p: any) => (
-                                        <option key={p.name} value={p.name}>{p.name}</option>
-                                    ))}
-                                    {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
-                                        <option key={inv.name} value={inv.name}>{inv.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Destino (Galpón)</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                                    value={selectedWarehouseId}
-                                    onChange={e => setSelectedWarehouseId(e.target.value)}
-                                    required
-                                >
-                                    {warehouses.map(w => (
-                                        <option key={w.id} value={w.id}>{w.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowNote(!showNote)}
-                                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-2"
-                                >
-                                    {showNote ? '× Quitar Nota' : (note ? 'Editar nota' : '+ Agregar nota')}
-                                </button>
-
-                                <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
-                                    <label
-                                        htmlFor="factura-upload-stock"
-                                        className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 focus:outline-none focus:underline"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                document.getElementById('factura-upload-stock')?.click();
-                                            }
-                                        }}
-                                    >
-                                        {facturaFile ? (
-                                            <span className="text-emerald-700 font-bold truncate max-w-[200px]">{facturaFile.name}</span>
-                                        ) : (
-                                            <span>+ Adjuntar factura</span>
-                                        )}
-                                    </label>
-                                    <input
-                                        id="factura-upload-stock"
-                                        type="file"
-                                        accept="image/*,application/pdf"
-                                        onChange={handleFacturaChange}
-                                        className="hidden"
-                                    />
-                                    {facturaFile && (
-                                        <button type="button" onClick={() => setFacturaFile(null)} className="text-red-400 hover:text-red-600">
-                                            ✕
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                isLoading={isSubmitting || facturaUploading}
-                                className="px-8 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto"
-                            >
-                                Confirmar Compra
-                            </Button>
-                        </div>
-
-                        {showNote && (
-                            <div className="pt-2 flex gap-2 animate-fadeIn">
-                                <textarea
-                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4"
-                                    rows={2}
-                                    placeholder="ej. Factura #0001-12345678, observaciones adicionales..."
-                                    value={note}
-                                    onChange={e => setNote(e.target.value)}
-                                    autoFocus
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setNoteConfirmed(true);
-                                        setShowNote(false);
-                                    }}
-                                    className="h-[68px] w-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
-                                    title="Confirmar nota"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                        <polyline points="12 5 19 12 12 19"></polyline>
-                                    </svg>
-                                </button>
-                            </div>
-                        )}
-                    </form>
-                </div >
-            )
-            }
+            <StockEntryForm
+                showStockForm={showStockForm}
+                setShowStockForm={setShowStockForm}
+                warehouses={warehouses}
+                activeWarehouseId={activeWarehouseId}
+                selectedWarehouseId={selectedWarehouseId}
+                setSelectedWarehouseId={setSelectedWarehouseId}
+                availableProducts={availableProducts}
+                activeStockItem={activeStockItem}
+                updateActiveStockItem={updateActiveStockItem}
+                stockItems={stockItems}
+                setStockItems={setStockItems}
+                addStockToBatch={addStockToBatch}
+                editBatchItem={editBatchItem}
+                removeBatchItem={removeBatchItem}
+                availableSellers={availableSellers}
+                selectedSeller={selectedSeller}
+                setSelectedSeller={setSelectedSeller}
+                showSellerInput={showSellerInput}
+                setShowSellerInput={setShowSellerInput}
+                sellerInputValue={sellerInputValue}
+                setSellerInputValue={setSellerInputValue}
+                handleAddSeller={handleAddSeller}
+                showSellerDelete={showSellerDelete}
+                setShowSellerDelete={setShowSellerDelete}
+                setAvailableSellers={setAvailableSellers}
+                saveClientSellers={saveClientSellers}
+                selectedInvestor={selectedInvestor}
+                setSelectedInvestor={setSelectedInvestor}
+                client={client}
+                showNote={showNote}
+                setShowNote={setShowNote}
+                note={note}
+                setNote={setNote}
+                setNoteConfirmed={setNoteConfirmed}
+                facturaFile={facturaFile}
+                setFacturaFile={setFacturaFile}
+                handleFacturaChange={handleFacturaChange}
+                handleStockSubmit={handleStockSubmit}
+                isSubmitting={isSubmitting}
+                facturaUploading={facturaUploading}
+            />
         </div >
     );
 }

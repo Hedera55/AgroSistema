@@ -366,10 +366,9 @@ export class SyncService {
         this.notify('syncing');
 
         try {
-            console.log('🔄 Starting sync...');
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                console.warn('⚠️ No active session, skipping sync.');
+                // Silently skip if no session
                 this.notify('idle');
                 return;
             }
@@ -377,7 +376,6 @@ export class SyncService {
             await this.pushChangesInternal();
             await this.pullChangesInternal();
 
-            console.log('✅ Sync completed.');
             this.notify('success');
 
             // Revert to idle after 3 seconds
@@ -399,13 +397,11 @@ export class SyncService {
     subscribeToChanges() {
         if (this.channel) return;
 
-        console.log('📡 Subscribing to Realtime changes...');
         this.channel = supabase.channel('db-changes')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public' },
                 async (payload) => {
-                    console.log('🔔 Change received:', payload);
                     await this.handleRealtimeEvent(payload);
                 }
             )
@@ -470,7 +466,6 @@ export class SyncService {
     }
 
     private async pushChangesInternal() {
-        console.log('⬆️ Pushing changes...');
         await this.pushStore('clients', 'clients', mappers.client);
         await this.pushStore('products', 'products', mappers.product);
         await this.pushStore('farms', 'farms', mappers.farm);
@@ -484,7 +479,6 @@ export class SyncService {
     }
 
     private async pullChangesInternal() {
-        console.log('⬇️ Pulling changes...');
         await this.pullStore('clients', 'clients', reverseMappers.client);
         await this.pullStore('products', 'products', reverseMappers.product);
         await this.pullStore('farms', 'farms', reverseMappers.farm);
@@ -504,8 +498,6 @@ export class SyncService {
     ) {
         const unsyncedItems = await db.getUnsynced(localStoreName);
         if (unsyncedItems.length === 0) return;
-
-        console.log(`Pushing ${unsyncedItems.length} items from ${localStoreName}...`);
 
         for (const item of unsyncedItems) {
             try {

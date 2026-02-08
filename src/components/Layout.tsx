@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { syncService, SyncStatus } from '@/services/sync';
@@ -78,9 +78,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Effective Client ID for navigation context: 
     // - For CLIENT role: ALWAYS use assignedId.
     // - For ADMIN/MASTER: URL takes precedence, then persisted selection.
-    const effectiveId = (role === 'CLIENT')
-        ? assignedId
-        : (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
+    const effectiveId = useMemo(() => {
+        if (role === 'CLIENT') return assignedId;
+        return (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
+    }, [role, assignedId, urlClientId, persistedClientId]);
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {
@@ -96,7 +97,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Show client menu items if we have a context
     const showClientMenu = !!effectiveId;
 
-    const navigation = [
+    const navigation = useMemo(() => [
         // For Admin/Master: General Client list
         { name: 'Empresas', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CONTRATISTA' },
         // For Master: User management
@@ -106,7 +107,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Contaduría', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Órdenes', href: `/clients/${effectiveId}/orders`, show: showClientMenu },
-    ].filter(item => item.show);
+    ].filter(item => item.show), [isMaster, role, effectiveId, showClientMenu]);
 
     if (loading) {
         return (
