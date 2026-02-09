@@ -36,7 +36,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const { stock, updateStock, deleteStock, loading: stockLoading } = useClientStock(id);
     const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse, loading: warehousesLoading } = useWarehouses(id);
     const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
-    const { movements, loading: movementsLoading } = useClientMovements(id);
+    const { movements, loading: movementsLoading, refresh: movementsRefresh } = useClientMovements(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -63,7 +63,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [newProductBrand, setNewProductBrand] = useState('');
     const [newProductCommercialName, setNewProductCommercialName] = useState('');
     const [newProductPA, setNewProductPA] = useState('');
-    const [newProductPrice, setNewProductPrice] = useState('');
     const [newProductType, setNewProductType] = useState<ProductType>('HERBICIDE');
     const [newProductUnit, setNewProductUnit] = useState<Unit>('L');
     const [availableUnits, setAvailableUnits] = useState<string[]>(['L', 'KG']);
@@ -358,36 +357,46 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     // Enrich stock data with product details (name, unit, type) and weighted average price
     const enrichedStock = useMemo<EnrichedStockItem[]>(() => {
         // 1. Group movements to calculate weighted averages
-        // key: productId_brand
+        // key: productId_brand or normalized_name
         const purchasePricing = new Map<string, { totalVal: number; totalQty: number }>();
         const salePricing = new Map<string, { totalVal: number; totalQty: number }>();
 
-        movements.forEach(m => {
-            const brand = (m.productBrand || '').toLowerCase().trim();
+        const updateStats = (map: Map<string, { totalVal: number; totalQty: number }>, key: string, qty: number, val: number) => {
+            if (!key) return;
+            const entry = map.get(key) || { totalVal: 0, totalQty: 0 };
+            entry.totalVal += val;
+            entry.totalQty += qty;
+            map.set(key, entry);
+        };
 
+        movements.forEach(m => {
             if (m.type === 'IN') {
                 if (m.productId === 'CONSOLIDATED' && m.items) {
-                    m.items.forEach(item => {
-                        const itemBrand = (item.productBrand || '').toLowerCase().trim();
-                        const key = `${item.productId}_${itemBrand}`;
-                        const entry = purchasePricing.get(key) || { totalVal: 0, totalQty: 0 };
-                        entry.totalVal += (item.quantity * (item.price || 0));
-                        entry.totalQty += item.quantity;
-                        purchasePricing.set(key, entry);
+                    m.items.forEach((item: any) => {
+                        const cost = item.quantity * (item.price || 0);
+                        // 1. Specific ID
+                        updateStats(purchasePricing, item.productId, item.quantity, cost);
+                        // 2. Generic Name
+                        if (item.productName) {
+                            updateStats(purchasePricing, item.productName.toLowerCase().trim(), item.quantity, cost);
+                        }
                     });
                 } else {
-                    const key = `${m.productId}_${brand}`;
-                    const entry = purchasePricing.get(key) || { totalVal: 0, totalQty: 0 };
-                    entry.totalVal += (m.quantity * (m.price || 0));
-                    entry.totalQty += m.quantity;
-                    purchasePricing.set(key, entry);
+                    const cost = m.quantity * (m.purchasePrice || m.price || 0);
+                    // 1. Specific ID
+                    updateStats(purchasePricing, m.productId, m.quantity, cost);
+                    // 2. Generic Name
+                    if (m.productName) {
+                        updateStats(purchasePricing, m.productName.toLowerCase().trim(), m.quantity, cost);
+                    }
                 }
             } else if (m.type === 'SALE') {
-                const key = `${m.productId}_${brand}`;
-                const entry = salePricing.get(key) || { totalVal: 0, totalQty: 0 };
-                entry.totalVal += (m.quantity * (m.salePrice || 0));
-                entry.totalQty += m.quantity;
-                salePricing.set(key, entry);
+                const cost = m.quantity * (m.salePrice || 0);
+                // 1. Specific ID
+                updateStats(salePricing, m.productId, m.quantity, cost);
+                // 2. Generic Name
+                const nameKey = (m.crop || m.productName || '').toLowerCase().trim();
+                updateStats(salePricing, nameKey, m.quantity, cost);
             }
         });
 
@@ -403,53 +412,27 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const product = products.find(p => p.id === item.productId);
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
             const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
-            const key = `${item.productId}_${brand}`;
+            const normalizedName = (product?.name || '').toLowerCase().trim();
 
             let avgPrice = 0;
-            const productMatch = products.find(p => p.id === item.productId);
 
-            if (brand === 'propia') {
-                const saleData = salePricing.get(key);
-                if (saleData && saleData.totalQty > 0) {
-                    avgPrice = saleData.totalVal / saleData.totalQty;
-                } else {
-                    // Fallback to purchase avg of other brands of same product
-                    let otherVal = 0;
-                    let otherQty = 0;
-                    purchasePricing.forEach((val, pKey) => {
-                        if (pKey.startsWith(`${item.productId}_`) && !pKey.endsWith('_propia')) {
-                            otherVal += val.totalVal;
-                            otherQty += val.totalQty;
-                        }
-                    });
+            // Priority 1: Sale Average (Specific -> Generic)
+            const saleDataSpecific = salePricing.get(item.productId);
+            const saleDataGeneric = salePricing.get(normalizedName);
 
-                    if (otherQty > 0) {
-                        avgPrice = otherVal / otherQty;
-                    } else {
-                        // Strict PPP: if NO movements exist for this product at all, value is 0
-                        avgPrice = 0;
-                    }
-                }
+            if (saleDataSpecific && saleDataSpecific.totalQty > 0) {
+                avgPrice = saleDataSpecific.totalVal / saleDataSpecific.totalQty;
+            } else if (saleDataGeneric && saleDataGeneric.totalQty > 0) {
+                avgPrice = saleDataGeneric.totalVal / saleDataGeneric.totalQty;
             } else {
-                const purchaseData = purchasePricing.get(key);
-                if (purchaseData && purchaseData.totalQty > 0) {
-                    avgPrice = purchaseData.totalVal / purchaseData.totalQty;
-                } else {
-                    // Fallback to average of ANY brand of this product if specific brand has no IN movements
-                    let totalProductVal = 0;
-                    let totalProductQty = 0;
-                    purchasePricing.forEach((val, pKey) => {
-                        if (pKey.startsWith(`${item.productId}_`)) {
-                            totalProductVal += val.totalVal;
-                            totalProductQty += val.totalQty;
-                        }
-                    });
+                // Priority 2: Purchase Average (Specific -> Generic)
+                const purchaseDataSpecific = purchasePricing.get(item.productId);
+                const purchaseDataGeneric = purchasePricing.get(normalizedName);
 
-                    if (totalProductQty > 0) {
-                        avgPrice = totalProductVal / totalProductQty;
-                    } else {
-                        avgPrice = 0;
-                    }
+                if (purchaseDataSpecific && purchaseDataSpecific.totalQty > 0) {
+                    avgPrice = purchaseDataSpecific.totalVal / purchaseDataSpecific.totalQty;
+                } else if (purchaseDataGeneric && purchaseDataGeneric.totalQty > 0) {
+                    avgPrice = purchaseDataGeneric.totalVal / purchaseDataGeneric.totalQty;
                 }
             }
 
@@ -502,7 +485,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
-                    price: parseFloat(newProductPrice.replace(',', '.')) || 0,
                     clientId: id
                 });
             } else {
@@ -514,7 +496,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
-                    price: parseFloat(newProductPrice.replace(',', '.')) || 0,
                     clientId: id
                 });
             }
@@ -523,9 +504,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setNewProductBrand('');
             setNewProductCommercialName('');
             setNewProductPA('');
-            setNewProductPrice('');
-            setNewProductBrand(''); // Added reset
-            setNewProductCommercialName(''); // Added reset
             setEditingProductId(null);
             setIsEditingProduct(false);
             setShowProductForm(false);
@@ -569,7 +547,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             for (const item of validItems) {
                 const product = availableProducts.find((p: Product) => p.id === item.productId);
                 const qtyNum = parseFloat(item.quantity.replace(',', '.'));
-                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : (product?.price || 0);
+                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : 0;
 
                 // Find existing item, but also account for items already processed in this loop
                 const existingInLoop = currentStockState.find((s: ClientStock) =>
@@ -640,6 +618,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setLastMovement(movementData);
             setLastAction('IN');
 
+            await movementsRefresh();
             syncService.pushChanges();
 
             // Reset
@@ -725,6 +704,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             await db.put('movements', movementData);
 
+            await movementsRefresh();
             setLastMovement(movementData);
             setLastMovement(movementData);
             setLastAction('SALE');
@@ -858,6 +838,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             }
         }
 
+        await movementsRefresh();
         syncService.pushChanges();
         handleClearSelection();
 
@@ -1222,7 +1203,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setNewProductName={setNewProductName}
                 setNewProductBrand={setNewProductBrand}
                 setNewProductPA={setNewProductPA}
-                setNewProductPrice={setNewProductPrice}
                 setShowProductForm={setShowProductForm}
                 availableUnits={availableUnits}
                 deleteProduct={deleteProduct}
@@ -1250,7 +1230,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setShowUnitDelete={setShowUnitDelete}
                 isDuplicate={isDuplicate}
                 isSubmitting={isSubmitting}
-                setNewProductCommercialName={setNewProductCommercialName}
             />
 
             <StockEntryForm

@@ -254,7 +254,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 quantity: yieldVal,
                 unit: product.unit,
                 date: movementDate,
-                // Fixed 24h format to avoid "Invalid Date"
                 time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 referenceId: lot.id,
                 notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'})`,
@@ -293,6 +292,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     type: 'HARVEST',
                     status: 'DONE',
                     date: movementDate,
+                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                     expectedYield: yieldVal,
                     servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
                     contractorName: harvestContractor,
@@ -598,9 +598,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             // 3. Update HARVEST movement
             await db.put('movements', {
-                ...originalHarvest,
-                date: newDate,
+                ...originalHarvest, // Keep original harvest movement data
                 quantity: newYield,
+                date: newDate,
+                time: originalHarvest.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                harvestLaborPricePerHa: newPrice, // This seems to be the intended field for price per ha
                 contractorName: newContractor,
                 investorName: newInvestor,
                 updatedAt: new Date().toISOString(),
@@ -640,7 +642,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     quantity: 1,
                     unit: 'UN',
                     date: newDate,
-                    time: originalHarvest.time,
+                    time: originalHarvest.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                     referenceId: originalHarvest.referenceId,
                     purchasePrice: totalCost,
                     harvestLaborPricePerHa: newPrice,
@@ -1216,7 +1218,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             </h4>
                                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                                                                 <Input
-                                                                                    label="Fecha"
+                                                                                    label="Fecha (DD/MM/YYYY)"
                                                                                     type="date"
                                                                                     value={harvestDate}
                                                                                     onChange={e => setHarvestDate(e.target.value)}

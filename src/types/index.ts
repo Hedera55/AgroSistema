@@ -103,7 +103,6 @@ export interface Product {
     activeIngredient?: string;
     commercialName?: string;
     concentration?: string; // e.g., "30%"
-    price?: number; // Price per unit (USD/KG or USD/L)
     synced?: boolean;
     createdAt?: string;
     deleted?: boolean;

@@ -109,8 +109,12 @@ export function OrderRecipeStep({
                             <Input
                                 type="number"
                                 placeholder=""
+                                min="1"
                                 value={currLoadingOrder}
-                                onChange={e => setCurrLoadingOrder(e.target.value)}
+                                onChange={e => {
+                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                    setCurrLoadingOrder(val);
+                                }}
                                 className="h-[46px]"
                             />
                         </div>

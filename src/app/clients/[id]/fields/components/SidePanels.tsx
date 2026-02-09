@@ -168,7 +168,7 @@ export function SidePanels({
                                         </div>
                                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                                             <div className="font-bold text-slate-800 text-xs uppercase tracking-widest pl-2 border-l-4 border-emerald-500">
-                                                RINDE TOTAL (kg)
+                                                RINDE ESPERADO (kg)
                                             </div>
                                         </div>
                                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

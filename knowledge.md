@@ -68,6 +68,9 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - **Technical context.md path**: C:\Users\franc\.gemini\antigravity\brain\d13ab6d8-92a1-4e16-86f2-644793823ba2
 
+- **There aren't catalog prices**: There hasn't been a catalog price for a while already, remember this. I'll write this in "knowledge.md" because it keeps coming up. There is only average sell and average purchase price.
+
+
 + . + . + . + . + . + . +
 
 

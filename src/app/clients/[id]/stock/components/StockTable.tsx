@@ -218,15 +218,31 @@ export function StockTable({
                                                     </div>
 
                                                     {showSaleNote && (
-                                                        <div className="animate-fadeIn w-full mt-2">
-                                                            <label className="block text-xs font-medium text-slate-500 mb-1">Nota de Venta</label>
-                                                            <textarea
-                                                                className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
-                                                                rows={2}
-                                                                placeholder="Escribe una nota para este movimiento..."
-                                                                value={saleNote}
-                                                                onChange={(e) => setSaleNote(e.target.value)}
-                                                            />
+                                                        <div className="animate-fadeIn w-full mt-2 flex gap-2">
+                                                            <div className="flex-1">
+                                                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota de Venta</label>
+                                                                <textarea
+                                                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
+                                                                    rows={2}
+                                                                    placeholder="Escribe una nota para este movimiento..."
+                                                                    value={saleNote}
+                                                                    onChange={(e) => setSaleNote(e.target.value)}
+                                                                    autoFocus
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setShowSaleNote(false);
+                                                                }}
+                                                                className="h-[68px] mt-5 w-12 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
+                                                                title="Confirmar nota"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                                    <polyline points="12 5 19 12 12 19"></polyline>
+                                                                </svg>
+                                                            </button>
                                                         </div>
                                                     )}
 
@@ -236,7 +252,7 @@ export function StockTable({
                                                             onClick={() => setShowSaleNote(!showSaleNote)}
                                                             className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
                                                         >
-                                                            {showSaleNote ? 'Quitar Nota' : '+ Agregar Nota'}
+                                                            {showSaleNote ? 'Quitar Nota' : (saleNote ? 'Editar Nota' : '+ Agregar Nota')}
                                                         </button>
 
                                                         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">

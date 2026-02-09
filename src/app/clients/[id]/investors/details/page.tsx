@@ -50,21 +50,35 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
         const productPurchases: Record<string, { totalQty: number, totalCost: number }> = {};
         const sortedMovements = [...movements].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+        const updateStat = (key: string, qty: number, val: number) => {
+            if (!productPurchases[key]) productPurchases[key] = { totalQty: 0, totalCost: 0 };
+            productPurchases[key].totalQty += qty;
+            productPurchases[key].totalCost += val;
+            map[key] = productPurchases[key].totalCost / productPurchases[key].totalQty;
+        };
+
         sortedMovements.forEach(m => {
             if (m.type === 'IN') {
-                if (!productPurchases[m.productId]) {
-                    productPurchases[m.productId] = { totalQty: 0, totalCost: 0 };
+                if (m.productId === 'CONSOLIDATED' && m.items) {
+                    m.items.forEach((item: any) => {
+                        // 1. Specific ID
+                        const cost = item.quantity * (item.price || 0);
+                        updateStat(item.productId, item.quantity, cost);
+                        // 2. Generic Name (for fallback)
+                        if (item.productName) {
+                            updateStat(item.productName.toLowerCase().trim(), item.quantity, cost);
+                        }
+                    });
+                } else {
+                    // 1. Specific ID
+                    const cost = m.quantity * (m.purchasePrice || 0);
+                    updateStat(m.productId, m.quantity, cost);
+                    // 2. Generic Name (for fallback)
+                    if (m.productName) {
+                        updateStat(m.productName.toLowerCase().trim(), m.quantity, cost);
+                    }
                 }
-                const product = products.find(p => p.id === m.productId);
-                const price = m.purchasePrice ?? product?.price ?? 0;
-                productPurchases[m.productId].totalQty += m.quantity;
-                productPurchases[m.productId].totalCost += (m.quantity * price);
-                map[m.productId] = productPurchases[m.productId].totalCost / productPurchases[m.productId].totalQty;
             }
-        });
-
-        products.forEach(p => {
-            if (!map[p.id]) map[p.id] = p.price || 0;
         });
 
         return map;
@@ -73,18 +87,24 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
     // Calculate Average Sale Price per Crop
     const avgSalePriceMap = useMemo(() => {
         const map: Record<string, number> = {};
-        const cropSales: Record<string, { totalQty: number, totalCost: number }> = {};
+        const productSales: Record<string, { totalQty: number, totalCost: number }> = {};
+
+        const processSale = (key: string, qty: number, price: number) => {
+            if (!key) return;
+            if (!productSales[key]) productSales[key] = { totalQty: 0, totalCost: 0 };
+            productSales[key].totalQty += qty;
+            productSales[key].totalCost += (qty * price);
+            map[key] = productSales[key].totalCost / productSales[key].totalQty;
+        };
 
         movements.forEach(m => {
             if (m.type === 'SALE') {
-                const product = products.find(p => p.id === m.productId);
-                const crop = m.crop || product?.name || 'Varios';
-                if (!cropSales[crop]) {
-                    cropSales[crop] = { totalQty: 0, totalCost: 0 };
-                }
-                cropSales[crop].totalQty += m.quantity;
-                cropSales[crop].totalCost += (m.quantity * (m.salePrice || 0));
-                map[crop] = cropSales[crop].totalCost / cropSales[crop].totalQty;
+                // 1. By Product ID
+                if (m.productId) processSale(m.productId, m.quantity, m.salePrice || 0);
+
+                // 2. By Crop/Name
+                const nameKey = (m.crop || m.productName || 'Varios').toLowerCase().trim();
+                processSale(nameKey, m.quantity, m.salePrice || 0);
             }
         });
 
@@ -167,7 +187,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         concept = 'Compra de insumos (Consolidada)';
                         detail = `Inversión: ${m.items.length} productos`;
                     } else {
-                        const price = m.purchasePrice ?? product?.price ?? 0;
+                        const price = m.purchasePrice || 0;
                         amount = m.quantity * price;
                         concept = `Compra: ${product?.name || 'Insumo'}`;
                         detail = `Inversión: ${m.quantity} ${product?.unit || 'u.'} @ USD ${price.toLocaleString()}`;
@@ -270,13 +290,26 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                 if (m.type === 'HARVEST') {
                     const product = products.find(p => p.id === m.productId);
                     const lot = lots.find(l => l.id === m.lotId);
-                    const crop = m.crop || product?.name || 'Varios';
 
-                    let avgSalePrice = avgSalePriceMap[crop];
-                    if (avgSalePrice === undefined) {
-                        avgSalePrice = referencePrices[crop] || 0;
+                    // Normalize names for lookup
+                    const displayCrop = m.crop || product?.name || 'Varios';
+                    const cropName = displayCrop.toLowerCase().trim();
+                    const productId = m.productId || '';
+                    const productName = (m.productName || product?.name || '').toLowerCase().trim();
+
+                    // Priority 1: Average Sale Price (Specific ID -> Generic Crop Name)
+                    let avgSalePrice = avgSalePriceMap[productId] || avgSalePriceMap[cropName] || 0;
+
+                    if (!avgSalePrice || avgSalePrice === 0) {
+                        // Priority 2: Weighted Average Purchase Price (Specific ID -> Generic Product Name)
+                        avgSalePrice = pppPurchaseMap[productId] || pppPurchaseMap[productName] || 0;
+                    }
+
+                    if (avgSalePrice === 0) {
+                        // Priority 3: Final fallback to Reference Price prompt
+                        avgSalePrice = referencePrices[displayCrop] || 0;
                         if (avgSalePrice === 0) {
-                            setTimeout(() => requestReferencePrice(crop), 100);
+                            setTimeout(() => requestReferencePrice(displayCrop), 100);
                         }
                     }
 
@@ -284,13 +317,13 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         id: `${m.id}-production`,
                         rawDate: m.date,
                         date: formatLedgerDate(m.date, m.time),
-                        concept: `Cosecha: ${crop}`,
+                        concept: `Cosecha: ${displayCrop}`,
                         category: 'INGRESO',
                         lote: lot?.name || '-',
-                        crop: crop,
+                        crop: displayCrop,
                         seller: '-',
                         amount: -(m.quantity * avgSalePrice),
-                        detail: `Valuación cosecha: ${m.quantity} ${product?.unit || 'u.'} @ USD ${avgSalePrice.toLocaleString()} (Venta Promedio)`
+                        detail: `Valuación cosecha: ${m.quantity} ${product?.unit || 'u.'} @ USD ${avgSalePrice.toLocaleString()} (${avgSalePriceMap[productId] || avgSalePriceMap[cropName] ? 'Venta Promedio' : (pppPurchaseMap[productId] || pppPurchaseMap[productName] ? 'Compra Promedio' : 'Ref. Manual')})`
                     });
                 }
             });

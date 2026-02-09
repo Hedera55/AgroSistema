@@ -43,7 +43,7 @@ interface ProductCatalogProps {
     handleAddUnit: () => void;
     isDuplicate: boolean;
     isSubmitting: boolean;
-    setNewProductPrice: (val: string) => void;
+    isSubmitting: boolean;
 }
 
 export function ProductCatalog({
@@ -85,7 +85,6 @@ export function ProductCatalog({
     handleAddUnit,
     isDuplicate,
     isSubmitting,
-    setNewProductPrice
 }: ProductCatalogProps) {
     if (!showCatalog) return null;
 
@@ -103,7 +102,6 @@ export function ProductCatalog({
                                     setNewProductName('');
                                     setNewProductBrand('');
                                     setNewProductPA('');
-                                    setNewProductPrice('');
                                     setShowProductForm(true);
                                     setTimeout(() => {
                                         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
@@ -166,7 +164,6 @@ export function ProductCatalog({
                                                             setNewProductPA(p.activeIngredient || '');
                                                             setNewProductType(p.type);
                                                             setNewProductUnit(p.unit);
-                                                            setNewProductPrice(p.price?.toString() || '');
                                                             setShowProductForm(true);
                                                             window.scrollTo({ top: 0, behavior: 'smooth' });
                                                         }}
