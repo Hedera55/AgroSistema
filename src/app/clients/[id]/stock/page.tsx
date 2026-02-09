@@ -406,13 +406,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const key = `${item.productId}_${brand}`;
 
             let avgPrice = 0;
+            const productMatch = products.find(p => p.id === item.productId);
 
             if (brand === 'propia') {
                 const saleData = salePricing.get(key);
                 if (saleData && saleData.totalQty > 0) {
                     avgPrice = saleData.totalVal / saleData.totalQty;
                 } else {
-                    // Fallback to purchase avg of other brands
+                    // Fallback to purchase avg of other brands of same product
                     let otherVal = 0;
                     let otherQty = 0;
                     purchasePricing.forEach((val, pKey) => {
@@ -425,7 +426,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     if (otherQty > 0) {
                         avgPrice = otherVal / otherQty;
                     } else {
-                        avgPrice = product?.price || 0;
+                        // Strict PPP: if NO movements exist for this product at all, value is 0
+                        avgPrice = 0;
                     }
                 }
             } else {
@@ -433,7 +435,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 if (purchaseData && purchaseData.totalQty > 0) {
                     avgPrice = purchaseData.totalVal / purchaseData.totalQty;
                 } else {
-                    avgPrice = product?.price || 0;
+                    // Fallback to average of ANY brand of this product if specific brand has no IN movements
+                    let totalProductVal = 0;
+                    let totalProductQty = 0;
+                    purchasePricing.forEach((val, pKey) => {
+                        if (pKey.startsWith(`${item.productId}_`)) {
+                            totalProductVal += val.totalVal;
+                            totalProductQty += val.totalQty;
+                        }
+                    });
+
+                    if (totalProductQty > 0) {
+                        avgPrice = totalProductVal / totalProductQty;
+                    } else {
+                        avgPrice = 0;
+                    }
                 }
             }
 

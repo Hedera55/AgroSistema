@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useMemo } from 'react';
+import React, { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
@@ -28,6 +28,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const [historyLimit, setHistoryLimit] = useState(10);
     const [editingPartnerIdx, setEditingPartnerIdx] = useState<number | null>(null);
     const [backupPartner, setBackupPartner] = useState<{ name: string; cuit?: string } | null>(null);
+    const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
 
     useEffect(() => {
         db.get('clients', id).then(c => {
@@ -109,6 +111,25 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         let sold = 0;
         const perPartner: Record<string, number> = {};
 
+        // Pre-calculate Weighted Average Purchase Price (WAP) for all products
+        const productWAPs = new Map<string, { totalVal: number, totalQty: number }>();
+        movements.forEach(m => {
+            if (m.type === 'IN' && !m.notes?.toLowerCase().includes('transferencia')) {
+                const entry = productWAPs.get(m.productId) || { totalVal: 0, totalQty: 0 };
+                if (m.productId === 'CONSOLIDATED' && m.items) {
+                    m.items.forEach((it: any) => {
+                        entry.totalVal += (it.quantity * (it.price || 0));
+                        entry.totalQty += it.quantity;
+                    });
+                } else {
+                    const price = m.purchasePrice ?? 0;
+                    entry.totalVal += (m.quantity * price);
+                    entry.totalQty += m.quantity;
+                }
+                productWAPs.set(m.productId, entry);
+            }
+        });
+
         movements.forEach((m: InventoryMovement) => {
             const product = products.find(p => p.id === m.productId);
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
@@ -118,7 +139,11 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 if (m.productId === 'CONSOLIDATED' && m.items) {
                     amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                 } else {
-                    const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
+                    let purchasePrice = m.purchasePrice;
+                    if (purchasePrice === undefined || purchasePrice === null) {
+                        const wap = productWAPs.get(m.productId);
+                        purchasePrice = (wap && wap.totalQty > 0) ? (wap.totalVal / wap.totalQty) : 0;
+                    }
                     amount = m.quantity * purchasePrice;
                 }
                 investedMovements += amount;
@@ -205,19 +230,66 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         const history: {
             id: string,
             date: string,
-            time?: string,
+            time: string,
             type: 'PURCHASE' | 'SALE' | 'SERVICE',
             description: string,
             amount: number,
             detail?: string
         }[] = [];
 
+        const normalizeDateTime = (dStr: string, tStr?: string) => {
+            let date = dStr || '';
+            let time = tStr || '';
+
+            // 1. Handle concatenated values like "30-01-202610:44 p.m."
+            if (!date.includes('T') && date.length > 10 && !date.includes(' ')) {
+                const potentialTime = date.substring(10).trim();
+                if (potentialTime.includes(':')) {
+                    time = potentialTime;
+                    date = date.substring(0, 10);
+                }
+            } else if (date.includes('T')) {
+                const parts = date.split('T');
+                date = parts[0];
+                if (!time) time = parts[1]?.substring(0, 5);
+            }
+
+            // 2. Normalize Date to YYYY-MM-DD
+            if (date.includes('-')) {
+                const parts = date.split('-');
+                if (parts[0].length === 2) { // DD-MM-YYYY
+                    date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
+            }
+
+            // 3. Normalize Time to 24h HH:mm
+            if (time) {
+                const lower = time.toLowerCase();
+                const match = lower.match(/(\d+):(\d+)/);
+                if (match) {
+                    let hrs = parseInt(match[1]);
+                    let mins = parseInt(match[2]);
+                    if (lower.includes('p.m.') || lower.includes('pm')) {
+                        if (hrs < 12) hrs += 12;
+                    } else if (lower.includes('a.m.') || lower.includes('am')) {
+                        if (hrs === 12) hrs = 0;
+                    }
+                    time = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+                } else {
+                    time = '00:00';
+                }
+            } else {
+                time = '00:00';
+            }
+
+            return { normalizedDate: date, normalizedTime: time };
+        };
+
         movements.forEach(m => {
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
 
-            const movementDate = m.date;
-            const movementTime = m.time || (m.date.includes('T') ? undefined : '00:00');
+            const { normalizedDate, normalizedTime } = normalizeDateTime(m.date, m.time);
 
             if (m.type === 'IN') {
                 if (m.items && m.items.length > 0) {
@@ -225,24 +297,24 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     const desc = m.items.length > 1 ? 'Varios' : m.items[0].productName;
                     history.push({
                         id: m.id,
-                        date: movementDate,
-                        time: movementTime,
+                        date: normalizedDate,
+                        time: normalizedTime,
                         type: 'PURCHASE',
                         description: `Compra: ${desc}`,
                         amount: totalAmount,
-                        detail: m.items.map((i: any) => `${i.productName}: ${i.quantity} x USD ${i.price}`).join(', ')
+                        detail: m.items.map((i: any) => `${i.productName}: ${i.quantity} ${i.unit || ''} x USD ${i.price}`).join(', ')
                     });
                 } else {
                     const product = products.find(p => p.id === m.productId);
                     const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
                     history.push({
                         id: m.id,
-                        date: movementDate,
-                        time: movementTime,
+                        date: normalizedDate,
+                        time: normalizedTime,
                         type: 'PURCHASE',
                         description: `Compra: ${product?.name || 'Insumo'}`,
                         amount: m.quantity * purchasePrice,
-                        detail: `${m.quantity} ${product?.unit || 'u.'} @ USD ${purchasePrice.toLocaleString()} / ${product?.unit || 'u.'}`
+                        detail: `${product?.name || 'Insumo'}: ${m.quantity} ${product?.unit || 'u.'} x USD ${purchasePrice.toLocaleString()}`
                     });
                 }
             } else if (m.type === 'SALE') {
@@ -250,39 +322,40 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 const salePrice = m.salePrice || 0;
                 history.push({
                     id: m.id,
-                    date: movementDate,
-                    time: movementTime,
+                    date: normalizedDate,
+                    time: normalizedTime,
                     type: 'SALE',
                     description: `Venta: ${product?.name || 'Insumo'}`,
                     amount: m.quantity * salePrice,
-                    detail: `${m.quantity} ${product?.unit || 'u.'} @ USD ${salePrice.toLocaleString()} / ${product?.unit || 'u.'}`
+                    detail: `${product?.name || 'Insumo'}: ${m.quantity} ${product?.unit || 'u.'} x USD ${salePrice.toLocaleString()}`
                 });
             }
         });
 
         orders.forEach(o => {
             if (o.servicePrice && o.servicePrice > 0) {
-                const orderDate = o.appliedAt || o.date;
-                const orderTime = o.time || (orderDate.includes('T') ? undefined : '00:00');
+                const { normalizedDate, normalizedTime } = normalizeDateTime(o.appliedAt || o.date, o.time);
                 history.push({
                     id: o.id,
-                    date: orderDate,
-                    time: orderTime,
+                    date: normalizedDate,
+                    time: normalizedTime,
                     type: 'SERVICE',
                     description: o.type === 'HARVEST' ? 'Servicio de cosecha' :
                         (o.type === 'SOWING' ? 'Siembra' : 'Pulverización') +
                         `: Orden No ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
                     amount: o.servicePrice * o.treatedArea,
-                    detail: `${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()} / ha`
+                    detail: `${o.type === 'HARVEST' ? 'Cosecha' : 'Labor'}: ${o.treatedArea} ha x USD ${o.servicePrice.toLocaleString()}`
                 });
             }
         });
 
         return history.sort((a, b) => {
-            const timeA = new Date(a.date).getTime();
-            const timeB = new Date(b.date).getTime();
-            return timeB - timeA;
+            const valA = a.date + 'T' + a.time;
+            const valB = b.date + 'T' + b.time;
+            if (valB !== valA) return valB.localeCompare(valA);
+            return b.id.localeCompare(a.id);
         });
+
     }, [movements, products, orders]);
 
     const investorBreakdown = useMemo(() => {
@@ -375,33 +448,60 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 </tr>
                             ) : (
                                 financialHistory.slice(0, historyLimit).map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
-                                            <div className="flex flex-col">
-                                                <span>{formatLedgerDate(item.date, item.time).date}</span>
-                                                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter">
-                                                    {formatLedgerDate(item.date, item.time).time}
+                                    <React.Fragment key={item.id}>
+                                        <tr
+                                            onClick={() => item.type === 'PURCHASE' ? setExpandedHistoryId(expandedHistoryId === item.id ? null : item.id) : null}
+                                            className={`transition-colors ${item.type === 'PURCHASE' ? 'cursor-pointer hover:bg-slate-50' : 'hover:bg-slate-50'}`}
+                                        >
+                                            <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                                                <div className="flex flex-col">
+                                                    <span>{formatLedgerDate(item.date, item.time).date}</span>
+                                                    <span className="text-[10px] text-slate-400 font-normal uppercase tracking-tighter">
+                                                        {formatLedgerDate(item.date, item.time).time}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' :
+                                                    item.type === 'PURCHASE' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                    {item.type === 'SALE' ? 'Ingreso' : 'Egreso'}
                                                 </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' :
-                                                item.type === 'PURCHASE' ? 'bg-orange-100 text-orange-700' :
-                                                    'bg-blue-100 text-blue-700'
-                                                }`}>
-                                                {item.type === 'SALE' ? 'Ingreso' : 'Egreso'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600 font-medium">
-                                            {item.description}
-                                        </td>
-                                        <td
-                                            title={item.detail}
-                                            className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.type === 'SALE' ? 'text-emerald-600' : 'text-red-500'
-                                                }`}>
-                                            {item.type === 'SALE' ? '+' : '-'}USD {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                    </tr>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-600 font-medium italic">
+                                                {item.description}
+                                                {item.type === 'PURCHASE' && (
+                                                    <span className="ml-2 text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">
+                                                        {expandedHistoryId === item.id ? '↑ Contraer' : '↓'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td
+                                                className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.type === 'SALE' ? 'text-emerald-600' : 'text-red-500'
+                                                    }`}>
+                                                {item.type === 'SALE' ? '+' : '-'}USD {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                        {expandedHistoryId === item.id && item.detail && (
+                                            <tr className="bg-slate-50/50 animate-fadeIn">
+                                                <td colSpan={4} className="px-8 py-3">
+                                                    <div className="text-xs text-slate-500 space-y-1 border-l-2 border-emerald-300 pl-4 py-1">
+                                                        <div className="font-bold text-slate-400 uppercase tracking-widest mb-1">Desglose de compra:</div>
+                                                        {item.detail.split(', ').map((d, i) => (
+                                                            <div key={i} className="flex gap-24 max-w-2xl">
+                                                                <span className="font-medium text-slate-600 w-56 shrink-0">{d.split(': ')[0]}</span>
+                                                                <span className="font-mono text-emerald-600 font-bold whitespace-nowrap">
+                                                                    {d.split(': ')[1]}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+
                                 ))
                             )}
                         </tbody>
@@ -516,7 +616,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                             setBackupPartner(partners[idx]);
                                                             setEditingPartnerIdx(idx);
                                                         }}
-                                                        className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                                                        className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100"
                                                         title="Editar"
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>

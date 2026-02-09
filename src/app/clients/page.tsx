@@ -84,6 +84,8 @@ export default function ClientsPage() {
     });
     const [activePartner, setActivePartner] = useState({ name: '', cuit: '' });
     const [showPartnerRibbon, setShowPartnerRibbon] = useState(false);
+    const [editingPartnerIdx, setEditingPartnerIdx] = useState<number | null>(null);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -383,22 +385,33 @@ export default function ClientsPage() {
                                             type="button"
                                             onClick={() => {
                                                 if (activePartner.name) {
-                                                    setNewClient({
-                                                        ...newClient,
-                                                        partners: [...newClient.partners, { ...activePartner }]
-                                                    });
+                                                    if (editingPartnerIdx !== null) {
+                                                        const p = [...newClient.partners];
+                                                        p[editingPartnerIdx] = { ...activePartner };
+                                                        setNewClient({ ...newClient, partners: p });
+                                                        setEditingPartnerIdx(null);
+                                                    } else {
+                                                        setNewClient({
+                                                            ...newClient,
+                                                            partners: [...newClient.partners, { ...activePartner }]
+                                                        });
+                                                    }
                                                     setActivePartner({ name: '', cuit: '' });
                                                     setShowPartnerRibbon(false);
                                                 }
                                             }}
                                             className={`h-10 w-10 flex items-center justify-center rounded-lg shadow-sm transition-all ${activePartner.name ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
-                                            title="Agregar a la lista"
+                                            title={editingPartnerIdx !== null ? "Guardar cambios" : "Agregar a la lista"}
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setShowPartnerRibbon(false)}
+                                            onClick={() => {
+                                                setShowPartnerRibbon(false);
+                                                setEditingPartnerIdx(null);
+                                                setActivePartner({ name: '', cuit: '' });
+                                            }}
                                             className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-lg transition-colors shadow-sm"
                                             title="Cerrar"
                                         >
@@ -419,17 +432,31 @@ export default function ClientsPage() {
                                                 <div className="font-bold text-slate-900 text-sm">{partner.name}</div>
                                                 {partner.cuit && <div className="text-[10px] text-slate-400 font-mono tracking-wider">{partner.cuit}</div>}
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const p = newClient.partners.filter((_, i) => i !== idx);
-                                                    setNewClient({ ...newClient, partners: p });
-                                                }}
-                                                className="text-slate-300 hover:text-red-500 p-2 transition-colors"
-                                                title="Eliminar Inversor"
-                                            >
-                                                ✕
-                                            </button>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setActivePartner({ ...partner });
+                                                        setEditingPartnerIdx(idx);
+                                                        setShowPartnerRibbon(true);
+                                                    }}
+                                                    className="text-slate-300 hover:text-slate-600 p-2 transition-colors"
+                                                    title="Editar Inversor"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const p = newClient.partners.filter((_, i) => i !== idx);
+                                                        setNewClient({ ...newClient, partners: p });
+                                                    }}
+                                                    className="text-slate-300 hover:text-red-500 p-2 transition-colors"
+                                                    title="Eliminar Inversor"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

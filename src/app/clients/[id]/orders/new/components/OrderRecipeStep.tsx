@@ -251,6 +251,7 @@ export function OrderRecipeStep({
                                 <div key={item.id} className="flex justify-between items-center p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
                                     <div>
                                         <div className="font-bold text-slate-800 text-sm">
+                                            {item.loadingOrder && <span className="text-emerald-600 mr-1.5 font-black">#{item.loadingOrder}</span>}
                                             {item.productName} {item.commercialName ? `| ${item.commercialName}` : (item.brandName === 'Propia' ? '| Propia' : '')}
                                         </div>
                                         <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4 uppercase font-medium">

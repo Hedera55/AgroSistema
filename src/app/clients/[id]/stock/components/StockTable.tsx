@@ -119,6 +119,7 @@ export function StockTable({
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio PPP</th>
                                 {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (USD)</th>
                                 )}
@@ -150,6 +151,9 @@ export function StockTable({
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                             {typeLabels[item.productType] || item.productType}
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-medium text-slate-400">
+                                            USD {(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
                                         {warehouses.find(w => w.id === activeWarehouseId)?.name !== 'Acopio de Granos' && (
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
                                                 USD {(item.quantity * (item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -161,7 +165,7 @@ export function StockTable({
                                     </tr>
                                     {sellingStockId === item.id && (
                                         <tr className="bg-emerald-50/50 animate-fadeIn">
-                                            <td colSpan={6} className="px-6 py-4">
+                                            <td colSpan={7} className="px-6 py-4">
                                                 <form onSubmit={handleSaleSubmit} className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
                                                     <div className="flex flex-wrap items-end gap-4">
                                                         <div className="flex-1 min-w-[120px]">
