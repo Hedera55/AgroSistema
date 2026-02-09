@@ -19,7 +19,7 @@ export function calculateStockValue(quantity: number, price: number = 0): number
 export function calculateTotalInvestment(stock: ClientStock[], products: Product[]): number {
     return stock.reduce((total, item) => {
         const product = products.find(p => p.id === item.productId);
-        const price = product?.price || 0;
+        const price = 0;
         return total + (item.quantity * price);
     }, 0);
 }

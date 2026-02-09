@@ -17,8 +17,8 @@ describe('Financial Utilities', () => {
 
     describe('calculateTotalInvestment', () => {
         const mockProducts: Product[] = [
-            { id: 'p1', name: 'Product 1', type: 'HERBICIDE', unit: 'L', price: 10 },
-            { id: 'p2', name: 'Product 2', type: 'FERTILIZER', unit: 'KG', price: 20 },
+            { id: 'p1', name: 'Product 1', type: 'HERBICIDE', unit: 'L' },
+            { id: 'p2', name: 'Product 2', type: 'FERTILIZER', unit: 'KG' },
         ];
 
         const mockStock: ClientStock[] = [
@@ -27,8 +27,8 @@ describe('Financial Utilities', () => {
         ];
 
         it('should calculate the total investment correctly', () => {
-            // (5 * 10) + (2 * 20) = 50 + 40 = 90
-            expect(calculateTotalInvestment(mockStock, mockProducts)).toBe(90);
+            // (5 * 0) + (2 * 0) = 0
+            expect(calculateTotalInvestment(mockStock, mockProducts)).toBe(0);
         });
 
         it('should return 0 if stock is empty', () => {

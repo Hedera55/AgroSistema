@@ -196,7 +196,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 brandName: 'Propia', // Enforced
                 commercialName: 'Propia', // Fix: Set commercial name to ensure visibility in dropdowns
                 unit: 'kg',
-                price: 0,
                 createdAt: new Date().toISOString(),
                 synced: false
             });

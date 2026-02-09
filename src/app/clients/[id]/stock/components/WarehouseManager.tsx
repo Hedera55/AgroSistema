@@ -26,6 +26,7 @@ interface WarehouseManagerProps {
     setShowMovePanel: (val: boolean) => void;
     isReadOnly: boolean;
     warehouseContainerRef: React.RefObject<HTMLDivElement | null>;
+    stock: any[]; // ClientStock[]
 }
 
 export function WarehouseManager({
@@ -49,7 +50,8 @@ export function WarehouseManager({
     setSellingStockId,
     setShowMovePanel,
     isReadOnly,
-    warehouseContainerRef
+    warehouseContainerRef,
+    stock
 }: WarehouseManagerProps) {
     if (!showWarehouses || isReadOnly) return null;
 

@@ -43,7 +43,6 @@ interface ProductCatalogProps {
     handleAddUnit: () => void;
     isDuplicate: boolean;
     isSubmitting: boolean;
-    isSubmitting: boolean;
 }
 
 export function ProductCatalog({

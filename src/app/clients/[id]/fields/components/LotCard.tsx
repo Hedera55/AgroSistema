@@ -34,8 +34,9 @@ export function LotCard({
     onCancelHarvest,
     onClearCrop,
     fetchSowingDetails,
-    fetchHarvestDetails
-}: LotCardProps) {
+    fetchHarvestDetails,
+    activePanel
+}: LotCardProps & { activePanel: any }) {
     return (
         <div
             className={`flex flex-col gap-3 p-3 rounded-xl border-2 transition-all group cursor-pointer ${selectedLotId === lot.id ? 'border-emerald-500 bg-slate-50' : 'bg-slate-50 border-slate-100'}`}

@@ -1172,7 +1172,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 showWarehouseForm={showWarehouseForm}
                 setShowWarehouseForm={setShowWarehouseForm}
                 warehouses={warehouses}
-                addWarehouse={addWarehouse}
+                addWarehouse={async (name) => { await addWarehouse(name); }}
                 updateWarehouse={updateWarehouse}
                 deleteWarehouse={deleteWarehouse}
                 activeWarehouseId={activeWarehouseId}

@@ -306,7 +306,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     });
                 } else {
                     const product = products.find(p => p.id === m.productId);
-                    const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : (product?.price || 0);
+                    const purchasePrice = (m.purchasePrice !== undefined && m.purchasePrice !== null) ? m.purchasePrice : 0;
                     history.push({
                         id: m.id,
                         date: normalizedDate,
