@@ -78,7 +78,7 @@ const mappers = {
         order_number: o.orderNumber,
         client_id: o.clientId,
         farm_id: (o.farmId && o.farmId !== '') ? o.farmId : null,
-        lot_id: (o.lotId && o.lotId !== '') ? o.lotId : null,
+        lot_id: (o.lotId && o.lotId !== '') ? o.lotId : (o.lotIds && o.lotIds.length > 0 ? o.lotIds[0] : null),
         warehouse_id: (o.warehouseId && o.warehouseId !== '') ? o.warehouseId : null,
         type: o.type,
         status: o.status,

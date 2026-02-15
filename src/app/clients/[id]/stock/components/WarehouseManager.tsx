@@ -13,8 +13,9 @@ interface WarehouseManagerProps {
     addWarehouse: (name: string) => Promise<void>;
     updateWarehouse: (w: Warehouse) => Promise<void>;
     deleteWarehouse: (id: string) => Promise<void>;
-    activeWarehouseId: string | null;
-    setActiveWarehouseId: (id: string | null) => void;
+    activeWarehouseIds: string[];
+    toggleWarehouseSelection: (id: string) => void;
+    setAllWarehouses: (ids: string[]) => void;
     selectedInManagerId: string | null;
     setSelectedInManagerId: (id: string | null) => void;
     editingWarehouseId: string | null;
@@ -38,8 +39,9 @@ export function WarehouseManager({
     addWarehouse,
     updateWarehouse,
     deleteWarehouse,
-    activeWarehouseId,
-    setActiveWarehouseId,
+    activeWarehouseIds,
+    toggleWarehouseSelection,
+    setAllWarehouses,
     selectedInManagerId,
     setSelectedInManagerId,
     editingWarehouseId,
@@ -60,6 +62,14 @@ export function WarehouseManager({
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold text-slate-900">Galpones Disponibles</h3>
                 <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => {
+                            setAllWarehouses(warehouses.map(w => w.id));
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                    >
+                        Seleccionar todos
+                    </button>
                     <button
                         onClick={() => setShowWarehouseForm(!showWarehouseForm)}
                         className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
@@ -117,11 +127,7 @@ export function WarehouseManager({
                         key={w.id}
                         onClick={() => {
                             if (selectedInManagerId === w.id) {
-                                if (activeWarehouseId === w.id) {
-                                    setActiveWarehouseId(null);
-                                } else {
-                                    setActiveWarehouseId(w.id);
-                                }
+                                toggleWarehouseSelection(w.id);
                                 setSelectedStockIds([]);
                                 setSellingStockId(null);
                                 setShowMovePanel(false);
@@ -129,11 +135,11 @@ export function WarehouseManager({
                                 setSelectedInManagerId(w.id);
                             }
                         }}
-                        className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseId === w.id ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
                     >
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3 flex-1">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseId === w.id ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                     📦
                                 </div>
                                 <div className="flex-1">
@@ -164,23 +170,23 @@ export function WarehouseManager({
                                             </button>
                                         </div>
                                     ) : (
-                                        <span className={`font-bold block ${activeWarehouseId === w.id ? 'text-emerald-900' : 'text-slate-700'}`}>{w.name}</span>
+                                        <span className={`font-bold block ${activeWarehouseIds.includes(w.id) ? 'text-emerald-900' : 'text-slate-700'}`}>{w.name}</span>
                                     )}
                                 </div>
                             </div>
 
                             <div className="flex gap-2 items-center">
-                                {activeWarehouseId === w.id && editingWarehouseId !== w.id && (
+                                {activeWarehouseIds.includes(w.id) && editingWarehouseId !== w.id && (
                                     <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-2 py-1 bg-emerald-100 rounded border border-emerald-200">Activo</span>
                                 )}
-                                {(selectedInManagerId === w.id || activeWarehouseId === w.id) && (
+                                {(selectedInManagerId === w.id || activeWarehouseIds.includes(w.id)) && (
                                     <div className="flex gap-2 animate-fadeIn" onClick={e => e.stopPropagation()}>
                                         {editingWarehouseId !== w.id && (
                                             <>
-                                                {activeWarehouseId !== w.id && (
+                                                {!activeWarehouseIds.includes(w.id) && (
                                                     <button
                                                         onClick={() => {
-                                                            setActiveWarehouseId(w.id);
+                                                            toggleWarehouseSelection(w.id);
                                                             setSelectedStockIds([]);
                                                             setSellingStockId(null);
                                                             setShowMovePanel(false);

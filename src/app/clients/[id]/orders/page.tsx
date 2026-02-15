@@ -110,7 +110,9 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         })); // The hook already sorts by date
     }, [rawOrders, farms, lots, loading, role, profile]);
 
-    const { generateOrderPDF } = usePDF();
+    const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
+    const [statusPopupOrder, setStatusPopupOrder] = useState<Order | null>(null);
+    const [statusPopupDate, setStatusPopupDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -138,19 +140,14 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
         const nextStatus = order.status === 'DONE' ? 'PENDING' : 'DONE';
 
-        if (nextStatus === 'DONE' && (!order.servicePrice || order.servicePrice === 0)) {
-            setPriceModalOrder(order);
-            setTempPrice('');
-            setTempInvestor(order.investorName || '');
-            setIsApplyingFromStatus(true);
+        if (nextStatus === 'DONE') {
+            setStatusPopupOrder(order);
+            setStatusPopupDate(new Date().toISOString().split('T')[0]);
             return;
         }
 
         try {
-            const auditData = nextStatus === 'DONE' ? {
-                appliedBy: displayName || 'Sistema',
-                appliedAt: new Date().toISOString()
-            } : {
+            const auditData = {
                 appliedBy: undefined,
                 appliedAt: undefined
             };
@@ -164,15 +161,40 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     await db.put('lots', {
                         ...lot,
                         status: 'EMPTY',
-                        cropSpecies: '',     // Clear crop
-                        yield: 0,            // Clear yield
-                        observedYield: 0,    // Clear observed
+                        cropSpecies: '',
+                        yield: 0,
+                        observedYield: 0,
                         updatedAt: new Date().toISOString()
                     });
-                    // Refresh local state to reflect change immediately (optional but good)
                     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: 'EMPTY', cropSpecies: '', yield: 0, observedYield: 0 } : l));
                 }
             }
+        } catch (e) {
+            alert('Error al actualizar el estado');
+        }
+    };
+
+    const handleConfirmStatus = async () => {
+        if (!statusPopupOrder) return;
+
+        // If price is missing, trigger the price modal
+        if (!statusPopupOrder.servicePrice || statusPopupOrder.servicePrice === 0) {
+            setPriceModalOrder(statusPopupOrder);
+            setTempPrice('');
+            setTempInvestor(statusPopupOrder.investorName || '');
+            setIsApplyingFromStatus(true);
+            setStatusPopupOrder(null);
+            return;
+        }
+
+        try {
+            const auditData = {
+                appliedBy: displayName || 'Sistema',
+                appliedAt: new Date(statusPopupDate + 'T12:00:00Z').toISOString()
+            };
+
+            await updateOrderStatus(statusPopupOrder.id, 'DONE', displayName || 'Sistema', auditData, statusPopupOrder.servicePrice);
+            setStatusPopupOrder(null);
         } catch (e) {
             alert('Error al actualizar el estado');
         }
@@ -191,15 +213,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             if (isApplyingFromStatus) {
                 const auditData = {
                     appliedBy: displayName || 'Sistema',
-                    appliedAt: new Date().toISOString()
+                    appliedAt: new Date(statusPopupDate + 'T12:00:00Z').toISOString()
                 };
-                // Capture investor name in the update
                 const orderWithInvestor = { ...priceModalOrder, investorName: tempInvestor };
                 await db.put('orders', { ...orderWithInvestor, status: 'DONE', servicePrice: price, ...auditData, updatedAt: new Date().toISOString(), synced: false });
-                // We also need to call updateOrderStatus to trigger any hooks if they exist, 
-                // but updateOrderStatus in useOrders currently only takes status, user, audit, price.
-                // I'll update the hook or just manually update if the hook is simple.
-                // Let's check updateOrderStatus implementation.
+                setIsApplyingFromStatus(false);
             } else {
                 await db.put('orders', { ...priceModalOrder, servicePrice: price, investorName: tempInvestor, updatedAt: new Date().toISOString(), synced: false });
             }
@@ -309,14 +327,15 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nro de orden</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Emisión</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha Aplicación</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ubicación</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Tipo</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Estado</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Monto Total</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Autor</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Nro de orden</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha Emisión</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha de aplicación efectiva</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Ubicación</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Tipo</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Estado</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Monto Total</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha de aplicación planeada</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Autor</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
                                 </tr>
                             </thead>
@@ -386,20 +405,53 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                 <span className="text-slate-300">---</span>
                                             )}
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
+                                            <div className="text-slate-600 font-normal">
+                                                {order.isDateRange ? (
+                                                    `${order.applicationStart?.split('-').reverse().join('/')} al ${order.applicationEnd?.split('-').reverse().join('/')}`
+                                                ) : (
+                                                    order.applicationDate?.split('-').reverse().join('/')
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
                                             {order.createdBy || 'Sistema'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
-                                            <div className="flex justify-end gap-2">
+                                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
+                                            <div className="grid grid-cols-3 gap-1 w-fit ml-auto">
+                                                <div className="relative group/tooltip">
+                                                    <button
+                                                        onClick={() => generateInsumosPDF(order, client)}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
+                                                    >
+                                                        N
+                                                    </button>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        Insumos
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative group/tooltip">
+                                                    <button
+                                                        onClick={() => generateRemitoPDF(order, client)}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
+                                                    >
+                                                        R
+                                                    </button>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        Remito
+                                                    </div>
+                                                </div>
+
                                                 <div className="relative group/tooltip">
                                                     <button
                                                         onClick={() => handleDownload(order)}
-                                                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest transition-colors"
+                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-slate-100 text-slate-500 hover:bg-slate-200"
                                                     >
-                                                        pdf
+                                                        O
                                                     </button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        descargar pdf
+                                                        Carga
                                                     </div>
                                                 </div>
 
@@ -409,23 +461,41 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                             e.stopPropagation();
                                                             setSelectedOrderDetailOrder(order);
                                                         }}
-                                                        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-500 text-red-500 hover:bg-red-50'}`}
+                                                        className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
                                                     >
                                                         F
                                                     </button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        {order.facturaImageUrl ? 'Factura Adjunta' : 'Falta Factura'}
+                                                        Factura
                                                     </div>
                                                 </div>
 
                                                 {!isReadOnly && (
-                                                    <button
-                                                        onClick={() => handleDeleteOrder(order.id)}
-                                                        className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                                                        title="Eliminar Orden"
-                                                    >
-                                                        Elim.
-                                                    </button>
+                                                    <>
+                                                        <div className="relative group/tooltip">
+                                                            <Link href={`/clients/${id}/orders/new?editId=${order.id}`}>
+                                                                <button
+                                                                    className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                                                                >
+                                                                    ✎
+                                                                </button>
+                                                            </Link>
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                                Editar
+                                                            </div>
+                                                        </div>
+                                                        <div className="relative group/tooltip">
+                                                            <button
+                                                                onClick={() => handleDeleteOrder(order.id)}
+                                                                className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-700"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                                Eliminar
+                                                            </div>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -468,6 +538,33 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     </Link>
                 </div>
             )}
+            {/* Status Change Date Modal */}
+            {statusPopupOrder && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fadeIn">
+                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border border-slate-100 flex flex-col gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Confirmar Aplicación</h3>
+                            <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                                Seleccione la fecha real en la que se realizó la labor para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
+                            </p>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de Aplicación</label>
+                            <input
+                                type="date"
+                                className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm shadow-sm"
+                                value={statusPopupDate}
+                                onChange={e => setStatusPopupDate(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <Button variant="outline" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>
+                            <Button onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar Aplicación</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Price & Partner Selection Modal */}
             {priceModalOrder && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
@@ -520,12 +617,14 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
             {/* Order Detail View (Inline) */}
             <div ref={detailsRef} className="transition-all duration-500 ease-in-out">
-                {selectedOrderDetailOrder && (
+                {selectedOrderDetailOrder && client && (
                     <OrderDetailView
-                        order={selectedOrderDetailOrder}
+                        order={selectedOrderDetailOrder as any}
+                        client={client}
                         onClose={() => setSelectedOrderDetailOrder(null)}
-                        createdBy={selectedOrderDetailOrder.createdBy}
                         warehouses={warehouses}
+                        createdBy={displayName || 'Sistema'}
+                        lots={lots}
                     />
                 )}
             </div>

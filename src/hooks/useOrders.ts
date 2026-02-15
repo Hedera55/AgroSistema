@@ -33,6 +33,71 @@ export function useOrders(clientId: string) {
         displayName: string
     ) => {
         try {
+            // Check if editing (id already exists)
+            const existingOrder = await db.get('orders', order.id);
+            if (existingOrder) {
+                // REVERSAL LOGIC: Restore stock from previous movements
+                const allMovements = await db.getAll('movements');
+                const originalMovements = allMovements.filter((m: any) => m.referenceId === order.id && !m.deleted);
+
+                for (const m of originalMovements) {
+                    // Restore stock
+                    const stockItems = await db.getAll('stock');
+                    const candidate = stockItems.find((s: ClientStock) =>
+                        s.productId === m.productId &&
+                        s.warehouseId === m.warehouseId &&
+                        s.clientId === clientId
+                    );
+
+                    if (candidate) {
+                        await db.put('stock', {
+                            ...candidate,
+                            quantity: candidate.quantity + m.quantity,
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        });
+                    } else {
+                        // If stock entry was deleted for some reason, recreate it
+                        await db.put('stock', {
+                            id: generateId(),
+                            clientId: clientId,
+                            productId: m.productId,
+                            warehouseId: m.warehouseId,
+                            quantity: m.quantity,
+                            lastUpdated: new Date().toISOString(),
+                            synced: false
+                        });
+                    }
+
+                    // Soft-delete old movement
+                    await db.put('movements', {
+                        ...m,
+                        deleted: true,
+                        deletedAt: new Date().toISOString(),
+                        synced: false
+                    });
+                }
+
+                await db.logOrderActivity({
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    clientId: order.clientId,
+                    action: 'STATUS_CHANGE',
+                    description: 'Orden editada/actualizada',
+                    userName: displayName
+                });
+            } else {
+                // New Order
+                await db.logOrderActivity({
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    clientId: order.clientId,
+                    action: 'CREATE',
+                    description: 'Orden creada',
+                    userName: displayName
+                });
+            }
+
             // 1. Save Order
             const finalOrder = {
                 ...order,
@@ -41,48 +106,72 @@ export function useOrders(clientId: string) {
             };
             await db.put('orders', finalOrder);
 
-            // 2. Log activity
-            await db.logOrderActivity({
-                orderId: order.id,
-                orderNumber: order.orderNumber,
-                clientId: order.clientId,
-                action: 'CREATE',
-                description: 'Orden creada',
-                userName: displayName
-            });
-
             // 3. Deduct Stock & Record Movements
-            // We fetch the latest stock here to ensure atomic-like correctness
             const currentStock = await db.getAll('stock');
             const clientStock = currentStock.filter((s: ClientStock) => s.clientId === clientId);
 
             for (const item of items) {
-                // Fix: Strictly use item-level warehouseId to avoid "phantom" stock rows if order.warehouseId is empty
+                // SKIP stock deduction for Virtual Deficits
+                if (item.isVirtualDéficit) continue;
+
                 const effectiveWarehouseId = item.warehouseId;
-                const stockItem = clientStock.find((s: ClientStock) =>
+                if (!effectiveWarehouseId) continue;
+
+                // Find all stock candidates for this product and warehouse
+                const candidates = clientStock.filter((s: ClientStock) =>
                     s.productId === item.productId &&
                     s.warehouseId === effectiveWarehouseId
-                );
+                ).sort((a: ClientStock, b: ClientStock) => {
+                    const aHasPresentation = !!(a.presentationLabel || a.presentationContent);
+                    const bHasPresentation = !!(b.presentationLabel || b.presentationContent);
+                    if (aHasPresentation !== bHasPresentation) return aHasPresentation ? 1 : -1;
+                    return (a.quantity || 0) - (b.quantity || 0);
+                });
 
-                if (stockItem) {
-                    await db.put('stock', {
-                        ...stockItem,
-                        quantity: stockItem.quantity - item.totalQuantity,
-                        updatedAt: new Date().toISOString(),
-                        lastUpdated: new Date().toISOString(),
-                        synced: false
-                    });
-                } else {
-                    await db.put('stock', {
-                        id: generateId(),
-                        clientId: order.clientId,
-                        warehouseId: effectiveWarehouseId,
-                        productId: item.productId,
-                        quantity: -item.totalQuantity,
-                        updatedAt: new Date().toISOString(),
-                        lastUpdated: new Date().toISOString(),
-                        synced: false
-                    });
+                let remaining = item.totalQuantity;
+
+                if (candidates.length > 0) {
+                    for (const stockItem of candidates) {
+                        if (remaining <= 0.0001) break;
+
+                        const deductAmount = Math.min(stockItem.quantity, remaining);
+                        const newQuantity = stockItem.quantity - deductAmount;
+
+                        await db.put('stock', {
+                            ...stockItem,
+                            quantity: newQuantity,
+                            updatedAt: new Date().toISOString(),
+                            lastUpdated: new Date().toISOString(),
+                            synced: false
+                        });
+
+                        remaining -= deductAmount;
+                    }
+                }
+
+                // If still remaining (no stock or not enough), create/update a negative entry
+                if (remaining > 0.0001) {
+                    if (candidates.length > 0) {
+                        const firstCandidate = candidates[0];
+                        const currentInDb = await db.get('stock', firstCandidate.id) as ClientStock;
+                        await db.put('stock', {
+                            ...currentInDb,
+                            quantity: (currentInDb.quantity || 0) - remaining,
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        });
+                    } else {
+                        await db.put('stock', {
+                            id: generateId(),
+                            clientId: order.clientId,
+                            warehouseId: effectiveWarehouseId,
+                            productId: item.productId,
+                            quantity: -remaining,
+                            updatedAt: new Date().toISOString(),
+                            lastUpdated: new Date().toISOString(),
+                            synced: false
+                        });
+                    }
                 }
 
                 // Record Movement
@@ -95,7 +184,7 @@ export function useOrders(clientId: string) {
                     type: 'OUT',
                     quantity: item.totalQuantity,
                     unit: item.unit,
-                    date: new Date().toISOString(),
+                    date: order.date,
                     time: new Date().toTimeString().split(' ')[0].substring(0, 5),
                     referenceId: order.id,
                     notes: `Orden Nro ${order.orderNumber ?? '-'}`,
@@ -111,7 +200,7 @@ export function useOrders(clientId: string) {
             await refreshOrders();
             return true;
         } catch (error) {
-            console.error('Error adding order:', error);
+            console.error('Error adding/updating order:', error);
             throw error;
         }
     };
@@ -141,7 +230,7 @@ export function useOrders(clientId: string) {
 
             // --- AUTOMATED LOT STATUS UPDATE ---
             // If it's a SOWING order and it's being marked as DONE, update the Lot status
-            if (order.type === 'SOWING' && newStatus === 'DONE') {
+            if (order.type === 'SOWING' && newStatus === 'DONE' && order.lotId) {
                 const lot = await db.get('lots', order.lotId);
                 if (lot) {
                     // Find the seed item in the order

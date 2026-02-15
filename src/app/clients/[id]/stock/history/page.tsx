@@ -3,11 +3,16 @@
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { InventoryMovement, Order, Product, Warehouse } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem } from '@/types';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
+import { StockEntryForm } from '../components/StockEntryForm';
+import { useClientStock, useInventory } from '@/hooks/useInventory';
+import { useWarehouses } from '@/hooks/useWarehouses';
+import { generateId } from '@/lib/uuid';
+import { syncService } from '@/services/sync';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -27,15 +32,56 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [selectedOrder, setSelectedOrder] = useState<(Order & { farmName?: string; lotName?: string; hectares?: number }) | null>(null);
     const { displayName } = useAuth();
 
+    // Edit state
+    const [showEditForm, setShowEditForm] = useState(false);
+    const [editingMovement, setEditingMovement] = useState<InventoryMovement | null>(null);
+    const [client, setClient] = useState<Client | null>(null);
+    const { stock, updateStock } = useClientStock(clientId);
+    const { warehouses: warehousesList } = useWarehouses(clientId);
+    const { products: allProductsList } = useInventory(); // To make it match StockPage's behavior if needed
+
+    // StockEntryForm Required States
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' });
+    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; presentationLabel?: string; presentationContent?: string; presentationAmount?: string; }[]>([]);
+    const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
+    const [facturaDate, setFacturaDate] = useState('');
+    const [dueDate, setDueDate] = useState('');
+    const [selectedSeller, setSelectedSeller] = useState('');
+    const [note, setNote] = useState('');
+    const [showNote, setShowNote] = useState(false);
+    const [facturaFile, setFacturaFile] = useState<File | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [facturaUploading, setFacturaUploading] = useState(false);
+    const [availableSellers, setAvailableSellers] = useState<string[]>([]);
+    const [showSellerInput, setShowSellerInput] = useState(false);
+    const [showSellerDelete, setShowSellerDelete] = useState(false);
+    const [sellerInputValue, setSellerInputValue] = useState('');
+    const [typeLabels] = useState<Record<ProductType, string>>({
+        HERBICIDE: 'HERBICIDA',
+        FERTILIZER: 'FERTILIZANTE',
+        SEED: 'SEMILLA/GRANOS',
+        FUNGICIDE: 'FUNGICIDA',
+        INSECTICIDE: 'INSECTICIDA',
+        COADYUVANTE: 'COADYUVANTE',
+        INOCULANTE: 'INOCULANTE',
+        OTHER: 'OTR'
+    });
+
+
     async function loadData() {
-        const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots] = await Promise.all([
+        const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
             db.getAll('movements'),
             db.getAll('products'),
             db.getAll('orders'),
             db.getAll('warehouses'),
             db.getAll('farms'),
-            db.getAll('lots')
+            db.getAll('lots'),
+            db.getAll('clients')
         ]);
+
+        const currentClient = allClients.find((c: Client) => c.id === clientId);
+        setClient(currentClient || null);
 
         const clientMovements = allMovements
             .filter((m: InventoryMovement) =>
@@ -179,6 +225,162 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         };
     };
 
+    const handleEditMovement = (m: InventoryMovement) => {
+        setEditingMovement(m);
+        setSelectedWarehouseId(m.warehouseId || '');
+        setNote(m.notes || '');
+        setFacturaDate(m.facturaDate || '');
+        setDueDate(m.dueDate || '');
+        if (m.items && m.items.length > 0) {
+            setStockItems(m.items.map(it => ({
+                productId: it.productId,
+                quantity: it.quantity.toString(),
+                price: it.price?.toString() || '',
+                tempBrand: it.productBrand || '',
+                presentationLabel: it.presentationLabel || '',
+                presentationContent: it.presentationContent?.toString() || '',
+                presentationAmount: it.presentationAmount?.toString() || ''
+            })));
+        } else {
+            setStockItems([{
+                productId: m.productId,
+                quantity: m.quantity.toString(),
+                price: (m.purchasePrice || m.salePrice || 0).toString(),
+                tempBrand: m.productBrand || '',
+                presentationLabel: '',
+                presentationContent: '',
+                presentationAmount: ''
+            }]);
+        }
+
+        setShowEditForm(true);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    };
+
+    const handleEditSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingMovement) return;
+
+        // Include active items if present (duplicated from StockPage logic)
+        const allItemsToProcess = [...stockItems];
+        if (activeStockItem.productId && activeStockItem.quantity) {
+            allItemsToProcess.push(activeStockItem);
+        }
+        const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
+        if (validItems.length === 0) return;
+
+        setIsSubmitting(true);
+        try {
+            // 1. REVERT OLD STOCK EFFECT
+            if (editingMovement.type === 'IN' || editingMovement.type === 'HARVEST') {
+                const oldItems = editingMovement.items || [{ productId: editingMovement.productId, quantity: editingMovement.quantity, presentationLabel: (editingMovement as any).presentationLabel, presentationContent: (editingMovement as any).presentationContent }];
+                for (const it of oldItems) {
+                    const st = stock.find(s =>
+                        s.productId === it.productId &&
+                        s.warehouseId === editingMovement.warehouseId &&
+                        (s.presentationLabel || '') === (it.presentationLabel || '') &&
+                        (s.presentationContent || 0) === (it.presentationContent || 0)
+                    );
+                    if (st) {
+                        await updateStock({ ...st, quantity: st.quantity - it.quantity });
+                    }
+                }
+            } else if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
+                const oldItems = editingMovement.items || [{ productId: editingMovement.productId, quantity: editingMovement.quantity, presentationLabel: (editingMovement as any).presentationLabel, presentationContent: (editingMovement as any).presentationContent }];
+                for (const it of oldItems) {
+                    const st = stock.find(s =>
+                        s.productId === it.productId &&
+                        s.warehouseId === editingMovement.warehouseId &&
+                        (s.presentationLabel || '') === (it.presentationLabel || '') &&
+                        (s.presentationContent || 0) === (it.presentationContent || 0)
+                    );
+                    if (st) {
+                        await updateStock({ ...st, quantity: st.quantity + it.quantity });
+                    }
+                }
+            }
+
+            // 2. APPLY NEW STOCK EFFECT & PREPARE MOVEMENT DATA
+            const now = new Date();
+            const movementItems: MovementItem[] = [];
+
+            for (const item of validItems) {
+                const product = productsData[item.productId];
+                const qtyNum = parseFloat(item.quantity.replace(',', '.'));
+                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : 0;
+                const pLabel = (item.presentationLabel || '').trim();
+                const pContent = item.presentationContent ? parseFloat(item.presentationContent.replace(',', '.')) : 0;
+                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.replace(',', '.')) : 0;
+
+                // Standard stock update logic
+                const existing = stock.find(s =>
+                    s.productId === item.productId &&
+                    s.warehouseId === selectedWarehouseId &&
+                    (s.presentationLabel || '') === pLabel &&
+                    (s.presentationContent || 0) === pContent
+                );
+                const stockId = existing ? existing.id : generateId();
+                const updatedStockItem: ClientStock = {
+                    id: stockId,
+                    clientId: clientId,
+                    warehouseId: selectedWarehouseId || undefined,
+                    productId: item.productId,
+                    productBrand: item.tempBrand || product?.brandName || '',
+                    quantity: (existing ? existing.quantity : 0) + (editingMovement.type === 'IN' ? qtyNum : -qtyNum),
+                    lastUpdated: now.toISOString(),
+                    updatedAt: now.toISOString(),
+                    presentationLabel: pLabel || undefined,
+                    presentationContent: pContent || undefined,
+                    presentationAmount: existing
+                        ? (existing.presentationAmount || 0) + (editingMovement.type === 'IN' ? pAmount : -pAmount)
+                        : pAmount
+                };
+                await updateStock(updatedStockItem);
+
+                movementItems.push({
+                    id: generateId(),
+                    productId: item.productId,
+                    productName: product?.name || 'Unknown',
+                    productCommercialName: product?.commercialName || '-',
+                    productBrand: item.tempBrand || product?.brandName || '',
+                    quantity: qtyNum,
+                    unit: product?.unit || 'L',
+                    price: priceNum,
+                    sellerName: selectedSeller || undefined,
+                    presentationLabel: pLabel || undefined,
+                    presentationContent: pContent || 0,
+                    presentationAmount: pAmount || 0
+                });
+            }
+
+            // 3. UPDATE MOVEMENT RECORD
+            const updatedMovement: InventoryMovement = {
+                ...editingMovement,
+                warehouseId: selectedWarehouseId || undefined,
+                notes: note,
+                facturaDate: facturaDate || undefined,
+                dueDate: dueDate || undefined,
+                investors: selectedInvestors,
+                sellerName: selectedSeller || undefined,
+                items: movementItems,
+                updatedAt: now.toISOString()
+            };
+
+            await db.put('movements', updatedMovement);
+            await loadData();
+            setShowEditForm(false);
+            setEditingMovement(null);
+            syncService.pushChanges();
+
+        } catch (error) {
+            console.error(error);
+            alert('Error al guardar los cambios');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -217,6 +419,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Vendedor</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Socio que pagó</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Emisión</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Venc.</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase"></th>
@@ -275,26 +479,27 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             labelClass = 'bg-indigo-100 text-indigo-800';
                                             tooltip = 'Traslado entre galpones';
                                         } else if (m.type === 'IN') {
-                                            label = 'INGRESO-C';
+                                            label = 'I-COMPRA';
                                             labelClass = 'bg-orange-100 text-orange-800';
-                                            tooltip = isConsolidated ? 'Compra multi-producto' : 'Compra';
+                                            tooltip = 'ingreso - compra';
                                         } else if (m.type === 'HARVEST') {
-                                            label = 'INGRESO-CC';
+                                            label = 'I-COSECHA';
                                             labelClass = 'bg-lime-100 text-lime-800';
-                                            tooltip = 'Cosecha';
+                                            tooltip = 'ingreso - cosecha';
                                         } else if (m.type === 'SALE') {
-                                            label = 'EGRESO-V';
+                                            label = 'E-VENTA';
                                             labelClass = 'bg-blue-100 text-blue-800';
-                                            tooltip = 'Venta';
+                                            tooltip = 'egreso - venta';
                                         } else if (m.type === 'OUT') {
                                             // Check order type
                                             const orderType = ordersKey[m.referenceId];
                                             if (orderType === 'SOWING') {
-                                                label = 'EGRESO-S';
+                                                label = 'E-SIEMBRA';
                                                 labelClass = 'bg-emerald-100 text-emerald-800';
-                                                tooltip = 'Siembra';
-                                            } else if (orderType === 'APPLICATION') {
-                                                label = 'EGRESO';
+                                                tooltip = 'egreso - siembra';
+                                            } else {
+                                                // Default for OUT movements related to orders is now E-APLICACIÓN
+                                                label = 'E-APLICACIÓN';
                                                 labelClass = 'bg-orange-100 text-orange-800';
                                                 tooltip = 'Aplicación';
                                             }
@@ -415,8 +620,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className={`px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px] ${m.sellerName ? 'text-blue-600' : ''}`}>
                                                         {m.sellerName || '-'}
                                                     </td>
-                                                    <td className={`px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[100px] ${m.investorName ? 'text-indigo-600' : ''}`}>
-                                                        {m.investorName || '-'}
+                                                    <td className={`px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px] ${(m.investorName || (m.investors && m.investors.length > 0)) ? 'text-indigo-600' : ''}`} title={m.investors ? m.investors.map((i: any) => `${i.name} (${i.percentage}%)`).join(', ') : ''}>
+                                                        {m.investorName || (m.investors ? m.investors.map((i: any) => i.name).join(', ') : '-')}
                                                     </td>
                                                     <td className="px-6 py-2 whitespace-nowrap">
                                                         {m.isTransfer ? (
@@ -429,6 +634,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-600 text-[11px] font-medium">{warehousesKey[m.warehouseId || ''] || '-'}</span>
                                                         )}
                                                     </td>
+                                                    <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">
+                                                        {m.facturaDate ? formatDate(m.facturaDate).date : '-'}
+                                                    </td>
+                                                    <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">
+                                                        {m.dueDate ? formatDate(m.dueDate).date : '-'}
+                                                    </td>
                                                     <td className="px-6 py-2 text-slate-500 max-w-xs truncate text-[11px] leading-relaxed">
                                                         {m.notes || '-'}
                                                     </td>
@@ -437,7 +648,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     </td>
                                                     <td className="px-6 py-2 whitespace-nowrap text-right">
                                                         <div className="flex items-center justify-end gap-2 text-right">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEditMovement(m);
+                                                                }}
+                                                                className="w-8 h-8 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-2"
+                                                                title="Editar movimiento"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                            </button>
                                                             {m.facturaImageUrl ? (
+
                                                                 <a
                                                                     href={m.facturaImageUrl}
                                                                     target="_blank"
@@ -538,7 +760,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 )}
             </div>
 
-            {selectedOrder && (
+            {selectedOrder && client && (
                 <div className="mt-4 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-slideUp">
                     <div className="bg-emerald-600 px-6 py-2 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-emerald-500">
                         <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Detalle de la Orden selecionada</span>
@@ -546,9 +768,111 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     </div>
                     <OrderDetailView
                         order={selectedOrder}
+                        client={client}
                         onClose={() => setSelectedOrder(null)}
                         warehouses={warehousesFull}
                         createdBy={displayName || 'Sistema'}
+                    />
+                </div>
+            )}
+
+            {showEditForm && (
+                <div className="mt-8 bg-white p-6 rounded-2xl shadow-xl border-4 border-emerald-500/20 animate-slideUp">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-900">Editar Movimiento</h2>
+                            <p className="text-sm text-slate-500">Modificando registro: {editingMovement?.id.slice(0, 8)}</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setShowEditForm(false);
+                                setEditingMovement(null);
+                            }}
+                            className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <StockEntryForm
+                        showStockForm={true}
+                        setShowStockForm={() => { }}
+                        warehouses={warehousesFull}
+                        activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []}
+                        selectedWarehouseId={selectedWarehouseId}
+                        setSelectedWarehouseId={setSelectedWarehouseId}
+                        availableProducts={Object.values(productsData)}
+                        activeStockItem={activeStockItem as any}
+                        updateActiveStockItem={(field, value) => {
+                            setActiveStockItem(prev => {
+                                const newState = { ...prev, [field]: value };
+                                if (field === 'presentationContent' || field === 'presentationAmount') {
+                                    const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
+                                    const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
+
+                                    const content = parseFloat(contentVal.toString().replace(',', '.'));
+                                    const amount = parseFloat(amountVal.toString().replace(',', '.'));
+
+                                    if (!isNaN(content) && !isNaN(amount)) {
+                                        newState.quantity = (content * amount).toString();
+                                    }
+                                }
+                                return newState;
+                            });
+                        }}
+                        stockItems={stockItems}
+                        setStockItems={setStockItems}
+                        addStockToBatch={() => {
+                            if (activeStockItem.productId && activeStockItem.quantity) {
+                                setStockItems(prev => [...prev, activeStockItem]);
+                                setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
+                            }
+                        }}
+                        editBatchItem={(idx) => {
+                            const item = stockItems[idx];
+                            setActiveStockItem(item);
+                            setStockItems(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                        removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))}
+                        availableSellers={availableSellers}
+                        selectedSeller={selectedSeller}
+                        setSelectedSeller={setSelectedSeller}
+                        showSellerInput={showSellerInput}
+                        setShowSellerInput={setShowSellerInput}
+                        sellerInputValue={sellerInputValue}
+                        setSellerInputValue={setSellerInputValue}
+                        handleAddSeller={() => {
+                            if (sellerInputValue.trim()) {
+                                setAvailableSellers(prev => [...prev, sellerInputValue.trim()]);
+                                setSelectedSeller(sellerInputValue.trim());
+                                setSellerInputValue('');
+                                setShowSellerInput(false);
+                            }
+                        }}
+                        showSellerDelete={showSellerDelete}
+                        setShowSellerDelete={setShowSellerDelete}
+                        setAvailableSellers={setAvailableSellers}
+                        saveClientSellers={() => { }} // Not strictly needed here
+                        selectedInvestors={selectedInvestors}
+                        setSelectedInvestors={setSelectedInvestors}
+                        client={client}
+                        showNote={showNote}
+                        setShowNote={setShowNote}
+                        note={note}
+                        setNote={setNote}
+                        setNoteConfirmed={() => { }}
+                        facturaFile={facturaFile}
+                        setFacturaFile={setFacturaFile}
+                        handleFacturaChange={(e) => {
+                            if (e.target.files?.[0]) setFacturaFile(e.target.files[0]);
+                        }}
+                        handleStockSubmit={handleEditSave}
+                        isSubmitting={isSubmitting}
+                        facturaUploading={facturaUploading}
+                        facturaDate={facturaDate}
+                        setFacturaDate={setFacturaDate}
+                        dueDate={dueDate}
+                        setDueDate={setDueDate}
                     />
                 </div>
             )}

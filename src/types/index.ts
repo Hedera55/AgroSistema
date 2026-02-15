@@ -121,6 +121,10 @@ export interface ClientStock {
     lastUpdated: string; // ISO Date
     updatedAt?: string; // To align with other entities
     synced?: boolean;
+    presentation?: string; // Standard observation
+    presentationLabel?: string;   // e.g., "Bidones", "Bolsas"
+    presentationContent?: number; // e.g., 20
+    presentationAmount?: number;  // e.g., 5
 }
 
 // --- Orders ---
@@ -146,6 +150,11 @@ export interface OrderItem {
     warehouseId?: string; // Origin warehouse for this specific item
     warehouseName?: string; // Cached name
     productType?: ProductType;
+    presentationLabel?: string;
+    presentationContent?: number;
+    multiplier?: number;
+    groupId?: string;
+    isVirtualDéficit?: boolean;
 }
 
 export interface MovementItem {
@@ -158,6 +167,10 @@ export interface MovementItem {
     unit: Unit;
     price?: number;
     sellerName?: string;
+    presentation?: string;
+    presentationLabel?: string;
+    presentationContent?: number;
+    presentationAmount?: number;
 }
 
 export interface InventoryMovement {
@@ -177,6 +190,8 @@ export interface InventoryMovement {
     purchasePrice?: number; // Price paid at which it was bought (for IN type)
     referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
+    facturaDate?: string; // Fecha de emisión
+    dueDate?: string; // Fecha de vencimiento
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image
     investorName?: string; // Who paid for this
     sellerName?: string; // Where this was purchased from
@@ -195,6 +210,7 @@ export interface InventoryMovement {
     deletedAt?: string;
     deletedBy?: string;
     items?: MovementItem[]; // For consolidated entries
+    investors?: { name: string; percentage: number }[]; // Multi-investor support
 }
 
 export interface Order {
@@ -208,11 +224,13 @@ export interface Order {
     // Relations
     clientId: string;
     farmId: string;
-    lotId: string;
+    lotId?: string; // Legacy: For single lot compatibility if needed
+    lotIds?: string[]; // New: Supports multiple lots per order
+    lotObservations?: Record<string, string>; // Observations per lotId
     warehouseId?: string; // Origin warehouse
 
     // Details
-    treatedArea: number; // Hectares
+    treatedArea: number; // Total Hectares
     items: OrderItem[];
     contractorName?: string; // For Harvest Orders made as Orders
 
@@ -221,8 +239,10 @@ export interface Order {
     appliedAt?: string;
     appliedBy?: string; // Name for audit trail
     applicatorName?: string; // Legacy/Display name
+    applicationDate?: string; // New: For single specific date
     applicationStart?: string; // ISO Date for range
     applicationEnd?: string;   // ISO Date for range
+    isDateRange?: boolean;     // New: Toggle between range and single date
     plantingDensity?: number;
     plantingDensityUnit?: 'PLANTS_HA' | 'KG_HA';
     plantingSpacing?: number;

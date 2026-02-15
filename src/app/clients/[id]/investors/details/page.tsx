@@ -226,15 +226,27 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
             // Service costs for the whole company
             orders.forEach(o => {
                 const lot = lots.find(l => l.id === o.lotId);
+
+                // Enhanced Crop Resolution for Harvests types
+                // If lot is cleared (no cropSpecies), try to retrieve it from the order notes
+                let cropDisplay = lot?.cropSpecies || '-';
+                if (o.type === 'HARVEST' && cropDisplay === '-' && o.notes?.startsWith('Cosecha de ')) {
+                    const match = o.notes.match(/Cosecha de (.+) en /);
+                    if (match && match[1]) {
+                        cropDisplay = match[1];
+                    }
+                }
+
                 if (o.servicePrice && o.servicePrice > 0) {
                     data.push({
                         id: `${o.id}-labor-company`,
                         rawDate: o.appliedAt || o.date,
                         date: formatLedgerDate(o.appliedAt || o.date, o.time),
-                        concept: `Servicio: ${o.type === 'HARVEST' ? 'Cosecha' : (o.type === 'SOWING' ? 'Siembra' : 'Pulverización')}`,
+                        // Use the specific note for Harvests if available (e.g. "Cosecha de Soja en Lote 1")
+                        concept: `Servicio: ${o.type === 'HARVEST' ? (o.notes || 'Cosecha') : (o.type === 'SOWING' ? 'Siembra' : 'Pulverización')}`,
                         category: 'LABOR',
                         lote: lot?.name || '-',
-                        crop: lot?.cropSpecies || '-',
+                        crop: cropDisplay,
                         seller: o.applicatorName || '-',
                         amount: o.servicePrice * o.treatedArea,
                         detail: `Orden #${o.orderNumber}. ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`

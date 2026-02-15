@@ -8,7 +8,7 @@ interface OrderConfirmationStepProps {
     appStart: string;
     appEnd: string;
     selectedFarm?: Farm;
-    selectedLot?: Lot;
+    selectedLot?: { name: string; hectares: number };
     items: OrderItem[];
     availableProducts: Product[];
     stockShortages: (OrderItem & { available: number; missing: number })[];
@@ -96,32 +96,45 @@ export function OrderConfirmationStep({
                         <div><span className="text-slate-500">Precio Servicio:</span> <span className="font-medium">USD {servicePrice} / ha</span></div>
                     )}
                     {selectedPartnerName && (
-                        <div><span className="text-slate-500">Responsable:</span> <span className="font-medium">{selectedPartnerName}</span></div>
+                        <div><span className="text-slate-500">Pagado por:</span> <span className="font-medium">{selectedPartnerName}</span></div>
                     )}
                     {notes && (
                         <div className="col-span-2"><span className="text-slate-500 block">Nota:</span> <p className="text-slate-800 text-sm italic">"{notes}"</p></div>
                     )}
                 </div>
 
-                <table className="min-w-full text-sm">
-                    <thead>
-                        <tr className="text-left text-slate-500 border-b">
-                            <th className="font-medium py-2">Producto</th>
-                            <th className="font-medium py-2 text-right">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items.map(item => (
-                            <tr key={item.id} className="border-b last:border-0 border-slate-50">
-                                <td className="py-2">
-                                    {item.productName}
-                                    {item.commercialName && <span className="text-slate-400 text-xs ml-2">({item.commercialName})</span>}
-                                </td>
-                                <td className="py-2 text-right font-mono">{item.totalQuantity.toFixed(2)} {item.unit}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <div className="space-y-4">
+                    {Array.from(new Set(items.map(i => i.groupId || i.id))).map(groupId => {
+                        const groupItems = items.filter(i => (i.groupId || i.id) === groupId);
+                        const first = groupItems[0];
+                        const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
+
+                        return (
+                            <div key={groupId} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className={`font-bold uppercase tracking-tight ${first.isVirtualDéficit ? 'text-orange-600' : 'text-slate-800'}`}>
+                                        {first.commercialName || first.productName}{first.activeIngredient ? ` (${first.activeIngredient})` : ''}
+                                        {first.isVirtualDéficit && <span className="ml-2 text-[10px] uppercase font-black tracking-widest">(Déficit)</span>}
+                                    </span>
+                                    <span className={`font-mono font-bold ${first.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{totalInGroup.toFixed(2)} {first.unit}</span>
+                                </div>
+                                <div className="space-y-1 pl-4">
+                                    {groupItems.map(item => (
+                                        <div key={item.id} className={`flex justify-between items-center text-xs italic ${item.isVirtualDéficit ? 'text-orange-400 bg-orange-50/30' : 'text-slate-500'}`}>
+                                            <span>
+                                                {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                {item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`)}
+                                                {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
+                                            </span>
+                                            <span className="font-mono">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
             <div className="flex justify-between pt-4">

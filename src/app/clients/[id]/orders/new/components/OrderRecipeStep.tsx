@@ -40,6 +40,9 @@ interface OrderRecipeStepProps {
     setNotes: (val: string) => void;
     facturaImageUrl: string | null;
     setFacturaImageUrl: (val: string | null) => void;
+    subQuantities: Record<string, number>;
+    setSubQuantities: (val: Record<string, number>) => void;
+    stock: any[];
     handleAddItem: () => void;
     handleEditItem: (item: OrderItem) => void;
     handleRemoveItem: (id: string) => void;
@@ -61,8 +64,6 @@ export function OrderRecipeStep({
     setIsMechanicalLabor,
     currProdId,
     setCurrProdId,
-    currWarehouseId,
-    setCurrWarehouseId,
     currDosage,
     setCurrDosage,
     mechanicalLaborName,
@@ -84,6 +85,9 @@ export function OrderRecipeStep({
     setNotes,
     facturaImageUrl,
     setFacturaImageUrl,
+    subQuantities,
+    setSubQuantities,
+    stock,
     handleAddItem,
     handleEditItem,
     handleRemoveItem,
@@ -93,6 +97,33 @@ export function OrderRecipeStep({
     clientPartners
 }: OrderRecipeStepProps & { clientPartners?: any[] }) {
     const selectedProduct = availableProducts.find(p => p.id === currProdId);
+
+    // Filter stock for the selected product and group by warehouse
+    const productStock = stock.filter(s => s.productId === currProdId && s.quantity > 0);
+    const stockByWarehouse = warehouses.map(w => ({
+        ...w,
+        items: productStock.filter(s => s.warehouseId === w.id)
+    })).filter(w => w.items.length > 0);
+
+    const requiredTotal = (parseFloat(currDosage) || 0) * (selectedLot.hectares || 0);
+
+    const selectedTotal = Object.entries(subQuantities).reduce((acc, [stockId, multiplier]) => {
+        const s = productStock.find(item => item.id === stockId);
+        if (!s) return acc;
+        return acc + (multiplier * (s.presentationContent || 1));
+    }, 0);
+
+    const diff = selectedTotal - requiredTotal;
+    const containsSeed = items.some(i => i.productType === 'SEED');
+    const currentlySelectedProduct = availableProducts.find(p => p.id === currProdId);
+    const isSelectingSeed = currentlySelectedProduct?.type === 'SEED';
+    const isSowingOrder = containsSeed || isSelectingSeed;
+    const showLoadingOrder = !isSowingOrder && !isMechanicalLabor;
+
+    const handleMultiplierChange = (stockId: string, val: string) => {
+        const num = parseInt(val) || 0;
+        setSubQuantities({ ...subQuantities, [stockId]: num });
+    };
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -104,22 +135,24 @@ export function OrderRecipeStep({
             <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm space-y-6">
                 <div className="flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                        <div className="md:col-span-1">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden de Carga</label>
-                            <Input
-                                type="number"
-                                placeholder=""
-                                min="1"
-                                value={currLoadingOrder}
-                                onChange={e => {
-                                    const val = e.target.value.replace(/[^0-9]/g, '');
-                                    setCurrLoadingOrder(val);
-                                }}
-                                className="h-[46px]"
-                            />
-                        </div>
+                        {showLoadingOrder && (
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden</label>
+                                <Input
+                                    type="number"
+                                    placeholder=""
+                                    min="1"
+                                    value={currLoadingOrder}
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                        setCurrLoadingOrder(val);
+                                    }}
+                                    className="h-[46px]"
+                                />
+                            </div>
+                        )}
 
-                        <div className="md:col-span-4">
+                        <div className={showLoadingOrder ? "md:col-span-7" : "md:col-span-8"}>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Producto / Labor</label>
                             <select
                                 className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
@@ -132,6 +165,7 @@ export function OrderRecipeStep({
                                         setIsMechanicalLabor(false);
                                         setCurrProdId(e.target.value);
                                     }
+                                    setSubQuantities({});
                                 }}
                             >
                                 <option value="">Seleccionar...</option>
@@ -141,26 +175,12 @@ export function OrderRecipeStep({
                                 <optgroup label="Stock Galpón">
                                     {availableProducts.map(p => (
                                         <option key={p.id} value={p.id}>
-                                            {p.activeIngredient || p.name} {p.commercialName ? `| ${p.commercialName}` : (p.brandName === 'Propia' ? '| Propia' : '')} ({typeLabels[p.type]})
+                                            {p.commercialName || p.name}{p.activeIngredient ? ` (${p.activeIngredient})` : ''} ({typeLabels[p.type]})
                                         </option>
                                     ))}
                                 </optgroup>
                             </select>
                         </div>
-
-                        {!isMechanicalLabor && (
-                            <div className="md:col-span-3">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Depósito</label>
-                                <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
-                                    value={currWarehouseId}
-                                    onChange={e => setCurrWarehouseId(e.target.value)}
-                                >
-                                    <option value="">Seleccione...</option>
-                                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                </select>
-                            </div>
-                        )}
 
                         {!isMechanicalLabor ? (
                             <div className="md:col-span-3">
@@ -188,11 +208,11 @@ export function OrderRecipeStep({
                                 </div>
                             </div>
                         ) : (
-                            <div className="md:col-span-6 animate-fadeIn">
+                            <div className="md:col-span-3 animate-fadeIn">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Tipo de Laboreo</label>
                                 <Input
                                     type="text"
-                                    placeholder="Ej. Cosecha, Siembra, Pulverización..."
+                                    placeholder="Ej. Cosecha, Siembra..."
                                     value={mechanicalLaborName}
                                     onChange={e => setMechanicalLaborName(e.target.value)}
                                     className="h-[46px]"
@@ -200,43 +220,104 @@ export function OrderRecipeStep({
                             </div>
                         )}
 
-                        {selectedProduct?.type === 'SEED' ? (
-                            <>
-                                <div className="md:col-span-3 animate-fadeIn">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Espaciamiento (cm)</label>
-                                    <Input type="number" step="0.1" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value)} className="h-[46px]" />
-                                </div>
-                                <div className="md:col-span-3 animate-fadeIn">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Rinde esperado (kg/ha)</label>
-                                    <Input type="number" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value)} className="h-[46px]" />
-                                </div>
-                                <div className="md:col-span-5 hidden md:block"></div>
-                                <div className="md:col-span-1">
-                                    <button
-                                        onClick={handleAddItem}
-                                        className="w-full bg-emerald-600 hover:bg-emerald-700 h-[46px] rounded-lg shadow-sm flex items-center justify-center text-white disabled:opacity-50 transition-colors"
-                                        title={editingItemId ? 'Actualizar' : 'Agregar'}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="md:col-span-1 md:col-start-12">
-                                <button
-                                    onClick={handleAddItem}
-                                    disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
-                                    className="w-full bg-emerald-600 hover:bg-emerald-700 h-[46px] rounded-lg shadow-sm flex items-center justify-center text-white disabled:opacity-50 transition-colors"
-                                    title={editingItemId ? 'Actualizar' : 'Agregar'}
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                                </button>
-                            </div>
-                        )}
+                        <div className="md:col-span-1">
+                            <button
+                                onClick={handleAddItem}
+                                disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
+                                title={editingItemId ? 'Actualizar' : 'Agregar'}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 h-[46px] rounded-lg shadow-sm flex items-center justify-center text-white disabled:opacity-50 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+                            </button>
+                        </div>
                     </div>
 
+                    {/* Stock Source Selection (Presentations) */}
+                    {!isMechanicalLabor && currProdId && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 animate-fadeIn space-y-4">
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Selección de Stock por Depósito</h4>
+                                <div className="text-right">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Total Requerido</div>
+                                    <div className="text-sm font-mono font-black text-slate-700">{requiredTotal.toFixed(2)} {selectedProduct?.unit}</div>
+                                </div>
+                            </div>
+
+                            {stockByWarehouse.length > 0 ? (
+                                <div className="space-y-6">
+                                    {stockByWarehouse.map(wh => (
+                                        <div key={wh.id} className="space-y-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{wh.name}</span>
+                                                <div className="h-[1px] flex-1 bg-slate-200"></div>
+                                            </div>
+                                            <div className="divide-y divide-slate-100">
+                                                {wh.items.map(s => (
+                                                    <div key={s.id} className="flex items-center justify-between py-2.5 px-1 hover:bg-slate-100/50 transition-colors rounded-md">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-bold text-slate-700">
+                                                                {s.presentationLabel || 'A granel'} {s.presentationContent ? `${s.presentationContent}${selectedProduct?.unit}` : ''}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-400 font-medium tracking-tight">Disponible: {s.quantity} {selectedProduct?.unit}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">x</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                className="w-16 h-8 rounded-md border-slate-200 text-sm font-bold text-center focus:border-emerald-500 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                value={subQuantities[s.id] || ''}
+                                                                onChange={e => handleMultiplierChange(s.id, e.target.value)}
+                                                                placeholder="0"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-8 text-center bg-white rounded-lg border border-dashed border-slate-200">
+                                    <span className="text-sm text-slate-400">Sin stock disponible en ningún depósito.</span>
+                                </div>
+                            )}
+
+                            {/* Verification Summary */}
+                            <div className="pt-4 border-t border-slate-200 flex justify-between items-end">
+                                <div>
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Total Seleccionado</div>
+                                    <div className={`text-lg font-mono font-black ${selectedTotal > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                        {selectedTotal.toFixed(2)} {selectedProduct?.unit}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    {currDosage && (
+                                        <div className={`text-[11px] font-black uppercase tracking-tight py-1 ${diff >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                                            {diff === 0 ? '✓ Cantidad Exacta' : (diff > 0 ? `Sobra ${diff.toFixed(2)} ${selectedProduct?.unit}` : `Faltan ${Math.abs(diff).toFixed(2)} ${selectedProduct?.unit}`)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {selectedProduct?.type === 'SEED' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Espaciamiento (cm)</label>
+                                <Input type="number" step="0.1" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value)} className="h-[46px]" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Rinde esperado (kg/ha)</label>
+                                <Input type="number" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value)} className="h-[46px]" />
+                            </div>
+                        </div>
+                    )}
+
+
                     {editingItemId && (
-                        <div className="flex justify-end pt-2">
+                        <div className="flex justify-end pt-0">
                             <button
                                 onClick={handleCancelEdit}
                                 className="text-xs font-bold text-slate-400 hover:text-red-500 uppercase tracking-wider flex items-center gap-1"
@@ -248,50 +329,54 @@ export function OrderRecipeStep({
                 </div>
 
                 {items.length > 0 && (
-                    <div className="space-y-2 pt-4 border-t border-slate-100">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Productos en la Orden de Carga</label>
-                        <div className="space-y-2">
-                            {items.map((item) => (
-                                <div key={item.id} className="flex justify-between items-center p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
-                                    <div>
-                                        <div className="font-bold text-slate-800 text-sm">
-                                            {item.loadingOrder && <span className="text-emerald-600 mr-1.5 font-black">#{item.loadingOrder}</span>}
-                                            {item.productName} {item.commercialName ? `| ${item.commercialName}` : (item.brandName === 'Propia' ? '| Propia' : '')}
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Resumen de Insumos / Labores</label>
+                        <div className="space-y-3">
+                            {/* Grouping items by groupId for hierarchical display */}
+                            {Array.from(new Set(items.map(i => i.groupId || i.id))).map(groupId => {
+                                const groupItems = items.filter(i => (i.groupId || i.id) === groupId);
+                                const first = groupItems[0];
+                                const isLabor = first.productId === 'LABOREO_MECANICO';
+                                const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
+
+                                return (
+                                    <div key={groupId} className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                        <div className="bg-slate-50/50 px-4 py-3 flex justify-between items-center border-b border-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                {first.loadingOrder && <span className="text-emerald-600 font-black text-sm">#{first.loadingOrder}</span>}
+                                                <span className="font-black text-slate-800 text-sm uppercase tracking-tight">
+                                                    {first.commercialName || first.productName}{first.activeIngredient ? ` (${first.activeIngredient})` : ''}
+                                                </span>
+                                                {!isLabor && <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-full">{totalInGroup.toFixed(1)} {first.unit} TOTAL</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleEditItem(first)} className="p-1.5 text-slate-300 hover:text-emerald-500 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                </button>
+                                                <button onClick={() => handleRemoveItem(first.groupId || first.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-4 uppercase font-medium">
-                                            {!item.plantingDensity && item.productId !== 'LABOREO_MECANICO' && (
-                                                <span>Dosis: {item.dosage} {item.unit}/ha</span>
-                                            )}
-                                            {item.plantingDensity && (
-                                                <span className="text-blue-600">Densidad: {item.plantingDensity} kg/ha</span>
-                                            )}
-                                            {item.plantingSpacing && (
-                                                <span className="text-blue-600">Espaciamiento: {item.plantingSpacing} cm</span>
-                                            )}
-                                            {item.expectedYield && (
-                                                <span className="text-blue-600">Rinde: {item.expectedYield} kg/ha</span>
-                                            )}
-                                            {item.warehouseName && (
-                                                <span className="text-purple-600 font-bold">Depósito: {item.warehouseName}</span>
-                                            )}
+                                        <div className="p-3 space-y-2">
+                                            {groupItems.map(item => (
+                                                <div key={item.id} className="flex justify-between items-center text-xs">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-slate-600">
+                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                            {item.presentationLabel || (isLabor ? 'Labor' : 'A granel')}
+                                                            {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                            {item.warehouseName && <span className="text-slate-400 font-medium ml-2">— {item.warehouseName}</span>}
+                                                        </span>
+                                                        {item.plantingDensity && <span className="text-blue-500 font-bold uppercase text-[9px]">Densidad: {item.plantingDensity} kg/ha</span>}
+                                                    </div>
+                                                    <span className="font-mono text-slate-500 font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-6">
-                                        <div className="text-right">
-                                            <div className="font-mono text-emerald-600 font-bold text-xs whitespace-nowrap">{item.totalQuantity.toFixed(2)} {item.unit}</div>
-                                            <div className="text-[9px] text-slate-400 uppercase font-bold tracking-tighter">Total</div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors" title="Editar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-                                            </button>
-                                            <button onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors" title="Eliminar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -320,7 +405,7 @@ export function OrderRecipeStep({
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Socio que paga</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pagado por</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
                             value={selectedPartnerName}
@@ -337,10 +422,10 @@ export function OrderRecipeStep({
                 <div className="flex items-center gap-6 pt-2 h-5">
                     <button
                         type="button"
-                        onClick={() => setShowNotes(!showNotes)}
-                        className={`inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all ${showNotes ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                        onClick={() => setShowNotes(true)}
+                        className="inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all min-w-[120px] text-emerald-600 hover:text-emerald-700"
                     >
-                        {showNotes ? '✓ Nota Agregada' : '+ Agregar Nota'}
+                        {notes && !showNotes ? 'Editar Nota' : '+ Agregar Nota'}
                     </button>
                     <div className="flex items-center">
                         <button
@@ -368,14 +453,25 @@ export function OrderRecipeStep({
                 </div>
 
                 {showNotes && (
-                    <div className="animate-fadeIn">
+                    <div className="animate-fadeIn flex gap-2 items-start">
                         <textarea
-                            className="w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-4"
+                            className="flex-1 rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-4"
                             placeholder="Escriba aquí cualquier observación o detalle adicional..."
                             rows={3}
                             value={notes}
                             onChange={e => setNotes(e.target.value)}
+                            autoFocus
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowNotes(false)}
+                            className="h-10 w-10 flex-shrink-0 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-sm mt-1"
+                            title="Confirmar nota"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                        </button>
                     </div>
                 )}
             </div>

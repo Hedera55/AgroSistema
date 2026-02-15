@@ -16,6 +16,9 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 [+] Rules the user has added, do not erase: [+]
 
+- ** Talk in english **:
+- Because I believe the agent in english might work better
+
 - **Code execution**: All commands will be ran by me, because running powershell commands usually crash the agent.
   If you need me to run the code in another program that isn't powershell, I can also do that, just specify it for me
 	For example, *powershell doesn't have grep*, which you've asked me to run a couple times
@@ -70,6 +73,7 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - **There aren't catalog prices**: There hasn't been a catalog price for a while already, remember this. I'll write this in "knowledge.md" because it keeps coming up. There is only average sell and average purchase price.
 
+- **Meaning of negative stock values**: Negative stock values in galpones *is allowed*. What it means is we used the supply product, and got it from somewhere else, that will at some point have to be loaded to the system.
 
 + . + . + . + . + . + . +
 

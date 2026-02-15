@@ -276,7 +276,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     appliedBy: displayName || 'Sistema',
                     investorName: selectedHarvestInvestor || undefined,
                     updatedAt: new Date().toISOString(),
-                    synced: false
+                    updatedAt: new Date().toISOString(),
+                    synced: false,
+                    notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
                 });
             } else {
                 const lastSowing = orders
@@ -307,7 +309,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     appliedAt: new Date().toISOString(),
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                    synced: false
+                    synced: false,
+                    notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
                 });
             }
 

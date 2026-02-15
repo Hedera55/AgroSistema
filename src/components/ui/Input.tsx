@@ -31,6 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               disabled:bg-slate-50 disabled:text-slate-500
               placeholder:text-slate-400
               transition-colors duration-200
+              [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
               ${prefix ? 'pl-7' : ''}
               ${suffix ? 'pr-10' : ''}
               ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}

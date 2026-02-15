@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { OrderActivity, Order, Farm, Lot } from '@/types';
+import { OrderActivity, Order, Farm, Lot, Client } from '@/types';
 import { OrderDetailView } from '@/components/OrderDetailView';
 
 export default function OrderHistoryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,19 +13,24 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
     const [farms, setFarms] = useState<Farm[]>([]);
     const [lots, setLots] = useState<Lot[]>([]);
     const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [client, setClient] = useState<Client | null>(null);
     const [loading, setLoading] = useState(true);
     const [activitiesLimit, setActivitiesLimit] = useState(20);
     const [selectedOrder, setSelectedOrder] = useState<(Order & { farmName?: string; lotName?: string; hectares?: number }) | null>(null);
 
     useEffect(() => {
         async function loadData() {
-            const [allActivities, allOrders, allFarms, allLots, allWarehouses] = await Promise.all([
+            const [allActivities, allOrders, allFarms, allLots, allWarehouses, allClients] = await Promise.all([
                 db.getAll('order_activities'),
                 db.getAll('orders'),
                 db.getAll('farms'),
                 db.getAll('lots'),
-                db.getAll('warehouses')
+                db.getAll('warehouses'),
+                db.getAll('clients')
             ]);
+
+            const currentClient = allClients.find((c: Client) => c.id === clientId);
+            setClient(currentClient || null);
 
             const clientActivities = allActivities
                 .filter((a: OrderActivity) => a.clientId === clientId)
@@ -88,7 +93,7 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Fecha de carga de dato</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nro de Orden</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Acción</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Usuario</th>
@@ -171,10 +176,11 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                 )}
             </div>
 
-            {selectedOrder && (
-                <div className="mt-8 animate-fadeIn">
+            {selectedOrder && client && (
+                <div className="mt-8 bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-slideUp">
                     <OrderDetailView
                         order={selectedOrder}
+                        client={client}
                         onClose={() => setSelectedOrder(null)}
                         warehouses={warehouses}
                     />

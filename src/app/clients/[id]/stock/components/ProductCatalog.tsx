@@ -1,5 +1,4 @@
-'use client';
-
+import { useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Product, ProductType, Unit } from '@/types';
@@ -43,6 +42,7 @@ interface ProductCatalogProps {
     handleAddUnit: () => void;
     isDuplicate: boolean;
     isSubmitting: boolean;
+    importProducts: (products: any[]) => Promise<void>;
 }
 
 export function ProductCatalog({
@@ -84,7 +84,27 @@ export function ProductCatalog({
     handleAddUnit,
     isDuplicate,
     isSubmitting,
+    importProducts
 }: ProductCatalogProps) {
+    const registerButtonRef = useRef<HTMLButtonElement>(null);
+    const firstInputRef = useRef<HTMLSelectElement>(null);
+
+    // Focus management
+    useEffect(() => {
+        if (showProductForm) {
+            // Focus the first input when form opens
+            setTimeout(() => {
+                firstInputRef.current?.focus();
+            }, 50);
+        } else if (!showProductForm && !productsLoading) {
+            // Return focus to the button when form closes
+            // Check if we are not loading to avoid focusing on initial mount if irrelevant
+            if (registerButtonRef.current) {
+                registerButtonRef.current.focus();
+            }
+        }
+    }, [showProductForm, productsLoading]);
+
     if (!showCatalog) return null;
 
     return (
@@ -93,8 +113,57 @@ export function ProductCatalog({
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-lg font-semibold text-slate-900">Catálogo de Productos</h2>
                     <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 mr-2">
+                            <button
+                                onClick={() => {
+                                    const dataStr = JSON.stringify(availableProducts, null, 2);
+                                    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+                                    const exportFileDefaultName = 'catalogo_productos.json';
+                                    const linkElement = document.createElement('a');
+                                    linkElement.setAttribute('href', dataUri);
+                                    linkElement.setAttribute('download', exportFileDefaultName);
+                                    linkElement.click();
+                                }}
+                                className="text-slate-500 hover:text-emerald-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"
+                                title="Exportar Catálogo JSON"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                Exportar
+                            </button>
+                            <label className="cursor-pointer text-slate-500 hover:text-emerald-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1" title="Importar Catálogo JSON">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                                Importar
+                                <input
+                                    type="file"
+                                    accept=".json"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = async (event) => {
+                                            try {
+                                                const json = JSON.parse(event.target?.result as string);
+                                                if (Array.isArray(json)) {
+                                                    if (confirm(`¿Importar ${json.length} productos? Se agregarán al catálogo existente.`)) {
+                                                        await importProducts(json);
+                                                        alert('Productos importados correctamente');
+                                                    }
+                                                }
+                                            } catch (err) {
+                                                console.error(err);
+                                                alert('Error al leer el archivo JSON');
+                                            }
+                                            e.target.value = '';
+                                        };
+                                        reader.readAsText(file);
+                                    }}
+                                />
+                            </label>
+                        </div>
                         {!isReadOnly && (
                             <button
+                                ref={registerButtonRef}
                                 onClick={() => {
                                     setIsEditingProduct(false);
                                     setEditingProductId(null);
@@ -106,7 +175,21 @@ export function ProductCatalog({
                                         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                                     }, 100);
                                 }}
-                                className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        setIsEditingProduct(false);
+                                        setEditingProductId(null);
+                                        setNewProductName('');
+                                        setNewProductBrand('');
+                                        setNewProductPA('');
+                                        setShowProductForm(true);
+                                        setTimeout(() => {
+                                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                        }, 100);
+                                    }
+                                }}
+                                className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded px-1"
                             >
                                 Registrar nuevo producto
                             </button>
@@ -134,8 +217,8 @@ export function ProductCatalog({
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nombre Comercial</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">P.A. / Cultivo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Unidad</th>
@@ -145,8 +228,8 @@ export function ProductCatalog({
                             <tbody className="bg-white divide-y divide-slate-200">
                                 {availableProducts.map((p) => (
                                     <tr key={p.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{p.activeIngredient || p.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.commercialName || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{p.commercialName || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.activeIngredient || p.name}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.brandName || '-'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{typeLabels[p.type] || p.type}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{p.unit}</td>
@@ -166,19 +249,19 @@ export function ProductCatalog({
                                                             setShowProductForm(true);
                                                             window.scrollTo({ top: 0, behavior: 'smooth' });
                                                         }}
-                                                        className="text-slate-400 hover:text-emerald-600 px-2 py-1 transition-colors text-[10px] font-bold uppercase tracking-widest"
+                                                        className="text-slate-400 hover:text-emerald-600 p-1 transition-colors"
                                                         title="Editar"
                                                     >
-                                                        Editar
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
                                                     </button>
                                                     <button
                                                         onClick={async () => {
                                                             if (confirm('¿Eliminar producto del catálogo?')) await deleteProduct(p.id);
                                                         }}
-                                                        className="text-slate-400 hover:text-red-900 px-2 py-1 transition-colors text-[10px] font-bold uppercase tracking-widest"
+                                                        className="text-slate-400 hover:text-red-900 p-1 transition-colors"
                                                         title="Eliminar"
                                                     >
-                                                        Eliminar
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                                     </button>
                                                 </div>
                                             )}
@@ -217,9 +300,16 @@ export function ProductCatalog({
                             <div className="w-full">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
                                 <select
+                                    ref={firstInputRef}
                                     className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
                                     value={newProductType}
                                     onChange={e => setNewProductType(e.target.value as ProductType)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleProductSubmit(e as any);
+                                        }
+                                    }}
                                 >
                                     {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
                                 </select>
@@ -234,6 +324,12 @@ export function ProductCatalog({
                                 }}
                                 className="h-[42px]"
                                 required
+                                onKeyDown={(e: React.KeyboardEvent) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleProductSubmit(e as any);
+                                    }
+                                }}
                             />
                             <Input
                                 label="Nombre Comercial"
@@ -241,6 +337,12 @@ export function ProductCatalog({
                                 value={newProductCommercialName}
                                 onChange={e => setNewProductCommercialName(e.target.value)}
                                 className="h-[42px]"
+                                onKeyDown={(e: React.KeyboardEvent) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleProductSubmit(e as any);
+                                    }
+                                }}
                             />
                             <Input
                                 label="Marca"
@@ -248,6 +350,12 @@ export function ProductCatalog({
                                 value={newProductBrand}
                                 onChange={e => setNewProductBrand(e.target.value)}
                                 className="h-[42px]"
+                                onKeyDown={(e: React.KeyboardEvent) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleProductSubmit(e as any);
+                                    }
+                                }}
                             />
                             <div className="w-full relative">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>

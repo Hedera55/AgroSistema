@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { useClientStock, useInventory } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -31,6 +31,8 @@ const typeLabels: Record<ProductType, string> = {
 export default function NewOrderPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const editId = searchParams.get('editId');
     const { displayName } = useAuth();
 
     // Data Hooks
@@ -45,10 +47,48 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         db.get('clients', clientId).then(setClient);
     }, [clientId]);
 
+    // Preload Order for Edit
+    useEffect(() => {
+        if (!editId) return;
+
+        const preloadOrder = async () => {
+            const order = await db.get('orders', editId) as Order;
+            if (!order) return;
+
+            // Basic Info
+            setSelectedFarmId(order.farmId || '');
+            setSelectedLotIds(order.lotIds || (order.lotId ? [order.lotId] : []));
+            setLotObservations(order.lotObservations || {});
+
+            // Dates
+            setDate(order.date || new Date().toISOString().split('T')[0]);
+            setIsDateRange(order.isDateRange ?? true);
+            if (order.applicationDate) setApplicationDate(order.applicationDate);
+            if (order.applicationStart) setAppStart(order.applicationStart);
+            if (order.applicationEnd) setAppEnd(order.applicationEnd);
+
+            // Recipe & Items
+            setItems(order.items || []);
+
+            // Contractor & Partners
+            setSelectedApplicatorId(order.applicatorId || '');
+            setServicePrice(order.servicePrice ? String(order.servicePrice) : '');
+            setSelectedPartnerName(order.investorName || '');
+
+            // Notes & Extra
+            setNotes(order.notes || '');
+            setFacturaImageUrl(order.facturaImageUrl || null);
+            if (order.notes) setShowNotes(true);
+        };
+
+        preloadOrder();
+    }, [editId]);
+
     // Form State
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [selectedFarmId, setSelectedFarmId] = useState('');
-    const [selectedLotId, setSelectedLotId] = useState('');
+    const [selectedLotIds, setSelectedLotIds] = useState<string[]>([]);
+    const [lotObservations, setLotObservations] = useState<Record<string, string>>({});
     const [currWarehouseId, setCurrWarehouseId] = useState('');
 
     useEffect(() => {
@@ -58,6 +98,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     }, [warehouses, currWarehouseId]);
 
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [isDateRange, setIsDateRange] = useState(true);
+    const [applicationDate, setApplicationDate] = useState(new Date().toISOString().split('T')[0]);
     const [appStart, setAppStart] = useState(new Date().toISOString().split('T')[0]);
     const [appEnd, setAppEnd] = useState(new Date().toISOString().split('T')[0]);
 
@@ -67,9 +109,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     // Current Item Input
     const [currProdId, setCurrProdId] = useState('');
     const [currDosage, setCurrDosage] = useState('');
+    const [subQuantities, setSubQuantities] = useState<Record<string, number>>({});
 
     // Contractors
-    const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
+    const [contractors, setContractors] = useState<{ id: string, username: string, assigned_clients?: string[] }[]>([]);
     const [selectedApplicatorId, setSelectedApplicatorId] = useState('');
 
     // Planting Fields
@@ -90,8 +133,12 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
     // Derived Data
     const { lots } = useLots(selectedFarmId);
-    const selectedLot = lots.find(l => l.id === selectedLotId);
+    const selectedLots = lots.filter(l => selectedLotIds.includes(l.id));
     const selectedFarm = farms.find(f => f.id === selectedFarmId);
+
+    const totalTreatedArea = useMemo(() => {
+        return selectedLots.reduce((acc, l) => acc + (l.hectares || 0), 0);
+    }, [selectedLots]);
 
     const availableProducts = useMemo(() => {
         return products.filter(p => p.clientId === clientId);
@@ -113,7 +160,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
         // Auto-shifting logic for loading order
         const requestedOrder = currLoadingOrder ? parseInt(currLoadingOrder) : undefined;
-        let otherItems = items.filter(i => i.id !== editingItemId);
+        let otherItems = items.filter(i => (i.groupId || i.id) !== editingItemId);
 
         if (requestedOrder !== undefined) {
             const collision = otherItems.some(i => i.loadingOrder === requestedOrder);
@@ -137,8 +184,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             dosage: isMechanicalLabor ? 1 : parseFloat(currDosage || '0'),
             unit: product?.unit || 'ha',
             totalQuantity: isMechanicalLabor
-                ? (selectedLot?.hectares || 0)
-                : parseFloat(currDosage || '0') * (selectedLot?.hectares || 0),
+                ? totalTreatedArea
+                : parseFloat(currDosage || '0') * totalTreatedArea,
             loadingOrder: requestedOrder,
             plantingDensity: product?.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
             plantingDensityUnit: product?.type === 'SEED' ? 'KG_HA' : undefined,
@@ -149,12 +196,70 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             productType: product?.type
         };
 
-        const finalItems = [...otherItems, item].sort((a, b) => (a.loadingOrder || 999) - (b.loadingOrder || 999));
+        const newItemGroupId = generateId();
+        const newItems: OrderItem[] = [];
+
+        // If it's mechanical labor, just one item
+        if (isMechanicalLabor) {
+            newItems.push({ ...item, groupId: newItemGroupId });
+        } else {
+            // Check if we have subQuantities (presentations selected)
+            const selectedStockIds = Object.entries(subQuantities).filter(([_, qty]) => qty > 0);
+
+            if (selectedStockIds.length > 0) {
+                let selectedTotalFromSubQuantities = 0;
+                selectedStockIds.forEach(([stockId, multiplier]) => {
+                    const stockItem = stock.find(s => s.id === stockId);
+                    if (!stockItem) return;
+
+                    const wh = warehouses.find(w => w.id === stockItem.warehouseId);
+                    const absoluteQty = multiplier * (stockItem.presentationContent || 1);
+                    selectedTotalFromSubQuantities += absoluteQty;
+
+                    newItems.push({
+                        ...item,
+                        id: generateId(),
+                        groupId: newItemGroupId,
+                        warehouseId: stockItem.warehouseId,
+                        warehouseName: wh?.name || 'Desconocido',
+                        presentationLabel: stockItem.presentationLabel,
+                        presentationContent: stockItem.presentationContent,
+                        multiplier: multiplier,
+                        totalQuantity: absoluteQty
+                    });
+                });
+
+                // Check for deficit
+                const requiredTotal = item.totalQuantity;
+                if (selectedTotalFromSubQuantities < requiredTotal - 0.001) {
+                    const deficitQty = requiredTotal - selectedTotalFromSubQuantities;
+                    newItems.push({
+                        ...item,
+                        id: generateId(),
+                        groupId: newItemGroupId,
+                        productName: `Déficit de ${item.productName}`,
+                        commercialName: `Déficit de ${item.productName}`,
+                        presentationLabel: 'Déficit',
+                        multiplier: undefined,
+                        totalQuantity: deficitQty,
+                        isVirtualDéficit: true,
+                        warehouseId: undefined, // Deficits are global to the order
+                        warehouseName: undefined
+                    });
+                }
+            } else {
+                // Fallback: use the single warehouse and dosage if no subQuantities were used (though UI should prevent this)
+                newItems.push({ ...item, groupId: newItemGroupId });
+            }
+        }
+
+        const finalItems = [...otherItems, ...newItems].sort((a, b) => (a.loadingOrder || 999) - (b.loadingOrder || 999));
         setItems(finalItems);
         setEditingItemId(null);
 
         setCurrProdId('');
         setCurrDosage('');
+        setSubQuantities({});
         setPlantingSpacing('');
         setExpectedYield('');
         setCurrLoadingOrder('');
@@ -163,35 +268,56 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     };
 
     const handleEditItem = (item: OrderItem) => {
-        setEditingItemId(item.id);
-        if (item.productId === 'LABOREO_MECANICO') {
+        setEditingItemId(item.groupId || item.id);
+        const groupItems = items.filter(i => (i.groupId || i.id) === (item.groupId || item.id));
+        const first = groupItems[0];
+
+        if (first.productId === 'LABOREO_MECANICO') {
             setIsMechanicalLabor(true);
-            setMechanicalLaborName(item.productName);
+            setMechanicalLaborName(first.productName);
         } else {
             setIsMechanicalLabor(false);
-            setCurrProdId(item.productId);
+            setCurrProdId(first.productId);
         }
-        setCurrDosage(String(item.dosage));
-        setPlantingSpacing(item.plantingSpacing ? String(item.plantingSpacing) : '');
-        setCurrLoadingOrder(item.loadingOrder ? String(item.loadingOrder) : '');
-        setCurrWarehouseId(item.warehouseId || '');
+
+        setCurrDosage(String(first.dosage));
+        setPlantingSpacing(first.plantingSpacing ? String(first.plantingSpacing) : '');
+        setExpectedYield(first.expectedYield ? String(first.expectedYield) : '');
+        setCurrLoadingOrder(first.loadingOrder ? String(first.loadingOrder) : '');
+
+        // Repopulate subQuantities
+        const newSubQs: Record<string, number> = {};
+        groupItems.forEach(i => {
+            // We need to find the stockId. 
+            // Since we don't store stockId in OrderItem, we have to match by productId, warehouseId, and presentation details.
+            const s = stock.find(st =>
+                st.productId === i.productId &&
+                st.warehouseId === i.warehouseId &&
+                (st.presentationLabel || '') === (i.presentationLabel || '') &&
+                (st.presentationContent || 0) === (i.presentationContent || 0)
+            );
+            if (s) {
+                newSubQs[s.id] = i.multiplier || 0;
+            }
+        });
+        setSubQuantities(newSubQs);
     };
 
     const handleCancelEdit = () => {
         setEditingItemId(null);
         setCurrProdId('');
         setCurrDosage('');
+        setSubQuantities({});
         setPlantingSpacing('');
         setExpectedYield('');
         setCurrLoadingOrder('');
         setIsMechanicalLabor(false);
         setMechanicalLaborName('');
-        if (warehouses.length > 0) setCurrWarehouseId(warehouses[0].id);
     };
 
-    const handleRemoveItem = (id: string) => {
-        setItems(items.filter(i => i.id !== id));
-        if (editingItemId === id) handleCancelEdit();
+    const handleRemoveItem = (idOrGroupId: string) => {
+        setItems(items.filter(i => (i.groupId || i.id) !== idOrGroupId));
+        if (editingItemId === idOrGroupId) handleCancelEdit();
     };
 
     // Stock Validation
@@ -209,18 +335,26 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         const fetchContractors = async () => {
             const { data } = await supabase
                 .from('profiles')
-                .select('id, username')
+                .select('id, username, assigned_clients')
                 .eq('role', 'CONTRATISTA');
-            if (data) setContractors(data);
+            if (data) {
+                // Whitelist: Only show contractors assigned to this client
+                const filtered = data.filter((p: any) =>
+                    p.assigned_clients && Array.isArray(p.assigned_clients) && p.assigned_clients.includes(clientId)
+                );
+                setContractors(filtered);
+            }
         };
         fetchContractors();
-    }, []);
+    }, [clientId]);
 
     const handleSubmit = async () => {
-        if (!selectedLot || items.length === 0) return;
+        if (selectedLotIds.length === 0 || items.length === 0) return;
 
-        if (containsSeeds && selectedLot.status === 'SOWED') {
-            alert('Este lote ya posee una siembra aplicada. Debe reiniciarlo antes de cargar una nueva siembra.');
+        // Validation for seeds (optional/flexible for multi-lot)
+        const sowedLot = selectedLots.find(l => containsSeeds && l.status === 'SOWED');
+        if (sowedLot) {
+            alert(`El lote "${sowedLot.name}" ya posee una siembra aplicada. Debe reiniciarlo antes de cargar una nueva siembra.`);
             return;
         }
 
@@ -232,22 +366,26 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 : 1;
 
             const order: Order = {
-                id: generateId(),
+                id: editId || generateId(),
                 orderNumber: nextOrderNumber,
                 type: containsSeeds ? 'SOWING' : 'APPLICATION',
                 status: 'PENDING',
                 date: date,
                 time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                applicationStart: appStart,
-                applicationEnd: appEnd,
+                applicationDate: isDateRange ? undefined : applicationDate,
+                applicationStart: isDateRange ? appStart : undefined,
+                applicationEnd: isDateRange ? appEnd : undefined,
+                isDateRange,
                 clientId,
                 farmId: selectedFarmId,
-                lotId: selectedLotId,
+                lotId: selectedLotIds[0] || '', // Legacy compatibility for NOT NULL constraint
+                lotIds: selectedLotIds,
+                lotObservations,
                 applicatorId: selectedApplicatorId,
                 applicatorName: contractors.find(c => c.id === selectedApplicatorId)?.username,
                 servicePrice: servicePrice ? parseFloat(servicePrice) : 0,
                 expectedYield: items.find(i => i.expectedYield)?.expectedYield,
-                treatedArea: selectedLot.hectares,
+                treatedArea: totalTreatedArea,
                 items,
                 plantingDensity: items.find(i => i.plantingDensity)?.plantingDensity,
                 plantingDensityUnit: items.find(i => i.plantingDensityUnit)?.plantingDensityUnit,
@@ -298,18 +436,24 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             {step === 1 && (
                 <OrderLocationStep
                     date={date} setDate={setDate}
+                    isDateRange={isDateRange} setIsDateRange={setIsDateRange}
+                    applicationDate={applicationDate} setApplicationDate={setApplicationDate}
                     appStart={appStart} setAppStart={setAppStart}
                     appEnd={appEnd} setAppEnd={setAppEnd}
                     selectedFarmId={selectedFarmId} setSelectedFarmId={setSelectedFarmId}
-                    selectedLotId={selectedLotId} setSelectedLotId={setSelectedLotId}
+                    selectedLotIds={selectedLotIds} setSelectedLotIds={setSelectedLotIds}
+                    lotObservations={lotObservations} setLotObservations={setLotObservations}
                     farms={farms} lots={lots}
                     onNext={() => setStep(2)}
                 />
             )}
 
-            {step === 2 && selectedLot && (
+            {step === 2 && selectedLots.length > 0 && (
                 <OrderRecipeStep
-                    selectedLot={selectedLot}
+                    selectedLot={{
+                        name: selectedLots.length === 1 ? selectedLots[0].name : 'Varios lotes',
+                        hectares: totalTreatedArea
+                    }}
                     items={items}
                     availableProducts={availableProducts}
                     warehouses={warehouses}
@@ -330,6 +474,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     showNotes={showNotes} setShowNotes={setShowNotes}
                     notes={notes} setNotes={setNotes}
                     facturaImageUrl={facturaImageUrl} setFacturaImageUrl={setFacturaImageUrl}
+                    subQuantities={subQuantities} setSubQuantities={setSubQuantities}
+                    stock={stock}
                     handleAddItem={handleAddItem}
                     handleEditItem={handleEditItem}
                     handleRemoveItem={handleRemoveItem}
@@ -346,7 +492,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     appStart={appStart}
                     appEnd={appEnd}
                     selectedFarm={selectedFarm}
-                    selectedLot={selectedLot}
+                    selectedLot={{
+                        name: selectedLots.length === 1 ? selectedLots[0].name : 'Varios lotes',
+                        hectares: totalTreatedArea
+                    }}
                     items={items}
                     availableProducts={availableProducts}
                     stockShortages={stockShortages}

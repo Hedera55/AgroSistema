@@ -28,6 +28,7 @@ interface EnrichedStockItem extends ClientStock {
     productBrand?: string;
     productCommercialName?: string;
     hasProduct: boolean;
+    breakdown?: ClientStock[];
 }
 
 export default function ClientStockPage({ params }: { params: Promise<{ id: string }> }) {
@@ -48,7 +49,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Active Warehouse context
-    const [activeWarehouseId, setActiveWarehouseId] = useState<string | null>(null);
+    const [activeWarehouseIds, setActiveWarehouseIds] = useState<string[]>([]);
     const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
     const [selectedInManagerId, setSelectedInManagerId] = useState<string | null>(null); // For click interaction
     const [editName, setEditName] = useState('');
@@ -77,15 +78,32 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [sellerInputValue, setSellerInputValue] = useState('');
     const [note, setNote] = useState('');
     const [noteConfirmed, setNoteConfirmed] = useState(false);
-    const [selectedInvestor, setSelectedInvestor] = useState('');
+    // const [selectedInvestor, setSelectedInvestor] = useState(''); -> Replaced by selectedInvestors array
+    const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
     const [showNote, setShowNote] = useState(false);
     const [isDuplicate, setIsDuplicate] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
     // Multi-product entry state
-    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '' });
-    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string }[]>([]);
+    const [activeStockItem, setActiveStockItem] = useState({
+        productId: '',
+        quantity: '',
+        price: '',
+        tempBrand: '',
+        presentationLabel: '',
+        presentationContent: '',
+        presentationAmount: ''
+    });
+    const [stockItems, setStockItems] = useState<{
+        productId: string;
+        quantity: string;
+        price: string;
+        tempBrand: string;
+        presentationLabel?: string;
+        presentationContent?: string;
+        presentationAmount?: string;
+    }[]>([]);
 
     // Factura upload state
     const [sellingStockId, setSellingStockId] = useState<string | null>(null);
@@ -95,6 +113,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showSaleNote, setShowSaleNote] = useState(false);
     const [saleFacturaFile, setSaleFacturaFile] = useState<File | null>(null);
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
+    const [facturaDate, setFacturaDate] = useState('');
+    const [dueDate, setDueDate] = useState('');
 
     const [facturaUploading, setFacturaUploading] = useState(false);
 
@@ -161,18 +181,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         if (savedShowProductForm === 'true') setShowProductForm(true);
         if (savedShowCatalog === 'true') setShowCatalog(true);
         if (savedShowWarehouses === 'true') setShowWarehouses(true);
-        if (savedActiveW) setActiveWarehouseId(savedActiveW === 'null' ? null : savedActiveW);
+        if (savedActiveW) setActiveWarehouseIds(JSON.parse(savedActiveW));
     }, [id]);
 
-    // Handle default selection if none set
-    useEffect(() => {
-        // Only force selection if ID is invalid (deleted), but allow NULL (user deselected)
-        if (activeWarehouseId && warehouses.length > 0 && !warehouses.find(w => w.id === activeWarehouseId)) {
-            // Safety: if active warehouse was deleted, move to first
-            setActiveWarehouseId(warehouses[0].id);
-        }
-        // Removed logic that forced warehouses[0] if activeWarehouseId was null
-    }, [warehouses, activeWarehouseId]);
+    const toggleWarehouseSelection = (warehouseId: string) => {
+        setActiveWarehouseIds(prev =>
+            prev.includes(warehouseId)
+                ? prev.filter(id => id !== warehouseId)
+                : [...prev, warehouseId]
+        );
+    };
+
+    const setAllWarehouses = (ids: string[]) => {
+        setActiveWarehouseIds(ids);
+    };
 
     useEffect(() => {
         sessionStorage.setItem(`stock_showStockForm_${id}`, showStockForm.toString());
@@ -191,10 +213,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     }, [showWarehouses, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_activeW_${id}`, activeWarehouseId || 'null');
-        if (activeWarehouseId) setSelectedWarehouseId(activeWarehouseId);
-        else setSelectedWarehouseId('');
-    }, [activeWarehouseId, id]);
+        sessionStorage.setItem(`stock_activeW_${id}`, JSON.stringify(activeWarehouseIds));
+    }, [activeWarehouseIds, id]);
+
+    // Default selection when id changes
+    useEffect(() => {
+        if (!id) return;
+        if (activeWarehouseIds.length === 0) setSelectedWarehouseId('');
+        else if (activeWarehouseIds.length === 1) setSelectedWarehouseId(activeWarehouseIds[0]);
+    }, [activeWarehouseIds, id]);
 
 
     // Handle click outside to clear warehouse selection
@@ -402,21 +429,24 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
         const firstId = warehouses[0]?.id;
         const filteredStock = stock.filter((item: ClientStock) => {
-            // Match current active warehouse
-            // Also include null/undefined stock in the FIRST warehouse for transition
+            if (activeWarehouseIds.length === 0) return false;
             const effectiveWId = item.warehouseId || firstId;
-            return effectiveWId === activeWarehouseId;
+            return activeWarehouseIds.includes(effectiveWId);
         });
 
-        return filteredStock.map((item: ClientStock) => {
+        // Group by product/brand to combine stock
+        const combined = new Map<string, EnrichedStockItem>();
+
+        filteredStock.forEach((item: ClientStock) => {
             const product = products.find(p => p.id === item.productId);
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
             const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
             const normalizedName = (product?.name || '').toLowerCase().trim();
+            const commercialName = (product?.commercialName || '').toLowerCase().trim();
+
+            const key = `${item.productId}_${brand}`;
 
             let avgPrice = 0;
-
-            // Priority 1: Sale Average (Specific -> Generic)
             const saleDataSpecific = salePricing.get(item.productId);
             const saleDataGeneric = salePricing.get(normalizedName);
 
@@ -425,7 +455,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             } else if (saleDataGeneric && saleDataGeneric.totalQty > 0) {
                 avgPrice = saleDataGeneric.totalVal / saleDataGeneric.totalQty;
             } else {
-                // Priority 2: Purchase Average (Specific -> Generic)
                 const purchaseDataSpecific = purchasePricing.get(item.productId);
                 const purchaseDataGeneric = purchasePricing.get(normalizedName);
 
@@ -436,19 +465,29 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 }
             }
 
-            return {
-                ...item,
-                productName: product?.name || 'Producto Desconocido',
-                warehouseName: warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón'),
-                productType: product?.type || 'OTHER',
-                unit: product?.unit || 'UNIT',
-                price: avgPrice,
-                productBrand: item.productBrand || product?.brandName || '',
-                productCommercialName: product?.commercialName || (brand === 'propia' ? 'Propia' : ''),
-                hasProduct: !!product
-            };
-        }).filter(item => item.hasProduct);
-    }, [stock, products, warehouses, activeWarehouseId, movements]);
+            if (combined.has(key)) {
+                const existing = combined.get(key)!;
+                existing.quantity += item.quantity;
+                if (!existing.breakdown) existing.breakdown = [];
+                existing.breakdown.push(item);
+            } else {
+                combined.set(key, {
+                    ...item,
+                    productName: product?.name || 'Producto Desconocido',
+                    warehouseName: activeWarehouseIds.length > 1 ? 'Múltiples' : (warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón')),
+                    productType: product?.type || 'OTHER',
+                    unit: product?.unit || 'UNIT',
+                    price: avgPrice,
+                    productBrand: item.productBrand || product?.brandName || '',
+                    productCommercialName: product?.commercialName || (brand === 'propia' ? 'Propia' : ''),
+                    hasProduct: !!product,
+                    breakdown: [item]
+                });
+            }
+        });
+
+        return Array.from(combined.values()).filter(item => item.hasProduct);
+    }, [stock, products, warehouses, activeWarehouseIds, movements]);
 
     // Auto-update Sale Note with pricing details
     useEffect(() => {
@@ -548,16 +587,24 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 const product = availableProducts.find((p: Product) => p.id === item.productId);
                 const qtyNum = parseFloat(item.quantity.replace(',', '.'));
                 const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : 0;
+                const pLabel = (item.presentationLabel || '').trim();
+                const pContent = item.presentationContent ? parseFloat(item.presentationContent.replace(',', '.')) : 0;
+                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.replace(',', '.')) : 0;
+                const pBrand = (item.tempBrand || product?.brandName || '').toLowerCase().trim();
 
                 // Find existing item, but also account for items already processed in this loop
+                // Now matching by Product, Warehouse, Brand, and Presentation details
                 const existingInLoop = currentStockState.find((s: ClientStock) =>
                     s.productId === item.productId &&
-                    s.warehouseId === (selectedWarehouseId || undefined)
+                    s.warehouseId === (selectedWarehouseId || undefined) &&
+                    (s.productBrand || '').toLowerCase().trim() === pBrand &&
+                    (s.presentationLabel || '').trim() === pLabel &&
+                    (s.presentationContent || 0) === pContent
                 );
 
                 const stockId = existingInLoop ? existingInLoop.id : generateId();
 
-                const newItem = {
+                const newItem: ClientStock = {
                     id: stockId,
                     clientId: id,
                     warehouseId: selectedWarehouseId || undefined,
@@ -567,7 +614,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         ? existingInLoop.quantity + qtyNum
                         : qtyNum,
                     lastUpdated: now.toISOString(),
-                    updatedAt: now.toISOString()
+                    updatedAt: now.toISOString(),
+                    presentationLabel: pLabel || undefined,
+                    presentationContent: pContent || undefined,
+                    presentationAmount: existingInLoop
+                        ? (existingInLoop.presentationAmount || 0) + pAmount
+                        : pAmount
                 };
 
                 // Update intermediate state for the next iteration in this loop
@@ -588,7 +640,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     quantity: qtyNum,
                     unit: product?.unit || 'L',
                     price: priceNum,
-                    sellerName: selectedSeller || undefined
+                    sellerName: selectedSeller || undefined,
+                    presentationLabel: pLabel || undefined,
+                    presentationContent: pContent || 0,
+                    presentationAmount: pAmount || 0
                 });
             }
 
@@ -609,8 +664,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
-                investorName: selectedInvestor || undefined,
+                // investorName: selectedInvestor || undefined, -> Deprecated in favor of investors array
+                investors: selectedInvestors,
                 sellerName: selectedSeller || undefined,
+                facturaDate: facturaDate || undefined,
+                dueDate: dueDate || undefined,
                 items: movementItems
             };
 
@@ -628,8 +686,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setNote('');
             setNoteConfirmed(false);
             setShowNote(false);
-            setFacturaFile(null);
-            setSelectedInvestor('');
+            setFacturaDate('');
+            setDueDate('');
+            setSelectedInvestors([]);
             setSelectedSeller('');
             setShowStockForm(false);
         } catch (error) {
@@ -670,12 +729,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setFacturaUploading(false);
             }
 
-            // Update Stock
-            await updateStock({
-                ...stockItem,
-                quantity: stockItem.quantity - qtyNum,
-                lastUpdated: new Date().toISOString()
-            });
+            // Update Stock using auto-deduction across presentations
+            const deductSuccess = await deductStockQuantity(
+                stockItem.productId,
+                stockItem.productBrand || '',
+                qtyNum,
+                stockItem.warehouseId
+            );
+
+            if (!deductSuccess) {
+                // This shouldn't happen if UI validation works, but as a safety:
+                console.warn('Deduction might have been incomplete');
+            }
 
             const movementData: InventoryMovement = {
                 id: movementId,
@@ -728,41 +793,40 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     };
 
     const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => {
-        // Iterate over selected IDs
-        // For each, create movement(s) and update stock
-
+        // quantities here is a map of specific stock IDs to their selected quantities
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        // Track the last movement created for the ribbon (usually just one in batch, but we take the last one)
         let createdMovement: InventoryMovement | null = null;
 
-        for (const itemId of selectedStockIds) {
-            const item = enrichedStock.find(i => i.id === itemId);
-            if (!item) continue;
-
-            const qtyToMove = quantities[itemId] || 0;
+        // Iterate over the specific entries in the quantities map
+        for (const [stockId, qtyToMove] of Object.entries(quantities)) {
             if (qtyToMove <= 0) continue;
 
-            const product = products.find(p => p.id === item.productId);
+            // Find the specific stock record in the absolute stock state
+            const stockRecord = stock.find(s => s.id === stockId);
+            if (!stockRecord) continue;
+
+            const product = products.find(p => p.id === stockRecord.productId);
+            const warehouse = warehouses.find(w => w.id === stockRecord.warehouseId);
 
             // 1. Create OUT Movement (Origin)
             const movementData: InventoryMovement = {
                 id: generateId(),
                 clientId: id,
-                warehouseId: item.warehouseId,
-                productId: item.productId,
-                productName: item.productName,
-                productCommercialName: item.productCommercialName || '',
-                productBrand: item.productBrand || '-',
+                warehouseId: stockRecord.warehouseId,
+                productId: stockRecord.productId,
+                productName: product?.name || 'Producto Desconocido',
+                productCommercialName: product?.commercialName || '',
+                productBrand: stockRecord.productBrand || '-',
                 type: 'OUT',
                 quantity: qtyToMove,
-                unit: item.unit,
+                unit: product?.unit || 'u.',
                 date: dateStr,
                 time: timeStr,
                 referenceId: `MOVE-${now.getTime()}`,
-                notes: `${action === 'WITHDRAW' ? 'Retiro de stock' : 'Traslado a ' + (warehouses.find(w => w.id === destinationWarehouseId)?.name || 'galpón')} - ${note || ''}`,
+                notes: `${action === 'WITHDRAW' ? 'Retiro de stock' : 'Traslado a ' + (warehouses.find(w => w.id === destinationWarehouseId)?.name || 'galpón')} - ${stockRecord.presentationLabel || ''} ${stockRecord.presentationContent || ''} - ${note || ''}`,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
@@ -773,41 +837,45 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             if (action === 'WITHDRAW') {
                 createdMovement = movementData;
-                setLastTransferOrigin(item.warehouseName);
+                if (warehouse) setLastTransferOrigin(warehouse.name);
             }
 
-            // 2. Update Origin Stock
-            // We use updateStock logic manually or helper
-            // Note: item.quantity is UI value, we should check DB value theoretically but here we'll update with sub logic
-            // Careful: item might differ from DB if race condition, but assuming single user active logic for now.
-            // Better to re-fetch or use db.get but we have local `stock` state which is synced.
-            // Let's rely on item.quantity being reasonably fresh or calculate from existing `stock` list raw
-
-            const currentStockItem = stock.find(s => s.id === item.id);
-            if (currentStockItem) {
-                const newQty = currentStockItem.quantity - qtyToMove;
-                await updateStock({ ...currentStockItem, productBrand: item.productBrand, quantity: Math.max(0, newQty) });
-            }
+            // 2. Update Origin Stock (Direct Deduction)
+            const remainingQty = stockRecord.quantity - qtyToMove;
+            // Removed deleteStock(stockRecord.id) call to allow negative stock tracking
+            await updateStock({
+                ...stockRecord,
+                quantity: remainingQty,
+                lastUpdated: now.toISOString()
+            });
 
             // 3. If TRANSFER, create IN (Destination)
             if (action === 'TRANSFER' && destinationWarehouseId) {
-                // Find existing stock at destination
-                // We need to look up in the FULL `stock` list, not just `enrichedStock` (filtered by active warehouse)
-                const existingDestItem = stock.find(s => s.productId === item.productId && s.warehouseId === destinationWarehouseId);
+                // Find existing stock at destination with SAME product, brand, and presentation
+                const existingDestItem = stock.find(s =>
+                    s.productId === stockRecord.productId &&
+                    s.warehouseId === destinationWarehouseId &&
+                    (s.productBrand || '').toLowerCase().trim() === (stockRecord.productBrand || '').toLowerCase().trim() &&
+                    (s.presentationLabel || '').toLowerCase().trim() === (stockRecord.presentationLabel || '').toLowerCase().trim() &&
+                    (s.presentationContent || 0) === (stockRecord.presentationContent || 0)
+                );
 
                 if (existingDestItem) {
                     await updateStock({
                         ...existingDestItem,
-                        productBrand: item.productBrand,
-                        quantity: existingDestItem.quantity + qtyToMove
+                        quantity: existingDestItem.quantity + qtyToMove,
+                        lastUpdated: now.toISOString()
                     });
                 } else {
-                    // Create new stock record at destination
+                    // Create new stock record at destination mirroring the origin presentation
                     await updateStock({
                         clientId: id,
                         warehouseId: destinationWarehouseId,
-                        productId: item.productId,
-                        productBrand: item.productBrand,
+                        productId: stockRecord.productId,
+                        productBrand: stockRecord.productBrand,
+                        presentationLabel: stockRecord.presentationLabel,
+                        presentationContent: stockRecord.presentationContent,
+                        presentationAmount: '0', // Not relevant for moved items total
                         quantity: qtyToMove,
                         lastUpdated: now.toISOString()
                     });
@@ -818,17 +886,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     id: generateId(),
                     clientId: id,
                     warehouseId: destinationWarehouseId,
-                    productId: item.productId,
-                    productName: item.productName,
-                    productCommercialName: item.productCommercialName || '',
-                    productBrand: item.productBrand || '-',
+                    productId: stockRecord.productId,
+                    productName: product?.name || 'Producto Desconocido',
+                    productCommercialName: product?.commercialName || '',
+                    productBrand: stockRecord.productBrand || '-',
                     type: 'IN',
                     quantity: qtyToMove,
-                    unit: item.unit,
+                    unit: product?.unit || 'u.',
                     date: dateStr,
                     time: timeStr,
                     referenceId: `MOVE-${now.getTime()}`,
-                    notes: `Transferencia desde ${item.warehouseName} - ${note || ''}`,
+                    notes: `Transferencia desde ${warehouse?.name || 'Galpón'} - ${stockRecord.presentationLabel || ''} ${stockRecord.presentationContent || ''} - ${note || ''}`,
                     createdBy: displayName || 'Sistema',
                     createdAt: now.toISOString(),
                     synced: false
@@ -846,8 +914,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setLastMovement(createdMovement);
             setLastAction(action);
             if (action === 'TRANSFER') {
-                const item = enrichedStock.find(i => i.id === selectedStockIds[0]); // Use first item for origin
-                if (item) setLastTransferOrigin(item.warehouseName);
+                const firstId = Object.keys(quantities)[0];
+                const item = stock.find(i => i.id === firstId);
+                const warehouse = warehouses.find(w => w.id === item?.warehouseId);
+                if (warehouse) setLastTransferOrigin(warehouse.name);
             }
         }
     };
@@ -866,6 +936,39 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const handleClearSelection = () => {
         setSelectedStockIds([]);
         setShowMovePanel(false);
+    };
+
+    const deductStockQuantity = async (productId: string, brand: string, qtyToDeduct: number, warehouseId?: string) => {
+        // Find all stock items for this product/brand in the specific warehouse(s)
+        const candidates = stock.filter(s =>
+            s.productId === productId &&
+            (s.productBrand || '').toLowerCase().trim() === (brand || '').toLowerCase().trim() &&
+            (warehouseId ? s.warehouseId === warehouseId : true)
+        ).sort((a, b) => {
+            // Priority: items with no presentation details first (cleanup generic stock), then smallest quantities
+            const aHasPresentation = !!(a.presentationLabel || a.presentationContent);
+            const bHasPresentation = !!(b.presentationLabel || b.presentationContent);
+            if (aHasPresentation !== bHasPresentation) return aHasPresentation ? 1 : -1;
+            return a.quantity - b.quantity;
+        });
+
+        let remaining = qtyToDeduct;
+        for (const item of candidates) {
+            if (remaining <= 0) break;
+
+            if (item.quantity <= remaining + 0.0001) { // Add small epsilon for floating point
+                remaining -= item.quantity;
+                await deleteStock(item.id);
+            } else {
+                await updateStock({
+                    ...item,
+                    quantity: item.quantity - remaining,
+                    lastUpdated: new Date().toISOString()
+                });
+                remaining = 0;
+            }
+        }
+        return remaining <= 0.0001;
     };
 
     const handleDeleteProduct = async (productId: string) => {
@@ -926,11 +1029,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         const normalizedItem = {
             ...activeStockItem,
             quantity: activeStockItem.quantity.replace(',', '.'),
-            price: activeStockItem.price.replace(',', '.')
+            price: activeStockItem.price.replace(',', '.'),
+            presentationContent: activeStockItem.presentationContent.replace(',', '.'),
+            presentationAmount: activeStockItem.presentationAmount.replace(',', '.')
         };
 
         setStockItems([...stockItems, { ...normalizedItem }]);
-        setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
+        setActiveStockItem({
+            productId: '',
+            quantity: '',
+            price: '',
+            tempBrand: '',
+            presentationLabel: '',
+            presentationContent: '',
+            presentationAmount: ''
+        });
     };
 
     const removeBatchItem = (idx: number) => {
@@ -944,7 +1057,24 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     };
 
     const updateActiveStockItem = (field: string, value: string) => {
-        setActiveStockItem(prev => ({ ...prev, [field]: value }));
+        setActiveStockItem(prev => {
+            const newState = { ...prev, [field]: value };
+
+            // Auto-calculate quantity if presentation content or amount changes
+            if (field === 'presentationContent' || field === 'presentationAmount') {
+                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
+                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
+
+                const content = parseFloat(contentVal.toString().replace(',', '.'));
+                const amount = parseFloat(amountVal.toString().replace(',', '.'));
+
+                if (!isNaN(content) && !isNaN(amount)) {
+                    newState.quantity = (content * amount).toString();
+                }
+            }
+
+            return newState;
+        });
     };
 
     const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
@@ -958,6 +1088,42 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         COADYUVANTE: 'Coadyuvante',
         INOCULANTE: 'Inoculante',
         OTHER: 'Otro'
+    };
+
+    const handleImportProducts = async (importedProducts: any[]) => {
+        setIsSubmitting(true);
+        try {
+            let importedCount = 0;
+            for (const p of importedProducts) {
+                // Check if exists
+                const exists = availableProducts.find(existing =>
+                    (existing.activeIngredient || '').toLowerCase() === (p.activeIngredient || '').toLowerCase() &&
+                    (existing.brandName || '').toLowerCase() === (p.brandName || '').toLowerCase() &&
+                    (existing.commercialName || '').toLowerCase() === (p.commercialName || '').toLowerCase() &&
+                    existing.type === p.type
+                );
+
+                if (!exists) {
+                    await addProduct({
+                        name: p.name, // Fallback if PA missing, or just name
+                        brandName: p.brandName,
+                        commercialName: p.commercialName,
+                        activeIngredient: p.activeIngredient || p.name,
+                        type: p.type,
+                        unit: p.unit,
+                        clientId: id
+                    });
+                    importedCount++;
+                }
+            }
+            if (importedCount > 0) alert(`${importedCount} productos importados.`);
+            else alert('No se importaron productos nuevos (todos ya existían).');
+        } catch (error) {
+            console.error('Import error:', error);
+            alert('Error al importar productos.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (role === 'CONTRATISTA') {
@@ -990,7 +1156,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         Mover Stock ({selectedStockIds.length})
                                     </Button>
 
-                                    {warehouses.find(w => w.id === activeWarehouseId)?.name === 'Acopio de Granos' && (
+                                    {activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos' && (
                                         <Button
                                             onClick={() => {
                                                 if (sellingStockId) {
@@ -1023,7 +1189,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 variant={showStockForm ? "secondary" : "primary"}
                                 className={showStockForm ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : ""}
                             >
-                                {showStockForm ? 'Cancelar Cargar Stock' : 'Cargar Stock'}
+                                {showStockForm ? 'Cancelar Carga' : 'Cargar Compra de Insumo'}
                             </Button>
                         </div>
                     )}
@@ -1098,7 +1264,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
 
             <StockTable
-                activeWarehouseId={activeWarehouseId}
+                activeWarehouseIds={activeWarehouseIds}
                 warehouses={warehouses}
                 stockLoading={stockLoading}
                 productsLoading={productsLoading}
@@ -1137,9 +1303,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     selectedIds={selectedStockIds}
                     stockItems={enrichedStock}
                     warehouses={warehouses}
-                    activeWarehouseId={activeWarehouseId}
+                    activeWarehouseIds={activeWarehouseIds}
                     onConfirm={handleConfirmMove}
                     onCancel={() => setShowMovePanel(false)}
+                    investors={client?.partners || []}
                 />
             )}
 
@@ -1175,8 +1342,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 addWarehouse={async (name) => { await addWarehouse(name); }}
                 updateWarehouse={updateWarehouse}
                 deleteWarehouse={deleteWarehouse}
-                activeWarehouseId={activeWarehouseId}
-                setActiveWarehouseId={setActiveWarehouseId}
+                activeWarehouseIds={activeWarehouseIds}
+                toggleWarehouseSelection={toggleWarehouseSelection}
+                setAllWarehouses={setAllWarehouses}
                 selectedInManagerId={selectedInManagerId}
                 setSelectedInManagerId={setSelectedInManagerId}
                 editingWarehouseId={editingWarehouseId}
@@ -1203,6 +1371,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setNewProductName={setNewProductName}
                 setNewProductBrand={setNewProductBrand}
                 setNewProductPA={setNewProductPA}
+                newProductCommercialName={newProductCommercialName}
+                setNewProductCommercialName={setNewProductCommercialName}
                 setShowProductForm={setShowProductForm}
                 availableUnits={availableUnits}
                 deleteProduct={deleteProduct}
@@ -1217,26 +1387,25 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setNewProductType={setNewProductType}
                 productTypes={productTypes}
                 newProductPA={newProductPA}
-                newProductCommercialName={newProductCommercialName}
-                setNewProductCommercialName={setNewProductCommercialName}
                 newProductBrand={newProductBrand}
                 showUnitInput={showUnitInput}
                 setShowUnitInput={setShowUnitInput}
+                showUnitDelete={showUnitDelete}
+                setShowUnitDelete={setShowUnitDelete}
                 unitInputRef={unitInputRef}
                 unitInputValue={unitInputValue}
                 setUnitInputValue={setUnitInputValue}
                 handleAddUnit={handleAddUnit}
-                showUnitDelete={showUnitDelete}
-                setShowUnitDelete={setShowUnitDelete}
                 isDuplicate={isDuplicate}
                 isSubmitting={isSubmitting}
+                importProducts={handleImportProducts}
             />
 
             <StockEntryForm
                 showStockForm={showStockForm}
                 setShowStockForm={setShowStockForm}
                 warehouses={warehouses}
-                activeWarehouseId={activeWarehouseId}
+                activeWarehouseIds={activeWarehouseIds}
                 selectedWarehouseId={selectedWarehouseId}
                 setSelectedWarehouseId={setSelectedWarehouseId}
                 availableProducts={availableProducts}
@@ -1259,8 +1428,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setShowSellerDelete={setShowSellerDelete}
                 setAvailableSellers={setAvailableSellers}
                 saveClientSellers={saveClientSellers}
-                selectedInvestor={selectedInvestor}
-                setSelectedInvestor={setSelectedInvestor}
+                selectedInvestors={selectedInvestors}
+                setSelectedInvestors={setSelectedInvestors}
                 client={client}
                 showNote={showNote}
                 setShowNote={setShowNote}
@@ -1273,6 +1442,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 handleStockSubmit={handleStockSubmit}
                 isSubmitting={isSubmitting}
                 facturaUploading={facturaUploading}
+                facturaDate={facturaDate}
+                setFacturaDate={setFacturaDate}
+                dueDate={dueDate}
+                setDueDate={setDueDate}
             />
         </div >
     );
