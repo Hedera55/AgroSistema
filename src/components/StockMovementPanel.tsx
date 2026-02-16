@@ -8,9 +8,11 @@ interface StockMovementPanelProps {
     stockItems: any[]; // enriched items
     warehouses: Warehouse[]; // for transfer destination
     activeWarehouseIds: string[];
+    investors?: { name: string; percentage?: number }[];
+    campaigns?: any[];
+    movements?: any[];
     onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => Promise<void>;
     onCancel: () => void;
-    investors?: { name: string }[]; // New prop
 }
 
 export function StockMovementPanel({
@@ -20,7 +22,9 @@ export function StockMovementPanel({
     activeWarehouseIds,
     onConfirm,
     onCancel,
-    investors = []
+    investors = [],
+    campaigns = [],
+    movements = []
 }: StockMovementPanelProps) {
     const [action, setAction] = useState<'WITHDRAW' | 'TRANSFER'>('WITHDRAW');
     const [destinationId, setDestinationId] = useState('');
@@ -99,6 +103,31 @@ export function StockMovementPanel({
         );
     };
 
+    // --- Quota Logic ---
+    const getPartnerQuotaInfo = (productId: string, campaignId?: string, partnerName?: string) => {
+        if (!campaignId || !partnerName) return null;
+        const campaign = campaigns.find(c => c.id === campaignId);
+        if (campaign?.mode !== 'GRAIN') return null;
+
+        const partner = investors.find(i => i.name === partnerName);
+        const percentage = partner?.percentage || 0;
+
+        // Total Harvested (Movements type IN for this product/campaign)
+        const totalHarvested = movements
+            .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'IN')
+            .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+        // Already Withdrawn by this partner
+        const alreadyWithdrawn = movements
+            .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'WITHDRAW' && m.receiverName === partnerName)
+            .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+        const quota = totalHarvested * (percentage / 100);
+        const remaining = quota - alreadyWithdrawn;
+
+        return { quota, remaining, percentage };
+    };
+
     const handleSubmit = async () => {
         if (action === 'TRANSFER' && !destinationId) {
             alert('Seleccione un galpón de destino');
@@ -138,6 +167,21 @@ export function StockMovementPanel({
         if (wouldGoNegative) {
             if (!confirm('Atención: La cantidad seleccionada supera el stock disponible. Esto resultará en un saldo negativo. ¿Desea continuar?')) {
                 return;
+            }
+        }
+
+        // --- Quota Validation ---
+        if (action === 'WITHDRAW' && receiverName) {
+            for (const item of selectedItems) {
+                const info = getPartnerQuotaInfo(item.productId, item.campaignId, receiverName);
+                if (info) {
+                    const totalToWithdraw = getGroupTotal(item);
+                    if (totalToWithdraw > info.remaining + 0.01) { // 0.01 for float precision
+                        if (!confirm(`Atención: El retiro (${totalToWithdraw.toLocaleString()} ${item.unit}) supera el cupo restante de ${receiverName} (${info.remaining.toLocaleString()} ${item.unit}, Cuota: ${info.percentage}%). ¿Desea forzar la operación?`)) {
+                            return;
+                        }
+                    }
+                }
             }
         }
 
@@ -306,6 +350,30 @@ export function StockMovementPanel({
                             <option key={inv.name} value={inv.name}>{inv.name}</option>
                         ))}
                     </select>
+
+                    {receiverName && selectedItems.some(item => {
+                        const campaign = campaigns.find(c => c.id === item.campaignId);
+                        return campaign?.mode === 'GRAIN';
+                    }) && (
+                            <div className="mt-3 space-y-2">
+                                <label className="block text-[10px] font-black text-orange-600 uppercase tracking-widest">Cupos Disponibles ({receiverName}):</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {selectedItems.map(item => {
+                                        const info = getPartnerQuotaInfo(item.productId, item.campaignId, receiverName);
+                                        if (!info) return null;
+                                        return (
+                                            <div key={item.id} className="flex justify-between items-center bg-white/60 p-2 rounded border border-orange-100/50">
+                                                <span className="text-[11px] font-bold text-slate-600">{item.productName}</span>
+                                                <span className={`text-[11px] font-black ${info.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                    {info.remaining.toLocaleString()} {item.unit} libres
+                                                    <span className="text-[9px] text-slate-400 ml-1 font-normal">(Cupo: {info.percentage}%)</span>
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                 </div>
             )}
 

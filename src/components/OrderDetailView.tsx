@@ -9,9 +9,10 @@ interface OrderDetailViewProps {
     createdBy?: string;
     warehouses?: any[];
     lots?: any[];
+    campaigns?: any[];
 }
 
-export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client, onClose, createdBy, warehouses = [], lots = [] }) => {
+export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [] }) => {
     const [showFullNote, setShowFullNote] = useState(false);
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
 
@@ -172,6 +173,12 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Esperado</label>
                                     <p className="text-sm font-bold text-slate-700">{order.expectedYield.toLocaleString()} kg</p>
+                                </div>
+                            )}
+                            {order.campaignId && (
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Campaña</label>
+                                    <p className="text-sm font-bold text-emerald-700">{campaigns.find(c => c.id === order.campaignId)?.name || '---'}</p>
                                 </div>
                             )}
                         </div>

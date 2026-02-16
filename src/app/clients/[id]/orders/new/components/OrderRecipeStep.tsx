@@ -40,6 +40,9 @@ interface OrderRecipeStepProps {
     setNotes: (val: string) => void;
     facturaImageUrl: string | null;
     setFacturaImageUrl: (val: string | null) => void;
+    selectedCampaignId?: string;
+    setSelectedCampaignId?: (val: string) => void;
+    campaigns?: any[];
     subQuantities: Record<string, number>;
     setSubQuantities: (val: Record<string, number>) => void;
     stock: any[];
@@ -49,6 +52,7 @@ interface OrderRecipeStepProps {
     handleCancelEdit: () => void;
     onBack: () => void;
     onNext: () => void;
+    clientPartners?: any[];
 }
 
 export function OrderRecipeStep({
@@ -94,8 +98,11 @@ export function OrderRecipeStep({
     handleCancelEdit,
     onBack,
     onNext,
-    clientPartners
-}: OrderRecipeStepProps & { clientPartners?: any[] }) {
+    clientPartners,
+    selectedCampaignId,
+    setSelectedCampaignId,
+    campaigns
+}: OrderRecipeStepProps) {
     const selectedProduct = availableProducts.find(p => p.id === currProdId);
 
     // Filter stock for the selected product and group by warehouse
@@ -395,7 +402,7 @@ export function OrderRecipeStep({
                     </div>
                 )}
 
-                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
                         <select
@@ -428,6 +435,20 @@ export function OrderRecipeStep({
                             <option value="">Seleccione Socio...</option>
                             {clientPartners?.map((p: any) => (
                                 <option key={p.name} value={p.name}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
+                        <select
+                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
+                            value={selectedCampaignId}
+                            onChange={e => setSelectedCampaignId?.(e.target.value)}
+                        >
+                            <option value="">Seleccionar...</option>
+                            {campaigns?.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
                     </div>

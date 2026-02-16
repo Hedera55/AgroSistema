@@ -11,6 +11,7 @@ import { usePDF } from '@/hooks/usePDF';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrders } from '@/hooks/useOrders';
 import { useFarms } from '@/hooks/useLocations';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { supabase } from '@/lib/supabase';
 import { OrderDetailView } from '@/components/OrderDetailView';
 
@@ -21,6 +22,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     // Data Hooks
     const { orders: rawOrders, loading: ordersLoading, updateOrderStatus, deleteOrder } = useOrders(id);
     const { farms, loading: farmsLoading } = useFarms(id);
+    const { campaigns, loading: campaignsLoading } = useCampaigns(id);
 
     // Local state for lots (since useLots is farm-specific)
     const [lots, setLots] = useState<Lot[]>([]);
@@ -61,7 +63,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
         loadExtras();
     }, [id]);
 
-    const loading = ordersLoading || farmsLoading || dataLoading;
+    const loading = ordersLoading || farmsLoading || campaignsLoading || dataLoading;
 
     // Enrich orders with Farm/Lot names
     const orders = useMemo(() => {
@@ -421,7 +423,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                             <div className="grid grid-cols-3 gap-1 w-fit ml-auto">
                                                 <div className="relative group/tooltip">
                                                     <button
-                                                        onClick={() => generateInsumosPDF(order, client)}
+                                                        onClick={() => client && generateInsumosPDF(order, client)}
                                                         className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
                                                     >
                                                         N
@@ -433,7 +435,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
                                                 <div className="relative group/tooltip">
                                                     <button
-                                                        onClick={() => generateRemitoPDF(order, client)}
+                                                        onClick={() => client && generateRemitoPDF(order, client)}
                                                         className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
                                                     >
                                                         R
@@ -625,6 +627,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         warehouses={warehouses}
                         createdBy={displayName || 'Sistema'}
                         lots={lots}
+                        campaigns={campaigns}
                     />
                 )}
             </div>

@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Warehouse, Product, Client } from '@/types';
+import { Warehouse, Product, Client, Campaign } from '@/types';
 
 interface SegmentedDateInputProps {
     label: string;
@@ -151,6 +151,9 @@ interface StockEntryFormProps {
     handleFacturaChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isSubmitting: boolean;
     facturaUploading: boolean;
+    campaigns: Campaign[];
+    selectedCampaignId: string;
+    setSelectedCampaignId: (id: string) => void;
 }
 
 export function StockEntryForm({
@@ -198,8 +201,9 @@ export function StockEntryForm({
     setFacturaDate,
     dueDate,
     setDueDate,
-    presentation,
-    setPresentation
+    campaigns,
+    selectedCampaignId,
+    setSelectedCampaignId
 }: StockEntryFormProps) {
     if (!showStockForm) return null;
 
@@ -505,6 +509,20 @@ export function StockEntryForm({
                     </div>
 
                     <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Campaña</label>
+                        <select
+                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
+                            value={selectedCampaignId}
+                            onChange={e => setSelectedCampaignId(e.target.value)}
+                        >
+                            <option value="" className="text-slate-400">Seleccione Campaña...</option>
+                            {campaigns.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Destino (Galpón)</label>
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
@@ -519,17 +537,6 @@ export function StockEntryForm({
                         </select>
                     </div>
 
-                    {/* Row 1 - Col 3 empty */}
-                    {/* Total Purchase Calculation */}
-                    <div className="hidden md:flex flex-col justify-end">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Total Compra</label>
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg h-11 px-4 flex items-center justify-end shadow-sm">
-                            <span className="text-lg font-black text-emerald-700">
-                                USD {stockItems.reduce((acc, it) => acc + (parseFloat(it.quantity) * (parseFloat(it.price) || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                        </div>
-                    </div>
-
                     <SegmentedDateInput
                         label="Fecha Emisión"
                         value={facturaDate}
@@ -542,7 +549,14 @@ export function StockEntryForm({
                         onChange={setDueDate}
                     />
 
-                    <div className="hidden md:block"></div>
+                    <div className="md:flex flex-col justify-end">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Total Compra</label>
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg h-11 px-4 flex items-center justify-end shadow-sm">
+                            <span className="text-lg font-black text-emerald-700">
+                                USD {stockItems.reduce((acc, it) => acc + (parseFloat(it.quantity) * (parseFloat(it.price) || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 <div>
@@ -647,33 +661,35 @@ export function StockEntryForm({
                     </Button>
                 </div>
 
-                {showNote && (
-                    <div className="pt-2 flex gap-2 animate-fadeIn">
-                        <textarea
-                            className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4 h-12 min-h-[48px] resize-y"
-                            rows={1}
-                            placeholder="ej. Factura #0001-12345678..."
-                            value={note}
-                            onChange={e => setNote(e.target.value)}
-                            autoFocus
-                        />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setNoteConfirmed(true);
-                                setShowNote(false);
-                            }}
-                            className="h-12 w-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0 aspect-square"
-                            title="Confirmar nota"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </button>
-                    </div>
-                )}
-            </form>
-        </div>
+                {
+                    showNote && (
+                        <div className="pt-2 flex gap-2 animate-fadeIn">
+                            <textarea
+                                className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-3 px-4 h-12 min-h-[48px] resize-y"
+                                rows={1}
+                                placeholder="ej. Factura #0001-12345678..."
+                                value={note}
+                                onChange={e => setNote(e.target.value)}
+                                autoFocus
+                            />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setNoteConfirmed(true);
+                                    setShowNote(false);
+                                }}
+                                className="h-12 w-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0 aspect-square"
+                                title="Confirmar nota"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    <polyline points="12 5 19 12 12 19"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    )
+                }
+            </form >
+        </div >
     );
 }

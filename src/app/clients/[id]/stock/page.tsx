@@ -4,6 +4,7 @@ import React, { use, useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useClientStock, useInventory, useClientMovements } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
@@ -28,6 +29,7 @@ interface EnrichedStockItem extends ClientStock {
     productBrand?: string;
     productCommercialName?: string;
     hasProduct: boolean;
+    campaignId?: string;
     breakdown?: ClientStock[];
 }
 
@@ -38,6 +40,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse, loading: warehousesLoading } = useWarehouses(id);
     const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
     const { movements, loading: movementsLoading, refresh: movementsRefresh } = useClientMovements(id);
+    const { campaigns, loading: campaignsLoading } = useCampaigns(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -115,6 +118,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
     const [facturaDate, setFacturaDate] = useState('');
     const [dueDate, setDueDate] = useState('');
+    const [selectedCampaignId, setSelectedCampaignId] = useState('');
 
     const [facturaUploading, setFacturaUploading] = useState(false);
 
@@ -481,6 +485,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     productBrand: item.productBrand || product?.brandName || '',
                     productCommercialName: product?.commercialName || (brand === 'propia' ? 'Propia' : ''),
                     hasProduct: !!product,
+                    campaignId: item.campaignId,
                     breakdown: [item]
                 });
             }
@@ -494,10 +499,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         if (sellingStockId && saleQuantity && salePrice) {
             const stockItem = enrichedStock.find(s => s.id === sellingStockId);
             if (stockItem) {
-                const qtyNum = parseFloat(saleQuantity);
-                const priceNum = parseFloat(salePrice);
+                const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
+                const priceNum = parseFloat(salePrice.replace(',', '.'));
                 if (!isNaN(qtyNum) && !isNaN(priceNum)) {
-                    setSaleNote(`${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
+                    // Logic: User enters Tons, we store Kg. Note reflects the user's input (Tons)
+                    setSaleNote(`${priceNum} USD/Ton, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
                 }
             }
         }
@@ -599,7 +605,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     s.warehouseId === (selectedWarehouseId || undefined) &&
                     (s.productBrand || '').toLowerCase().trim() === pBrand &&
                     (s.presentationLabel || '').trim() === pLabel &&
-                    (s.presentationContent || 0) === pContent
+                    (s.presentationContent || 0) === pContent &&
+                    s.campaignId === (selectedCampaignId || undefined)
                 );
 
                 const stockId = existingInLoop ? existingInLoop.id : generateId();
@@ -608,6 +615,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     id: stockId,
                     clientId: id,
                     warehouseId: selectedWarehouseId || undefined,
+                    campaignId: selectedCampaignId || undefined,
                     productId: item.productId,
                     productBrand: item.tempBrand || product?.brandName || '',
                     quantity: existingInLoop
@@ -669,6 +677,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 sellerName: selectedSeller || undefined,
                 facturaDate: facturaDate || undefined,
                 dueDate: dueDate || undefined,
+                campaignId: selectedCampaignId || undefined,
                 items: movementItems
             };
 
@@ -681,13 +690,22 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             // Reset
             setStockItems([]);
-            setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
+            setActiveStockItem({
+                productId: '',
+                quantity: '',
+                price: '',
+                tempBrand: '',
+                presentationLabel: '',
+                presentationContent: '',
+                presentationAmount: ''
+            });
             setSelectedWarehouseId('');
             setNote('');
             setNoteConfirmed(false);
             setShowNote(false);
             setFacturaDate('');
             setDueDate('');
+            setSelectedCampaignId('');
             setSelectedInvestors([]);
             setSelectedSeller('');
             setShowStockForm(false);
@@ -707,8 +725,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const stockItem = enrichedStock.find(s => s.id === sellingStockId);
             if (!stockItem) return;
 
-            const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
-            const priceNum = parseFloat(salePrice.replace(',', '.'));
+            const qtyInTons = parseFloat(saleQuantity.replace(',', '.'));
+            const priceInTons = parseFloat(salePrice.replace(',', '.'));
+
+            if (isNaN(qtyInTons) || isNaN(priceInTons)) return;
+
+            const qtyNum = qtyInTons * 1000; // Store as Kg
+            const priceNum = priceInTons / 1000; // Store as USD/Kg
 
             // Record Movement
             const movementId = generateId();
@@ -875,7 +898,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         productBrand: stockRecord.productBrand,
                         presentationLabel: stockRecord.presentationLabel,
                         presentationContent: stockRecord.presentationContent,
-                        presentationAmount: '0', // Not relevant for moved items total
+                        presentationAmount: 0, // Not relevant for moved items total
                         quantity: qtyToMove,
                         lastUpdated: now.toISOString()
                     });
@@ -1052,7 +1075,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     const editBatchItem = (idx: number) => {
         const itemToEdit = stockItems[idx];
-        setActiveStockItem({ ...itemToEdit });
+        setActiveStockItem({
+            ...itemToEdit,
+            presentationLabel: itemToEdit.presentationLabel || '',
+            presentationContent: itemToEdit.presentationContent || '',
+            presentationAmount: itemToEdit.presentationAmount || ''
+        });
         setStockItems(stockItems.filter((_, i) => i !== idx));
     };
 
@@ -1166,6 +1194,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                                                 if (selectedStockIds.length === 1) {
                                                     const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
+                                                    const campaign = item?.campaignId ? campaigns.find(c => c.id === item.campaignId) : null;
+
+                                                    if (campaign?.mode === 'GRAIN') {
+                                                        alert('No se permiten ventas en campañas de modo COSECHA. Los socios deben realizar retiros.');
+                                                        return;
+                                                    }
+
                                                     if (item) {
                                                         setSellingStockId(item.id);
                                                         setSaleQuantity(item.quantity.toString());
@@ -1306,7 +1341,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeWarehouseIds={activeWarehouseIds}
                     onConfirm={handleConfirmMove}
                     onCancel={() => setShowMovePanel(false)}
-                    investors={client?.partners || []}
+                    investors={client?.investors || client?.partners || []}
+                    campaigns={campaigns}
+                    movements={movements}
                 />
             )}
 
@@ -1446,6 +1483,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setFacturaDate={setFacturaDate}
                 dueDate={dueDate}
                 setDueDate={setDueDate}
+                campaigns={campaigns}
+                selectedCampaignId={selectedCampaignId}
+                setSelectedCampaignId={setSelectedCampaignId}
             />
         </div >
     );

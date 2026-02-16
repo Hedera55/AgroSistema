@@ -19,6 +19,7 @@ export interface Client {
     cuit?: string; // Government ID
     investors?: { name: string; percentage: number }[]; // Legacy/To be removed
     partners?: { name: string; cuit?: string }[]; // List of available partner objects for expenditures
+    campaigns?: Campaign[]; // List of available campaigns
     synced?: boolean;
     enabledUnits?: string[];
     enabledSellers?: string[];
@@ -110,6 +111,21 @@ export interface Product {
     deletedAt?: string;
 }
 
+// --- Campaigns ---
+
+export type CampaignMode = 'MONEY' | 'GRAIN';
+
+export interface Campaign {
+    id: string;
+    clientId: string;
+    name: string; // e.g., "24/25"
+    mode: CampaignMode;
+    createdAt?: string;
+    updatedAt?: string;
+    synced?: boolean;
+    deleted?: boolean;
+}
+
 // "Galpón Virtual" (Stock)
 export interface ClientStock {
     id: string;
@@ -125,6 +141,7 @@ export interface ClientStock {
     presentationLabel?: string;   // e.g., "Bidones", "Bolsas"
     presentationContent?: number; // e.g., 20
     presentationAmount?: number;  // e.g., 5
+    campaignId?: string; // Link to Campaign
 }
 
 // --- Orders ---
@@ -211,6 +228,7 @@ export interface InventoryMovement {
     deletedBy?: string;
     items?: MovementItem[]; // For consolidated entries
     investors?: { name: string; percentage: number }[]; // Multi-investor support
+    campaignId?: string; // Link to Campaign
 }
 
 export interface Order {
@@ -263,6 +281,7 @@ export interface Order {
     deletedBy?: string;
     sowingOrderId?: string;
     investorName?: string; // Who is responsible for the service cost
+    campaignId?: string; // Link to Campaign
 }
 
 export interface OrderActivity {

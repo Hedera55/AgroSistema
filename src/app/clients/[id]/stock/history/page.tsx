@@ -3,7 +3,7 @@
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem, ClientStock } from '@/types';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,7 @@ import { StockEntryForm } from '../components/StockEntryForm';
 import { useClientStock, useInventory } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { generateId } from '@/lib/uuid';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { syncService } from '@/services/sync';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +58,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [showSellerInput, setShowSellerInput] = useState(false);
     const [showSellerDelete, setShowSellerDelete] = useState(false);
     const [sellerInputValue, setSellerInputValue] = useState('');
+    const { campaigns } = useCampaigns(clientId);
+    const [selectedCampaignId, setSelectedCampaignId] = useState('');
     const [typeLabels] = useState<Record<ProductType, string>>({
         HERBICIDE: 'HERBICIDA',
         FERTILIZER: 'FERTILIZANTE',
@@ -825,12 +828,25 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         addStockToBatch={() => {
                             if (activeStockItem.productId && activeStockItem.quantity) {
                                 setStockItems(prev => [...prev, activeStockItem]);
-                                setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '' });
+                                setActiveStockItem({
+                                    productId: '',
+                                    quantity: '',
+                                    price: '',
+                                    tempBrand: '',
+                                    presentationLabel: '',
+                                    presentationContent: '',
+                                    presentationAmount: ''
+                                });
                             }
                         }}
                         editBatchItem={(idx) => {
                             const item = stockItems[idx];
-                            setActiveStockItem(item);
+                            setActiveStockItem({
+                                ...item,
+                                presentationLabel: item.presentationLabel || '',
+                                presentationContent: item.presentationContent || '',
+                                presentationAmount: item.presentationAmount || ''
+                            });
                             setStockItems(prev => prev.filter((_, i) => i !== idx));
                         }}
                         removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))}
@@ -869,6 +885,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         handleStockSubmit={handleEditSave}
                         isSubmitting={isSubmitting}
                         facturaUploading={facturaUploading}
+                        campaigns={campaigns}
+                        selectedCampaignId={selectedCampaignId}
+                        setSelectedCampaignId={setSelectedCampaignId}
                         facturaDate={facturaDate}
                         setFacturaDate={setFacturaDate}
                         dueDate={dueDate}

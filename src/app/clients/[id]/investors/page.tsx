@@ -4,10 +4,11 @@ import React, { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
-import { Client, InventoryMovement, Order, Product } from '@/types';
+import { Client, InventoryMovement, Order, Product, Campaign, CampaignMode } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useInventory, useClientMovements } from '@/hooks/useInventory';
 import { useOrders } from '@/hooks/useOrders';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { generateId } from '@/lib/uuid';
@@ -29,6 +30,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const [editingPartnerIdx, setEditingPartnerIdx] = useState<number | null>(null);
     const [backupPartner, setBackupPartner] = useState<{ name: string; cuit?: string } | null>(null);
     const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+    // Campaigns state
+    const { campaigns, addCampaign, updateCampaign, deleteCampaign, loading: campaignsLoading } = useCampaigns(id);
+    const [showEditCampaigns, setShowEditCampaigns] = useState(false);
+    const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+    const [newCampaignName, setNewCampaignName] = useState('');
+    const [newCampaignMode, setNewCampaignMode] = useState<CampaignMode>('MONEY');
+    const [viewCampaignId, setViewCampaignId] = useState<string>('all');
 
 
     useEffect(() => {
@@ -131,6 +140,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         });
 
         movements.forEach((m: InventoryMovement) => {
+            // Filter by campaign if selected
+            if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
+
             const product = products.find(p => p.id === m.productId);
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
 
@@ -156,6 +168,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         });
 
         orders.forEach((o: Order) => {
+            // Filter by campaign if selected
+            if (viewCampaignId !== 'all' && o.campaignId !== viewCampaignId) return;
+
             if (o.servicePrice) {
                 const amount = (o.servicePrice * o.treatedArea);
                 serviceCosts += amount;
@@ -167,15 +182,51 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         const totalInvested = investedMovements + serviceCosts;
 
+        // Group by campaign for overview
+        const perCampaign: Record<string, { invested: number; sold: number; total: number }> = {};
+        campaigns.forEach(c => {
+            let cInvested = 0;
+            let cSold = 0;
+
+            movements.forEach(m => {
+                if (m.campaignId !== c.id) return;
+                const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+                if (m.type === 'IN' && !isTransfer) {
+                    if (m.productId === 'CONSOLIDATED' && m.items) {
+                        cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                    } else {
+                        let purchasePrice = m.purchasePrice;
+                        if (purchasePrice === undefined || purchasePrice === null) {
+                            const wap = productWAPs.get(m.productId);
+                            purchasePrice = (wap && wap.totalQty > 0) ? (wap.totalVal / wap.totalQty) : 0;
+                        }
+                        cInvested += m.quantity * purchasePrice;
+                    }
+                } else if (m.type === 'SALE') {
+                    cSold += (m.quantity * (m.salePrice || 0));
+                }
+            });
+
+            orders.forEach(o => {
+                if (o.campaignId !== c.id) return;
+                if (o.servicePrice) {
+                    cInvested += (o.servicePrice * o.treatedArea);
+                }
+            });
+
+            perCampaign[c.id] = { invested: cInvested, sold: cSold, total: cSold - cInvested };
+        });
+
         return {
             investedMovements,
             serviceCosts,
             totalInvested,
             sold,
             total: sold - totalInvested,
-            perPartner
+            perPartner,
+            perCampaign
         };
-    }, [movements, products, orders]);
+    }, [movements, products, orders, viewCampaignId, campaigns]);
 
     const formatLedgerDate = (dateStr: string, timeStr?: string) => {
         if (!dateStr) return { date: '-', time: '-' };
@@ -288,6 +339,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         movements.forEach(m => {
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
+            if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
 
             const { normalizedDate, normalizedTime } = normalizeDateTime(m.date, m.time);
 
@@ -333,6 +385,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         });
 
         orders.forEach(o => {
+            if (viewCampaignId !== 'all' && o.campaignId !== viewCampaignId) return;
             if (o.servicePrice && o.servicePrice > 0) {
                 const { normalizedDate, normalizedTime } = normalizeDateTime(o.appliedAt || o.date, o.time);
                 history.push({
@@ -356,7 +409,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             return b.id.localeCompare(a.id);
         });
 
-    }, [movements, products, orders]);
+    }, [movements, products, orders, viewCampaignId]);
 
     const investorBreakdown = useMemo(() => {
         const partnersMap = stats.perPartner;
@@ -384,8 +437,25 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             <div className="flex flex-col gap-4">
                 <div>
                     <Link href={`/clients/${id}`} className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block">← Volver al Dashboard</Link>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Contaduría</h1>
-                    <p className="text-slate-500">Resumen de inversión y ventas para <strong>{client.name}</strong></p>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-none">Contaduría</h1>
+                            <p className="text-slate-500 mt-1">Resumen de inversión y ventas para <strong>{client.name}</strong></p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar Campaña:</span>
+                            <select
+                                className="bg-white border-slate-200 text-sm font-bold text-slate-700 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all cursor-pointer shadow-sm"
+                                value={viewCampaignId}
+                                onChange={e => setViewCampaignId(e.target.value)}
+                            >
+                                <option value="all">Todas las Campañas</option>
+                                {campaigns.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -422,6 +492,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     </tbody>
                 </table>
             </div>
+
 
             {/* Financial History */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -527,6 +598,144 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Campaigns Section */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Campañas</h3>
+                    {isMaster && (
+                        <button
+                            onClick={() => setShowEditCampaigns(!showEditCampaigns)}
+                            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
+                        >
+                            {showEditCampaigns ? 'Cerrar' : '✏️ Gestionar campañas'}
+                        </button>
+                    )}
+                </div>
+
+                <div className="py-0">
+                    {showEditCampaigns && (
+                        /* Minimalist Creation Row - Floating style */
+                        <div className="px-6 py-3 mb-2 border-b border-slate-200 pb-4 animate-fadeIn">
+                            <div className="flex items-center gap-4">
+                                <div className="flex-1">
+                                    <Input
+                                        placeholder="Nombre de nueva campaña"
+                                        value={newCampaignName}
+                                        onChange={e => setNewCampaignName(e.target.value)}
+                                        className="bg-white border-slate-200 focus:border-emerald-500 h-8 text-sm placeholder:text-slate-400"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">Repartición de</span>
+                                    <select
+                                        value={newCampaignMode}
+                                        onChange={e => setNewCampaignMode(e.target.value as CampaignMode)}
+                                        className="h-8 px-2 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600 outline-none focus:ring-1 focus:ring-emerald-500"
+                                    >
+                                        <option value="MONEY">Saldo Monetario</option>
+                                        <option value="GRAIN">Granos</option>
+                                    </select>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!newCampaignName) return alert('Ingrese un nombre');
+                                        await addCampaign({ name: newCampaignName, mode: newCampaignMode });
+                                        setNewCampaignName('');
+                                    }}
+                                    disabled={!newCampaignName}
+                                    className="h-8 w-8 shrink-0 flex items-center justify-center bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-0 divide-y divide-slate-200">
+                        {showEditCampaigns && campaigns.length > 0 && (
+                            <div className="px-6 py-2">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Campañas Existentes</span>
+                            </div>
+                        )}
+                        {campaigns.map(camp => (
+                            <div key={camp.id} className="px-6 animate-fadeIn">
+                                {showEditCampaigns ? (
+                                    editingCampaignId === camp.id ? (
+                                        /* Edit Mode Row - Matching Creation layout */
+                                        <div className="flex items-center gap-4 py-2">
+                                            <div className="flex-1">
+                                                <Input
+                                                    value={camp.name}
+                                                    onChange={e => updateCampaign({ ...camp, name: e.target.value })}
+                                                    className="bg-white border-emerald-200 text-sm h-8"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                                <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">Repartición de</span>
+                                                <select
+                                                    value={camp.mode}
+                                                    onChange={e => updateCampaign({ ...camp, mode: e.target.value as CampaignMode })}
+                                                    className="h-8 px-2 bg-white border border-emerald-200 rounded text-xs font-medium text-slate-600 outline-none"
+                                                >
+                                                    <option value="MONEY">Saldo Monetario</option>
+                                                    <option value="GRAIN">Granos</option>
+                                                </select>
+                                            </div>
+                                            <button
+                                                onClick={() => setEditingCampaignId(null)}
+                                                className="h-8 w-8 shrink-0 flex items-center justify-center bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Management Mode - Floating with icons */
+                                        <div className="flex items-center justify-between py-2.5 group">
+                                            <span className="font-medium text-slate-800 text-sm">{camp.name}</span>
+                                            <div className="flex items-center gap-6">
+                                                <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">
+                                                    Repartición de {camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => setEditingCampaignId(camp.id)}
+                                                        className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                                                        title="Editar"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm(`¿Eliminar campaña ${camp.name}? Los movimientos asociados quedarán huérfanos.`)) {
+                                                                deleteCampaign(camp.id);
+                                                            }
+                                                        }}
+                                                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                                        title="Eliminar"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                ) : (
+                                    /* Normal Mode - Clean Floating text */
+                                    <div className="flex justify-between items-center py-2.5">
+                                        <span className="font-medium text-slate-800 text-sm">{camp.name}</span>
+                                        <span className={`text-[10px] font-medium uppercase tracking-widest text-slate-900`}>
+                                            Repartición de {camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {campaigns.length === 0 && <div className="text-center py-6 text-slate-400 text-sm italic">No hay campañas registradas.</div>}
+                    </div>
+                </div>
             </div>
 
             {/* Investors Table */}

@@ -4,6 +4,7 @@ import { use, useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { useInventory, useClientStock } from '@/hooks/useInventory';
 import { useOrders } from '@/hooks/useOrders';
 import { Button } from '@/components/ui/Button';
@@ -30,6 +31,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const { products, addProduct } = useInventory();
     const { stock, updateStock } = useClientStock(id);
     const { orders, refreshOrders } = useOrders(id);
+    const { campaigns, loading: campaignsLoading } = useCampaigns(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -63,6 +65,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [client, setClient] = useState<any>(null);
     const [selectedHarvestInvestor, setSelectedHarvestInvestor] = useState('');
     const [selectedHarvestWarehouseId, setSelectedHarvestWarehouseId] = useState('');
+    const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState('');
+    const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>('GRANO');
 
     const getSowingTooltip = (lotId: string) => {
         if (!orders) return 'Sembrado';
@@ -89,8 +93,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         if (!orders) return map;
         for (const o of orders) {
             if (o.type === 'HARVEST' && o.status === 'CONFIRMED') {
-                if (!map.has(o.lotId)) {
-                    map.set(o.lotId, o);
+                // Support both legacy single-lot and new multi-lot formats
+                const lotIds = o.lotIds || (o.lotId ? [o.lotId] : []);
+                for (const lid of lotIds) {
+                    if (!map.has(lid)) {
+                        map.set(lid, o);
+                    }
                 }
             }
         }
@@ -196,24 +204,26 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         if (!observedYield) return alert('Ingrese el rinde observado');
         const yieldVal = parseFloat(observedYield);
 
-        const grainName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
+        const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
+        const productName = harvestType === 'SEMILLA' ? cropBaseName : `${cropBaseName} (GRANO)`;
+        const productType = harvestType === 'SEMILLA' ? 'SEED' : 'OTHER'; // Using OTHER for Grano to avoid sowing logic
 
-        // Fix: Strictly search for "Propia" brand to isolate harvest from commercial seeds
+        // Fix: Strictly search for "Propia" brand to isolate harvest from commercial products
         let product = products.find(p =>
-            p.name.toLowerCase() === grainName.toLowerCase() &&
-            p.type === 'SEED' &&
+            p.name.toLowerCase() === productName.toLowerCase() &&
+            p.type === productType &&
             p.brandName === 'Propia' &&
             p.clientId === id
         );
 
         if (!product && lot.cropSpecies) {
-            // Create "Propia" seed if it doesn't exist
+            // Create "Propia" seed/grain if it doesn't exist
             product = await addProduct({
                 clientId: id,
-                name: grainName,
-                type: 'SEED',
+                name: productName,
+                type: productType,
                 brandName: 'Propia', // Enforced
-                commercialName: 'Propia', // Fix: Set commercial name to ensure visibility in dropdowns
+                commercialName: 'Propia', // Fix: Set commercial name to ensure visibility
                 unit: 'kg',
                 createdAt: new Date().toISOString(),
                 synced: false
@@ -250,6 +260,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 id: existingStock?.id,
                 clientId: id,
                 warehouseId: harvestWarehouse.id,
+                campaignId: selectedHarvestCampaignId || undefined,
                 productId: product.id,
                 quantity: currentQty + yieldVal,
                 lastUpdated: new Date().toISOString()
@@ -274,6 +285,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 date: movementDate,
                 time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 referenceId: lot.id,
+                campaignId: selectedHarvestCampaignId || undefined,
                 notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'})`,
                 contractorName: harvestContractor || undefined,
                 harvestLaborPricePerHa: pricePerHa || undefined,
@@ -294,7 +306,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     appliedAt: new Date().toISOString(),
                     appliedBy: displayName || 'Sistema',
                     investorName: selectedHarvestInvestor || undefined,
-                    updatedAt: new Date().toISOString(),
+                    campaignId: selectedHarvestCampaignId || undefined,
                     updatedAt: new Date().toISOString(),
                     synced: false,
                     notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
@@ -323,6 +335,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     plantingDensity: 0,
                     plantingSpacing: 0,
                     sowingOrderId: lastSowing?.id,
+                    campaignId: selectedHarvestCampaignId || undefined,
                     createdBy: displayName || 'Sistema',
                     appliedBy: displayName || 'Sistema',
                     appliedAt: new Date().toISOString(),
@@ -343,6 +356,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             setHarvestDate('');
             setHarvestPlanOrder(null);
             setSelectedHarvestInvestor('');
+            setSelectedHarvestCampaignId('');
         } catch (error) {
             console.error('Error marking harvested:', error);
             alert('Error al registrar la cosecha.');
@@ -1234,9 +1248,27 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                     {/* Inline Harvest Form */}
                                                                     {isHarvesting && selectedLotId === lot.id && (
                                                                         <div className="mt-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100 shadow-sm animate-fadeIn cursor-default" onClick={e => e.stopPropagation()}>
-                                                                            <h4 className="text-xs font-bold text-blue-800 mb-3 uppercase tracking-wide">
-                                                                                Registrar Cosecha
-                                                                            </h4>
+                                                                            <div className="flex items-center justify-between mb-3">
+                                                                                <h4 className="text-xs font-black text-blue-800 uppercase tracking-wide">
+                                                                                    Registrar Cosecha
+                                                                                </h4>
+
+                                                                                {/* Compact Harvest Type Toggle */}
+                                                                                <div className="flex bg-blue-100/50 p-0.5 rounded-md border border-blue-200 min-w-[120px]">
+                                                                                    <button
+                                                                                        onClick={() => setHarvestType('GRANO')}
+                                                                                        className={`flex-1 py-0.5 px-2 text-[9px] font-black uppercase tracking-widest rounded transition-all ${harvestType === 'GRANO' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-200/50'}`}
+                                                                                    >
+                                                                                        Grano
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => setHarvestType('SEMILLA')}
+                                                                                        className={`flex-1 py-0.5 px-2 text-[9px] font-black uppercase tracking-widest rounded transition-all ${harvestType === 'SEMILLA' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-200/50'}`}
+                                                                                    >
+                                                                                        Semilla
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
                                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                                                                 <Input
                                                                                     label="Fecha (DD/MM/YYYY)"
@@ -1244,6 +1276,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                     value={harvestDate}
                                                                                     onChange={e => setHarvestDate(e.target.value)}
                                                                                     className="bg-white"
+                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                                                                                 />
                                                                                 <div>
                                                                                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Contratista</label>
@@ -1255,6 +1288,20 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                         <option value="">Seleccionar...</option>
                                                                                         {contractors.map(c => (
                                                                                             <option key={c.id} value={c.username}>{c.username}</option>
+                                                                                        ))}
+                                                                                    </select>
+                                                                                </div>
+
+                                                                                <div>
+                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Campaña</label>
+                                                                                    <select
+                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                                                                        value={selectedHarvestCampaignId}
+                                                                                        onChange={e => setSelectedHarvestCampaignId(e.target.value)}
+                                                                                    >
+                                                                                        <option value="">Seleccionar...</option>
+                                                                                        {campaigns.map(c => (
+                                                                                            <option key={c.id} value={c.id}>{c.name}</option>
                                                                                         ))}
                                                                                     </select>
                                                                                 </div>
@@ -1274,7 +1321,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                 </div>
 
                                                                                 <Input
-                                                                                    label="RINDE TOTAL (kg)"
+                                                                                    label="PRODUCCIÓN TOTAL (kg)"
                                                                                     type="number"
                                                                                     value={observedYield}
                                                                                     onChange={e => {
@@ -1282,6 +1329,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                         setConfirmStep(false);
                                                                                     }}
                                                                                     className="bg-white"
+                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                                                                                 />
                                                                                 <Input
                                                                                     label="Precio Labor (USD/ha)"
@@ -1289,11 +1337,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                     value={harvestLaborPrice}
                                                                                     onChange={e => setHarvestLaborPrice(e.target.value)}
                                                                                     className="bg-white"
+                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                                                                                 />
                                                                                 <div>
                                                                                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Pagado por</label>
                                                                                     <select
-                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
                                                                                         value={selectedHarvestInvestor}
                                                                                         onChange={e => setSelectedHarvestInvestor(e.target.value)}
                                                                                     >
@@ -1308,6 +1357,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex flex-col gap-3">
+                                                                                {observedYield && parseFloat(observedYield) > 0 && (
+                                                                                    <div className="flex justify-end pr-1">
+                                                                                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                                                                                            Rinde Estimado: {Math.round(parseFloat(observedYield) / lot.hectares)} kg/ha
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )}
                                                                                 <div className="flex justify-end gap-2">
                                                                                     <button
                                                                                         onClick={() => {
@@ -1349,7 +1405,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         <span className="text-xl">⚠️</span>
                                         <div>
                                             <p className="text-xs font-black text-amber-900 uppercase tracking-widest leading-none mb-1">Recordatorio Importante</p>
-                                            <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight">Es rinde total (kg de todo el lote), no rinde por hectárea.</p>
+                                            <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight">es producción total (kg de todo el lote), no rinde por hectárea.</p>
                                         </div>
                                     </div>
                                 )}

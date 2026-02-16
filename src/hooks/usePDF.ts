@@ -116,15 +116,18 @@ export function usePDF() {
 
         order.items.forEach((item) => {
             let distribDetail = '';
-            if (item.dosage && item.dosage > 0) {
+            // Only show dosage if it's not a seed, or if it doesn't have planting info
+            if (item.productType !== 'SEED' && item.dosage && item.dosage > 0) {
                 distribDetail = `${formatNumber(item.dosage)} ${item.unit}/ha`;
             }
+
             if (item.plantingDensity || item.plantingSpacing) {
                 const parts = [];
                 if (item.plantingDensity) parts.push(`Densidad: ${formatNumber(item.plantingDensity)} kg/ha`);
                 if (item.plantingSpacing) parts.push(`Espaciamiento: ${formatNumber(item.plantingSpacing)} cm`);
                 const seedInfo = parts.join('\n');
-                distribDetail = distribDetail ? `${distribDetail}\n${seedInfo}` : seedInfo;
+                // For seeds, planting info is the primary distribution detail
+                distribDetail = (distribDetail && item.productType !== 'SEED') ? `${distribDetail}\n${seedInfo}` : seedInfo;
             }
             if (!distribDetail) distribDetail = '-';
 
@@ -230,7 +233,7 @@ export function usePDF() {
         doc.save(`Insumos_Orden_${order.orderNumber || ''}.pdf`);
     };
 
-    const generateRemitoPDF = async (order: Order, client: Client) => {
+    const generateRemitoPDF = async (source: Order | InventoryMovement, client: Client, warehouseName?: string) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -240,21 +243,39 @@ export function usePDF() {
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text(`Orden Ref: #${order.orderNumber || '-'}`, 14, 35);
-        doc.text(`Fecha: ${formatDate(order.date)}`, pageWidth - 40, 35);
+        const orderNum = (source as Order).orderNumber || (source as InventoryMovement).referenceId || '-';
+        doc.text(`Referencia: #${orderNum}`, 14, 35);
+        doc.text(`Fecha: ${formatDate(source.date)}`, pageWidth - 40, 35);
         doc.text(`Cliente: ${client.name}`, 14, 40);
+        if (warehouseName) {
+            doc.text(`Galpón/Origen: ${warehouseName}`, 14, 45);
+        }
 
         const tableColumn = ["Producto", "Presentacion", "Cantidad"];
-        const tableRows = order.items.map(item => [
-            item.commercialName || item.productName,
-            item.presentationLabel || `A granel (${item.unit})`,
-            item.multiplier ? `${formatNumber(item.multiplier, 1)} ${item.presentationLabel ? 'uds' : item.unit}` : '-'
-        ]);
+
+        let itemsForTable: any[] = [];
+        if (source.items && source.items.length > 0) {
+            itemsForTable = source.items.map((item: any) => [
+                item.commercialName || item.productName || item.productCommercialName || '-',
+                item.presentationLabel || `A granel (${item.unit})`,
+                item.multiplier
+                    ? `${formatNumber(item.multiplier, 1)} ${item.presentationLabel ? 'uds' : item.unit}`
+                    : (item.quantity ? `${formatNumber(item.quantity, 1)} ${item.unit}` : `${formatNumber(item.totalQuantity || 0, 1)} ${item.unit}`)
+            ]);
+        } else {
+            // Single item movement
+            const m = source as InventoryMovement;
+            itemsForTable = [[
+                m.productCommercialName || m.productName,
+                (m as any).presentationLabel || `A granel (${m.unit})`,
+                `${formatNumber(m.quantity, 1)} ${m.unit}`
+            ]];
+        }
 
         autoTable(doc, {
             head: [tableColumn],
-            body: tableRows,
-            startY: 50,
+            body: itemsForTable,
+            startY: warehouseName ? 55 : 50,
             theme: 'grid',
             headStyles: { fillColor: [30, 41, 59] },
             styles: { fontSize: 10, cellPadding: 4 }
@@ -267,7 +288,7 @@ export function usePDF() {
         doc.line(120, sigY, 190, sigY);
         doc.text("Entrega (Firma y Aclaración)", 120, sigY + 5);
 
-        doc.save(`Remito_Orden_${order.orderNumber || ''}.pdf`);
+        doc.save(`Remito_${client.name}_${orderNum}.pdf`);
     };
 
     const generateCartaDePortePDF = async (movement: InventoryMovement, client: Client, warehouseName: string) => {

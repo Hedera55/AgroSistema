@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useFarms, useLots } from '@/hooks/useLocations';
 import { useClientStock, useInventory } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
+import { useCampaigns } from '@/hooks/useCampaigns';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/services/db';
 import { Order, OrderItem, Client, ProductType } from '@/types';
@@ -41,6 +42,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const { stock } = useClientStock(clientId);
     const { warehouses } = useWarehouses(clientId);
     const { addOrder } = useOrders(clientId);
+    const { campaigns, loading: campaignsLoading } = useCampaigns(clientId);
     const [client, setClient] = useState<Client | null>(null);
 
     useEffect(() => {
@@ -74,6 +76,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             setSelectedApplicatorId(order.applicatorId || '');
             setServicePrice(order.servicePrice ? String(order.servicePrice) : '');
             setSelectedPartnerName(order.investorName || '');
+            setSelectedCampaignId(order.campaignId || '');
 
             // Notes & Extra
             setNotes(order.notes || '');
@@ -90,6 +93,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [selectedLotIds, setSelectedLotIds] = useState<string[]>([]);
     const [lotHectares, setLotHectares] = useState<Record<string, number>>({});
     const [lotObservations, setLotObservations] = useState<Record<string, string>>({});
+    const [selectedCampaignId, setSelectedCampaignId] = useState('');
     const [currWarehouseId, setCurrWarehouseId] = useState('');
 
     useEffect(() => {
@@ -423,6 +427,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 notes: notes,
                 facturaImageUrl: facturaImageUrl || undefined,
                 investorName: selectedPartnerName,
+                campaignId: selectedCampaignId || undefined,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: displayName || 'Sistema',
@@ -502,6 +507,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     selectedApplicatorId={selectedApplicatorId} setSelectedApplicatorId={setSelectedApplicatorId}
                     servicePrice={servicePrice} setServicePrice={setServicePrice}
                     selectedPartnerName={selectedPartnerName} setSelectedPartnerName={setSelectedPartnerName}
+                    selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId}
+                    campaigns={campaigns}
                     showNotes={showNotes} setShowNotes={setShowNotes}
                     notes={notes} setNotes={setNotes}
                     facturaImageUrl={facturaImageUrl} setFacturaImageUrl={setFacturaImageUrl}
@@ -537,6 +544,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     selectedApplicatorId={selectedApplicatorId}
                     servicePrice={servicePrice}
                     selectedPartnerName={selectedPartnerName}
+                    campaignName={campaigns.find(c => c.id === selectedCampaignId)?.name}
                     notes={notes}
                     onBack={() => setStep(2)}
                     onSubmit={handleSubmit}

@@ -19,6 +19,7 @@ interface OrderConfirmationStepProps {
     selectedApplicatorId: string;
     servicePrice: string;
     selectedPartnerName: string;
+    campaignName?: string;
     notes: string;
     onBack: () => void;
     onSubmit: () => void;
@@ -40,6 +41,7 @@ export function OrderConfirmationStep({
     selectedApplicatorId,
     servicePrice,
     selectedPartnerName,
+    campaignName,
     notes,
     onBack,
     onSubmit
@@ -82,6 +84,12 @@ export function OrderConfirmationStep({
                     <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>
                     <div><span className="text-slate-500">Fecha de emisión:</span> <span className="font-medium">{date}</span></div>
                     <div><span className="text-slate-500">Ventana de aplicación:</span> <span className="font-medium">{appStart} • {appEnd}</span></div>
+                    {campaignName && (
+                        <div><span className="text-slate-500">Campaña:</span> <span className="font-bold text-emerald-600">{campaignName}</span></div>
+                    )}
+                    {selectedPartnerName && (
+                        <div><span className="text-slate-500">Pagado por:</span> <span className="font-medium">{selectedPartnerName}</span></div>
+                    )}
 
                     {containsSeeds && (() => {
                         const seedItem = items.find(i => availableProducts.find(p => p.id === i.productId)?.type === 'SEED');

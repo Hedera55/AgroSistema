@@ -215,8 +215,7 @@ export function StockTable({
                                                     {item.breakdown.filter(b => !b.presentationLabel && !b.presentationContent).map((b, bIdx) => (
                                                         <div key={`generic-${bIdx}`} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0 opacity-60">
                                                             <div className="flex items-center gap-3 italic text-slate-400">
-                                                                <span className="text-[11px] font-medium uppercase tracking-widest min-w-[100px] text-left">Sin Detalle</span>
-                                                                <span className="text-sm">Granel / Otros</span>
+                                                                <span className="text-[11px] font-medium uppercase tracking-widest min-w-[100px] text-left">Granel / Otros</span>
                                                             </div>
                                                             <div className="text-sm font-bold text-slate-400">
                                                                 {b.quantity} <span className="text-[10px] uppercase">{item.unit}</span>
@@ -234,7 +233,7 @@ export function StockTable({
                                                     <div className="flex flex-wrap items-end gap-4">
                                                         <div className="flex-1 min-w-[120px]">
                                                             <Input
-                                                                label="Cantidad a Vender"
+                                                                label="Cantidad a Vender (Tons)"
                                                                 type="text"
                                                                 inputMode="decimal"
                                                                 value={saleQuantity}
@@ -244,7 +243,7 @@ export function StockTable({
                                                         </div>
                                                         <div className="flex-1 min-w-[120px]">
                                                             <Input
-                                                                label={`Precio de Venta (USD/${item.unit})`}
+                                                                label="Precio de Venta (USD/Tons)"
                                                                 type="text"
                                                                 inputMode="decimal"
                                                                 value={salePrice}
