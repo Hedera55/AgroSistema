@@ -226,6 +226,7 @@ export interface Order {
     farmId: string;
     lotId?: string; // Legacy: For single lot compatibility if needed
     lotIds?: string[]; // New: Supports multiple lots per order
+    lotHectares?: Record<string, number>; // New: Area per lot (supports partial sowing)
     lotObservations?: Record<string, string>; // Observations per lotId
     warehouseId?: string; // Origin warehouse
 

@@ -175,7 +175,9 @@ export function OrderRecipeStep({
                                 <optgroup label="Stock Galpón">
                                     {availableProducts.map(p => (
                                         <option key={p.id} value={p.id}>
-                                            {p.commercialName || p.name}{p.activeIngredient ? ` (${p.activeIngredient})` : ''} ({typeLabels[p.type]})
+                                            {p.type === 'SEED'
+                                                ? `${p.name}${p.brandName ? ` (${p.brandName})` : ''}`
+                                                : `${p.commercialName || p.name}${p.activeIngredient ? ` (${p.activeIngredient})` : ''}`} ({typeLabels[p.type]})
                                         </option>
                                     ))}
                                 </optgroup>
@@ -256,7 +258,7 @@ export function OrderRecipeStep({
                                                     <div key={s.id} className="flex items-center justify-between py-2.5 px-1 hover:bg-slate-100/50 transition-colors rounded-md">
                                                         <div className="flex flex-col">
                                                             <span className="text-xs font-bold text-slate-700">
-                                                                {s.presentationLabel || 'A granel'} {s.presentationContent ? `${s.presentationContent}${selectedProduct?.unit}` : ''}
+                                                                {s.presentationLabel || 'A granel'} {s.presentationContent ? `${s.presentationContent}${selectedProduct?.unit || ''}` : ''}
                                                             </span>
                                                             <span className="text-[10px] text-slate-400 font-medium tracking-tight">Disponible: {s.quantity} {selectedProduct?.unit}</span>
                                                         </div>
@@ -287,7 +289,7 @@ export function OrderRecipeStep({
                             <div className="pt-4 border-t border-slate-200 flex justify-between items-end">
                                 <div>
                                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Total Seleccionado</div>
-                                    <div className={`text-lg font-mono font-black ${selectedTotal > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    <div className={`text-sm font-mono font-black ${selectedTotal > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                                         {selectedTotal.toFixed(2)} {selectedProduct?.unit}
                                     </div>
                                 </div>
@@ -340,37 +342,49 @@ export function OrderRecipeStep({
                                 const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
 
                                 return (
-                                    <div key={groupId} className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="bg-slate-50/50 px-4 py-3 flex justify-between items-center border-b border-slate-100">
-                                            <div className="flex items-center gap-3">
-                                                {first.loadingOrder && <span className="text-emerald-600 font-black text-sm">#{first.loadingOrder}</span>}
-                                                <span className="font-black text-slate-800 text-sm uppercase tracking-tight">
-                                                    {first.commercialName || first.productName}{first.activeIngredient ? ` (${first.activeIngredient})` : ''}
-                                                </span>
-                                                {!isLabor && <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-full">{totalInGroup.toFixed(1)} {first.unit} TOTAL</span>}
-                                            </div>
+                                    <div key={groupId} className="animate-fadeIn">
+                                        <div className="flex justify-between items-center mb-1">
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => handleEditItem(first)} className="p-1.5 text-slate-300 hover:text-emerald-500 transition-colors">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                {first.loadingOrder && <span className="text-slate-800 font-black text-xs">#{first.loadingOrder}</span>}
+                                                <span className="font-black text-sm uppercase tracking-tight text-slate-800">
+                                                    {first.productType === 'SEED'
+                                                        ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                        : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
+                                                </span>
+                                                {!isLabor && <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-0.5 rounded-full">{totalInGroup.toFixed(1)} {first.unit}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => handleEditItem(first)} className="p-1 text-slate-300 hover:text-emerald-500 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
                                                 </button>
-                                                <button onClick={() => handleRemoveItem(first.groupId || first.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                                <button onClick={() => handleRemoveItem(first.groupId || first.id)} className="p-1 text-slate-300 hover:text-red-400 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="p-3 space-y-2">
+                                        <div className="pl-4 space-y-1">
                                             {groupItems.map(item => (
-                                                <div key={item.id} className="flex justify-between items-center text-xs">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-slate-600">
+                                                <div key={item.id} className="space-y-0.5">
+                                                    <div className="flex justify-between items-center text-[11px] leading-tight">
+                                                        <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
                                                             {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                            {item.presentationLabel || (isLabor ? 'Labor' : 'A granel')}
-                                                            {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                            {item.warehouseName && <span className="text-slate-400 font-medium ml-2">— {item.warehouseName}</span>}
+                                                            {item.isVirtualDéficit
+                                                                ? 'Faltan'
+                                                                : (item.presentationLabel || (isLabor ? 'Labor' : 'A granel'))}
+                                                            {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                            {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
                                                         </span>
-                                                        {item.plantingDensity && <span className="text-blue-500 font-bold uppercase text-[9px]">Densidad: {item.plantingDensity} kg/ha</span>}
+                                                        <span className={`font-mono font-bold ml-2 ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-400'}`}>
+                                                            {item.totalQuantity.toFixed(2)} {item.unit}
+                                                        </span>
                                                     </div>
-                                                    <span className="font-mono text-slate-500 font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                                    {(item.plantingDensity || item.plantingSpacing || item.expectedYield) && (
+                                                        <div className="flex flex-wrap gap-x-3 text-emerald-600/70 font-bold uppercase text-[8px] leading-none">
+                                                            {item.plantingDensity && <span>Densidad: {item.plantingDensity} kg/ha</span>}
+                                                            {item.plantingSpacing && <span>Espaciamiento: {item.plantingSpacing} cm</span>}
+                                                            {item.expectedYield && <span>Rendimiento: {item.expectedYield} kg/ha</span>}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -478,8 +492,10 @@ export function OrderRecipeStep({
 
             <div className="flex justify-between pt-6 border-t border-slate-100">
                 <Button variant="secondary" onClick={onBack}>Volver</Button>
-                <Button onClick={onNext} disabled={items.length === 0}>Confirmar Orden de Carga</Button>
+                <Button onClick={onNext} disabled={items.length === 0}>
+                    {isSowingOrder ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Carga'}
+                </Button>
             </div>
-        </div>
+        </div >
     );
 }

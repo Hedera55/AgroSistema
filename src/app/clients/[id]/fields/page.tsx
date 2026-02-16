@@ -64,6 +64,25 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [selectedHarvestInvestor, setSelectedHarvestInvestor] = useState('');
     const [selectedHarvestWarehouseId, setSelectedHarvestWarehouseId] = useState('');
 
+    const getSowingTooltip = (lotId: string) => {
+        if (!orders) return 'Sembrado';
+        const sowings = orders.filter(o =>
+            (o.lotId === lotId || o.lotIds?.includes(lotId)) &&
+            o.type === 'SOWING' &&
+            (o.status === 'CONFIRMED' || o.status === 'DONE') &&
+            !o.deleted
+        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        if (sowings.length === 0) return 'Sembrado';
+
+        return sowings.map(s => {
+            const ha = s.lotHectares?.[lotId] ?? s.treatedArea;
+            const crop = s.items.find(i => i.productType === 'SEED')?.productName || 'Semilla';
+            const dateStr = new Date(s.date).toLocaleDateString('es-AR');
+            return `${ha.toFixed(1)} ha - ${crop} - ${dateStr}`;
+        }).join('\n');
+    };
+
     // Compute harvest plans map for efficiently checking status per lot
     const harvestPlansByLot = useMemo(() => {
         const map = new Map<string, Order>();
@@ -1043,7 +1062,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             {lot.status && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span
-                                                                                        title={lot.status === 'SOWED' ? 'Sembrado' :
+                                                                                        title={lot.status === 'SOWED' ? getSowingTooltip(lot.id) :
                                                                                             lot.status === 'HARVESTED' ? 'Cosechado' :
                                                                                                 lot.status === 'NOT_SOWED' ? 'Asignado' : 'Vacío'}
                                                                                         onClick={async (e) => {

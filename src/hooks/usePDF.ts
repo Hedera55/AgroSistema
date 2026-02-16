@@ -69,8 +69,8 @@ export function usePDF() {
         // Title and Basic Info
         doc.setFontSize(22);
         doc.setTextColor(40);
-        doc.setFont("helvetica", "bold");
-        doc.text("ORDEN DE CARGA", 14, 20);
+        const isSowing = order.items.some(i => i.productType === 'SEED');
+        doc.text(isSowing ? "ORDEN DE SIEMBRA" : "ORDEN DE CARGA", 14, 20);
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
@@ -128,9 +128,13 @@ export function usePDF() {
             }
             if (!distribDetail) distribDetail = '-';
 
+            const nameDisplay = item.productType === 'SEED'
+                ? `${item.productName}${item.brandName ? ` (${item.brandName})` : ''}`
+                : (item.commercialName || item.productName || '-');
+
             tableRows.push([
-                item.commercialName || item.productName || '-',
-                item.activeIngredient || item.productName,
+                nameDisplay,
+                item.activeIngredient || item.productName || '-',
                 item.brandName || '-',
                 distribDetail,
                 `${formatNumber(item.totalQuantity)} ${item.unit}`
@@ -201,11 +205,15 @@ export function usePDF() {
         warehouses.forEach(wh => {
             const whItems = order.items.filter(i => (i.warehouseName || 'S/G') === wh);
             whItems.forEach((item, idx) => {
+                const nameDisplay = item.productType === 'SEED'
+                    ? `${item.productName}${item.brandName ? ` (${item.brandName})` : ''}`
+                    : (item.commercialName || item.productName);
+
                 tableRows.push([
                     idx === 0 ? wh : '',
-                    item.commercialName || item.productName,
-                    `${item.presentationLabel || `A granel (${item.unit})`} ${item.presentationContent ? `(${item.presentationContent}${item.unit})` : ''}`,
-                    item.multiplier ? formatNumber(item.multiplier, 1) : '-'
+                    nameDisplay,
+                    item.isVirtualDéficit ? 'FALTANTE' : (`${item.presentationLabel || `A granel (${item.unit})`} ${item.presentationContent ? `(${item.presentationContent}${item.unit})` : ''}`),
+                    item.isVirtualDéficit ? `Faltan ${formatNumber(item.totalQuantity, 1)}` : (item.multiplier ? formatNumber(item.multiplier, 1) : '-')
                 ]);
             });
         });

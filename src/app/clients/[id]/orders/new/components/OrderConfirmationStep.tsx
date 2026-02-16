@@ -5,11 +5,14 @@ import { OrderItem, Farm, Lot, Product, ProductType } from '@/types';
 
 interface OrderConfirmationStepProps {
     date: string;
+    isDateRange: boolean;
+    applicationDate: string;
     appStart: string;
     appEnd: string;
     selectedFarm?: Farm;
     selectedLot?: { name: string; hectares: number };
     items: OrderItem[];
+    containsSeeds: boolean;
     availableProducts: Product[];
     stockShortages: (OrderItem & { available: number; missing: number })[];
     contractors: { id: string; username: string }[];
@@ -23,11 +26,14 @@ interface OrderConfirmationStepProps {
 
 export function OrderConfirmationStep({
     date,
+    isDateRange,
+    applicationDate,
     appStart,
     appEnd,
     selectedFarm,
     selectedLot,
     items,
+    containsSeeds,
     availableProducts,
     stockShortages,
     contractors,
@@ -38,13 +44,21 @@ export function OrderConfirmationStep({
     onBack,
     onSubmit
 }: OrderConfirmationStepProps) {
-    const containsSeeds = items.some(item => {
-        const prod = availableProducts.find(p => p.id === item.productId);
-        return prod?.type === 'SEED';
-    });
+    const isSowingInvalid = containsSeeds && isDateRange;
 
     return (
         <div className="space-y-6 animate-fadeIn">
+            {isSowingInvalid && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+                    <h3 className="text-amber-800 font-bold flex items-center gap-2">
+                        ⚠️ Error: Fecha de Siembra
+                    </h3>
+                    <p className="text-sm text-amber-700">
+                        Las órdenes de siembra no permiten una "Ventana de aplicación". Por favor, vuelva al **Paso 1** y seleccione una fecha única.
+                    </p>
+                </div>
+            )}
+
             {stockShortages.length > 0 && (
                 <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
                     <h3 className="text-red-800 font-bold flex items-center gap-2">
@@ -112,22 +126,25 @@ export function OrderConfirmationStep({
                         return (
                             <div key={groupId} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className={`font-bold uppercase tracking-tight ${first.isVirtualDéficit ? 'text-orange-600' : 'text-slate-800'}`}>
-                                        {first.commercialName || first.productName}{first.activeIngredient ? ` (${first.activeIngredient})` : ''}
-                                        {first.isVirtualDéficit && <span className="ml-2 text-[10px] uppercase font-black tracking-widest">(Déficit)</span>}
+                                    <span className="font-bold uppercase tracking-tight text-slate-800">
+                                        {first.productType === 'SEED'
+                                            ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                            : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                     </span>
-                                    <span className={`font-mono font-bold ${first.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{totalInGroup.toFixed(2)} {first.unit}</span>
+                                    <span className="font-mono font-bold text-emerald-600">{totalInGroup.toFixed(2)} {first.unit}</span>
                                 </div>
                                 <div className="space-y-1 pl-4">
                                     {groupItems.map(item => (
-                                        <div key={item.id} className={`flex justify-between items-center text-xs italic ${item.isVirtualDéficit ? 'text-orange-400 bg-orange-50/30' : 'text-slate-500'}`}>
+                                        <div key={item.id} className={`flex justify-between items-center text-xs italic ${item.isVirtualDéficit ? 'text-orange-500 border-l-2 border-orange-200 pl-2' : 'text-slate-500'}`}>
                                             <span>
                                                 {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                {item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`)}
-                                                {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                {item.isVirtualDéficit
+                                                    ? 'Faltan'
+                                                    : (item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`))}
+                                                {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
                                                 {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
                                             </span>
-                                            <span className="font-mono">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                            <span className="font-mono font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -142,8 +159,11 @@ export function OrderConfirmationStep({
                 <Button
                     onClick={onSubmit}
                     variant={stockShortages.length > 0 ? 'danger' : 'primary'}
+                    disabled={isSowingInvalid}
                 >
-                    {stockShortages.length > 0 ? 'Confirmar de todas formas (Saldo Negativo)' : 'Confirmar Orden de Carga'}
+                    {stockShortages.length > 0
+                        ? 'Confirmar de todas formas (Saldo Negativo)'
+                        : (containsSeeds ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Carga')}
                 </Button>
             </div>
         </div>

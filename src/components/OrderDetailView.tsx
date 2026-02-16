@@ -117,7 +117,9 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                             <div className="flex items-center gap-3">
                                                 {first.loadingOrder && <span className="text-emerald-600 font-black text-xs">#{first.loadingOrder}</span>}
                                                 <span className="font-medium text-slate-800 text-xs uppercase tracking-tight">
-                                                    {first.commercialName || first.productName}{first.activeIngredient ? ` (${first.activeIngredient})` : ''}
+                                                    {first.productType === 'SEED'
+                                                        ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                        : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                                 </span>
                                                 {!isLabor && <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{totalInGroup.toLocaleString()} {first.unit} TOTAL</span>}
                                             </div>

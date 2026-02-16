@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { Button } from '@/components/ui/Button';
 import { Farm, Lot } from '@/types';
 
@@ -18,6 +20,8 @@ interface OrderLocationStepProps {
     setSelectedFarmId: (id: string) => void;
     selectedLotIds: string[];
     setSelectedLotIds: (ids: string[]) => void;
+    lotHectares: Record<string, number>;
+    setLotHectares: (val: Record<string, number>) => void;
     lotObservations: Record<string, string>;
     setLotObservations: (obs: Record<string, string>) => void;
     farms: Farm[];
@@ -40,12 +44,17 @@ export function OrderLocationStep({
     setSelectedFarmId,
     selectedLotIds,
     setSelectedLotIds,
+    lotHectares,
+    setLotHectares,
     lotObservations,
     setLotObservations,
     farms,
     lots,
     onNext
 }: OrderLocationStepProps) {
+    const [editingHectaresId, setEditingHectaresId] = useState<string | null>(null);
+    const [tempHectares, setTempHectares] = useState<string>('');
+
     const handleLotClick = (lotId: string) => {
         if (selectedLotIds.includes(lotId)) return;
         setSelectedLotIds([...selectedLotIds, lotId]);
@@ -56,15 +65,36 @@ export function OrderLocationStep({
         const newObs = { ...lotObservations };
         delete newObs[lotId];
         setLotObservations(newObs);
+
+        const newHectares = { ...lotHectares };
+        delete newHectares[lotId];
+        setLotHectares(newHectares);
     };
 
     const handleObsChange = (lotId: string, value: string) => {
         setLotObservations({ ...lotObservations, [lotId]: value });
     };
 
+    const handleHectaresChange = (lotId: string, value: string) => {
+        const lot = lots.find(l => l.id === lotId);
+        if (!lot) return;
+
+        if (value === '') {
+            setLotHectares({ ...lotHectares, [lotId]: 0 });
+            return;
+        }
+
+        let val = parseFloat(value);
+        if (isNaN(val)) val = 0;
+        if (val > lot.hectares) val = lot.hectares;
+        if (val < 0) val = 0;
+
+        setLotHectares({ ...lotHectares, [lotId]: val });
+    };
+
     const totalHectares = lots
         .filter(l => selectedLotIds.includes(l.id))
-        .reduce((acc, l) => acc + (l.hectares || 0), 0);
+        .reduce((acc, l) => acc + (lotHectares[l.id] ?? (l.hectares || 0)), 0);
 
     return (
         <div className="space-y-6 animate-fadeIn pb-8">
@@ -181,8 +211,14 @@ export function OrderLocationStep({
                             return (
                                 <div key={id} className="flex flex-row items-center gap-4 animate-fadeIn border-b border-slate-100 pb-3">
                                     <div className="flex-none min-w-[120px]">
-                                        <span className="text-sm font-bold text-slate-700 block">{lot.name}</span>
-                                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">{lot.hectares} ha</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-slate-700 block">{lot.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                                                {lotHectares[id] !== undefined ? `${lotHectares[id]} ha` : `${lot.hectares} ha`}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="flex-1">
                                         <input
@@ -193,16 +229,49 @@ export function OrderLocationStep({
                                             onChange={e => handleObsChange(id, e.target.value)}
                                         />
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveLot(id)}
-                                        className="flex-none p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                        title="Eliminar lote"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
+                                    <div className="flex items-center gap-1 min-w-[140px] justify-end">
+                                        {editingHectaresId === id ? (
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                max={lot.hectares}
+                                                className="w-32 h-8 text-xs px-2 border-slate-200 rounded-lg focus:border-emerald-500 focus:ring-emerald-500 bg-white"
+                                                placeholder="recortar hectáreas"
+                                                value={tempHectares}
+                                                onChange={e => {
+                                                    setTempHectares(e.target.value);
+                                                    handleHectaresChange(id, e.target.value);
+                                                }}
+                                                onBlur={() => setEditingHectaresId(null)}
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setEditingHectaresId(id);
+                                                    setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : '');
+                                                }}
+                                                className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
+                                                title="Editar hectáreas"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveLot(id)}
+                                            className="flex-none p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                            title="Eliminar lote"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             );
                         })}

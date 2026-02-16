@@ -88,6 +88,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [selectedFarmId, setSelectedFarmId] = useState('');
     const [selectedLotIds, setSelectedLotIds] = useState<string[]>([]);
+    const [lotHectares, setLotHectares] = useState<Record<string, number>>({});
     const [lotObservations, setLotObservations] = useState<Record<string, string>>({});
     const [currWarehouseId, setCurrWarehouseId] = useState('');
 
@@ -137,8 +138,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const selectedFarm = farms.find(f => f.id === selectedFarmId);
 
     const totalTreatedArea = useMemo(() => {
-        return selectedLots.reduce((acc, l) => acc + (l.hectares || 0), 0);
-    }, [selectedLots]);
+        return selectedLots.reduce((acc, l) => acc + (lotHectares[l.id] ?? (l.hectares || 0)), 0);
+    }, [selectedLots, lotHectares]);
 
     const availableProducts = useMemo(() => {
         return products.filter(p => p.clientId === clientId);
@@ -248,8 +249,15 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     });
                 }
             } else {
-                // Fallback: use the single warehouse and dosage if no subQuantities were used (though UI should prevent this)
-                newItems.push({ ...item, groupId: newItemGroupId });
+                // Fallback: mark as deficit if no stock selected
+                newItems.push({
+                    ...item,
+                    groupId: newItemGroupId,
+                    isVirtualDéficit: true,
+                    presentationLabel: 'Faltante',
+                    warehouseId: undefined,
+                    warehouseName: undefined
+                });
             }
         }
 
@@ -349,13 +357,34 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     }, [clientId]);
 
     const handleSubmit = async () => {
-        if (selectedLotIds.length === 0 || items.length === 0) return;
+        // Smart Sowing Validation
+        const containsSeeds = items.some(i => i.productType === 'SEED');
+        if (containsSeeds) {
+            const allOrders = await db.getAll('orders') as Order[];
+            for (const lotId of selectedLotIds) {
+                const lot = lots.find(l => l.id === lotId);
+                if (!lot) continue;
 
-        // Validation for seeds (optional/flexible for multi-lot)
-        const sowedLot = selectedLots.find(l => containsSeeds && l.status === 'SOWED');
-        if (sowedLot) {
-            alert(`El lote "${sowedLot.name}" ya posee una siembra aplicada. Debe reiniciarlo antes de cargar una nueva siembra.`);
-            return;
+                const previousSowings = allOrders.filter(o =>
+                    o.clientId === clientId &&
+                    !o.deleted &&
+                    (o.lotIds?.includes(lotId) || o.lotId === lotId) &&
+                    o.type === 'SOWING' &&
+                    o.id !== editId
+                );
+
+                const sownArea = previousSowings.reduce((acc, o) => {
+                    const ha = o.lotHectares?.[lotId] ?? o.treatedArea; // Fallback to treatedArea for single-lot legacy orders
+                    return acc + ha;
+                }, 0);
+
+                const currentArea = lotHectares[lotId] ?? lot.hectares;
+
+                if (sownArea + currentArea > lot.hectares + 0.01) { // 0.01 tolerance for float precision
+                    alert(`El lote "${lot.name}" ya tiene ${sownArea.toFixed(1)} ha sembradas. Sumando las ${currentArea.toFixed(1)} ha actuales, supera el total de ${lot.hectares} ha. Por favor, ajuste el recorte.`);
+                    return;
+                }
+            }
         }
 
         try {
@@ -380,6 +409,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 farmId: selectedFarmId,
                 lotId: selectedLotIds[0] || '', // Legacy compatibility for NOT NULL constraint
                 lotIds: selectedLotIds,
+                lotHectares,
                 lotObservations,
                 applicatorId: selectedApplicatorId,
                 applicatorName: contractors.find(c => c.id === selectedApplicatorId)?.username,
@@ -442,6 +472,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     appEnd={appEnd} setAppEnd={setAppEnd}
                     selectedFarmId={selectedFarmId} setSelectedFarmId={setSelectedFarmId}
                     selectedLotIds={selectedLotIds} setSelectedLotIds={setSelectedLotIds}
+                    lotHectares={lotHectares} setLotHectares={setLotHectares}
                     lotObservations={lotObservations} setLotObservations={setLotObservations}
                     farms={farms} lots={lots}
                     onNext={() => setStep(2)}
@@ -489,6 +520,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             {step === 3 && (
                 <OrderConfirmationStep
                     date={date}
+                    isDateRange={isDateRange}
+                    applicationDate={applicationDate}
                     appStart={appStart}
                     appEnd={appEnd}
                     selectedFarm={selectedFarm}
@@ -497,6 +530,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                         hectares: totalTreatedArea
                     }}
                     items={items}
+                    containsSeeds={containsSeeds}
                     availableProducts={availableProducts}
                     stockShortages={stockShortages}
                     contractors={contractors}
