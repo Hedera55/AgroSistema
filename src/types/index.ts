@@ -64,6 +64,7 @@ export type LotStatus = 'EMPTY' | 'NOT_SOWED' | 'SOWED' | 'HARVESTED';
 export interface Lot { // Lote
     id: string;
     farmId: string;
+    farmName?: string; // Optional: field to store the resolved farm name for reports/PDFs
     name: string;
     hectares: number;
     cropSpecies?: string; // e.g., "SOJA", "MAIZ"

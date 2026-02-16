@@ -79,7 +79,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                             R
                         </button>
                         <button
-                            onClick={() => generateOrderPDF(order, client)}
+                            onClick={() => generateOrderPDF(order, client, lots)}
                             className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
                             title="Orden de Carga"
                         >

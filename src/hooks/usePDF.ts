@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { Order, OrderItem, Client, InventoryMovement, UserProfile } from '@/types';
+import { Order, OrderItem, Client, InventoryMovement, UserProfile, Lot } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 // Augment jsPDF type for autoTable
@@ -33,7 +33,7 @@ export function usePDF() {
         return d.toLocaleDateString('es-AR');
     };
 
-    const generateOrderPDF = async (order: Order & { farmName?: string; lotName?: string }, client: Client) => {
+    const generateOrderPDF = async (order: Order & { farmName?: string; lotName?: string }, client: Client, lots: Lot[] = []) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -161,6 +161,51 @@ export function usePDF() {
         });
 
         lastY = (doc as any).lastAutoTable.finalY + 10;
+
+        // --- Lot Breakdown Section ---
+        if (order.lotIds && order.lotIds.length > 0) {
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            doc.text("DESGLOSE POR LOTE:", 14, lastY);
+            lastY += 5;
+
+            const lotTableColumn = ["Lote", "Establecimiento", "Superficie (ha)", "Obs./Estado"];
+            const lotTableRows: (string | number)[][] = [];
+
+            order.lotIds.forEach(lotId => {
+                const lot = lots.find(l => l.id === lotId);
+                const hectareasCargadas = order.lotHectares?.[lotId];
+                const totalLotHectares = lot?.hectares || 0;
+
+                let lotNameDisplay = lot?.name || 'S/D';
+                let areaDisplay = '';
+
+                if (hectareasCargadas !== undefined && totalLotHectares > 0 && hectareasCargadas < totalLotHectares) {
+                    lotNameDisplay += " - PARCIAL";
+                    areaDisplay = `${formatNumber(hectareasCargadas, 1)} / ${formatNumber(totalLotHectares, 1)} ha`;
+                } else {
+                    areaDisplay = `${formatNumber(hectareasCargadas ?? totalLotHectares, 1)} ha`;
+                }
+
+                lotTableRows.push([
+                    lotNameDisplay,
+                    lot?.farmName || order.farmName || '-',
+                    areaDisplay,
+                    order.lotObservations?.[lotId] || '-'
+                ]);
+            });
+
+            autoTable(doc, {
+                head: [lotTableColumn],
+                body: lotTableRows,
+                startY: lastY,
+                theme: 'grid',
+                headStyles: { fillColor: [71, 85, 105] }, // Slate-700
+                styles: { fontSize: 8, cellPadding: 2 },
+            });
+
+            lastY = (doc as any).lastAutoTable.finalY + 10;
+        }
 
         // Notes
         if (order.notes) {

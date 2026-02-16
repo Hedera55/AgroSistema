@@ -19,7 +19,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     // Redirect to login if not authenticated
     useEffect(() => {
-        if (!loading && !isActive && pathname !== '/login') {
+        if (!loading && !isActive && pathname !== '/login' && !pathname?.startsWith('/kml')) {
             router.push('/login');
         }
     }, [isActive, loading, pathname, router]);
