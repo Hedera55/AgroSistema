@@ -15,7 +15,8 @@ import { generateId } from '@/lib/uuid';
 
 export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const { isMaster } = useAuth();
+    const { isMaster, role, profile } = useAuth();
+    const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
     const [client, setClient] = useState<Client | null>(null);
     const { movements, loading: movementsLoading } = useClientMovements(id);
     const { products, loading: productsLoading } = useInventory();
@@ -604,7 +605,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Campañas</h3>
-                    {isMaster && (
+                    {!isReadOnly && (
                         <button
                             onClick={() => setShowEditCampaigns(!showEditCampaigns)}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
@@ -742,12 +743,12 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Socio</h3>
-                    {isMaster && (
+                    {!isReadOnly && (
                         <button
                             onClick={() => setShowEditInvestors(!showEditInvestors)}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
                         >
-                            {showEditInvestors ? 'Cerrar' : '✏️ Gestionar Socios'}
+                            {showEditInvestors ? 'Cerrar' : '✏️ Gestionar socios'}
                         </button>
                     )}
                 </div>

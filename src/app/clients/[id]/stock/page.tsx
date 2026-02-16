@@ -1356,12 +1356,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         {showWarehouses ? 'Cerrar gestión de galpón' : 'Gestionar Galpones'}
                     </button>
                 )}
-                <button
-                    onClick={() => setShowCatalog(!showCatalog)}
-                    className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showCatalog ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
-                >
-                    {showCatalog ? 'Cerrar catálogo' : 'Catálogo de productos'}
-                </button>
+                {!isReadOnly && (
+                    <button
+                        onClick={() => setShowCatalog(!showCatalog)}
+                        className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showCatalog ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
+                    >
+                        {showCatalog ? 'Cerrar catálogo' : 'Catálogo de productos'}
+                    </button>
+                )}
                 <Link
                     href={`/clients/${id}/stock/history`}
                     className="bg-slate-50 text-slate-500 text-xs px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-emerald-600 hover:bg-white transition-all font-medium"

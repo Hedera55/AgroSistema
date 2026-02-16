@@ -12,8 +12,10 @@ interface AuthContextType {
     role: UserRole | null;
     isAdmin: boolean;
     isContratista: boolean;
+    isClient: boolean;
     isMaster: boolean;
     isActive: boolean;
+    assignedClients: string[];
     assignedId: string | null;
     displayName: string;
     refreshProfile: () => Promise<void>;
@@ -26,8 +28,10 @@ const AuthContext = createContext<AuthContextType>({
     role: null,
     isAdmin: false,
     isContratista: false,
+    isClient: false,
     isMaster: false,
     isActive: false,
+    assignedClients: [],
     assignedId: null,
     displayName: '',
     refreshProfile: async () => { },
@@ -129,8 +133,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         role: profile?.role || null,
         isAdmin: profile?.role === 'ADMIN' || profile?.role === 'MASTER_ADMIN',
         isContratista: profile?.role === 'CONTRATISTA',
+        isClient: profile?.role === 'CLIENT',
         isMaster: profile?.role === 'MASTER_ADMIN',
         isActive: !!user,
+        assignedClients: profile?.assigned_clients || [],
         assignedId: profile?.assigned_clients?.[0] || null,
         displayName: profile?.username || profile?.email || user?.email || 'Sistema',
         refreshProfile,

@@ -25,10 +25,10 @@ export default function ClientsPage() {
     }, []);
 
     useEffect(() => {
-        if (role === 'CLIENT' && assignedId) {
-            router.push(`/clients/${assignedId}`);
+        if (role === 'CLIENT' && profile?.assigned_clients?.length === 1) {
+            router.push(`/clients/${profile.assigned_clients[0]}`);
         }
-    }, [role, assignedId, router]);
+    }, [role, profile, router]);
     const [showForm, setShowForm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
