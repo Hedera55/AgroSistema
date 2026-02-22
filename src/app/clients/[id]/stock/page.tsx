@@ -134,6 +134,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [saleHectoliterWeight, setSaleHectoliterWeight] = useState('');
     const [saleGrossWeight, setSaleGrossWeight] = useState('');
     const [saleTareWeight, setSaleTareWeight] = useState('');
+    const [salePrimarySaleCuit, setSalePrimarySaleCuit] = useState('');
+    const [saleDepartureDateTime, setSaleDepartureDateTime] = useState('');
+    const [saleDistanceKm, setSaleDistanceKm] = useState('');
+    const [saleFreightTariff, setSaleFreightTariff] = useState('');
+    const [saleDestinationCompany, setSaleDestinationCompany] = useState('');
+    const [saleDestinationAddress, setSaleDestinationAddress] = useState('');
     const [selectedSeller, setSelectedSeller] = useState('');
 
     // Success Ribbon State
@@ -800,22 +806,28 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false,
-                truckDriver: saleTruckDriver || undefined,
-                plateNumber: salePlateNumber || undefined,
-                deliveryLocation: saleDestination || undefined,
-                trailerPlate: saleTrailerPlate || undefined,
-                humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
-                dischargeNumber: saleDischargeNumber || undefined,
-                transportCompany: saleTransportCompany || undefined,
-                hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
-                grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
-                tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined
+                logistics: {
+                    truckDriver: saleTruckDriver || undefined,
+                    plateNumber: salePlateNumber || undefined,
+                    trailerPlate: saleTrailerPlate || undefined,
+                    destinationCompany: saleDestinationCompany || undefined,
+                    destinationAddress: saleDestinationAddress || undefined,
+                    transportCompany: saleTransportCompany || undefined,
+                    dischargeNumber: saleDischargeNumber || undefined,
+                    humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
+                    hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
+                    grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
+                    tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined,
+                    primarySaleCuit: salePrimarySaleCuit || undefined,
+                    departureDateTime: saleDepartureDateTime || undefined,
+                    distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.replace(',', '.')) : undefined,
+                    freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.replace(',', '.')) : undefined,
+                }
             };
 
             await db.put('movements', movementData);
 
             await movementsRefresh();
-            setLastMovement(movementData);
             setLastMovement(movementData);
             setLastAction('SALE');
             setLastTransferOrigin(stockItem.warehouseName);
@@ -1207,37 +1219,35 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         Mover Stock ({selectedStockIds.length})
                                     </Button>
 
-                                    {activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos' && (
-                                        <Button
-                                            onClick={() => {
-                                                if (sellingStockId) {
-                                                    setSellingStockId(null);
+                                    {/* Sales allowed from ANY warehouse as per user request */}
+                                    <Button
+                                        onClick={() => {
+                                            if (sellingStockId) {
+                                                setSellingStockId(null);
+                                                return;
+                                            }
+
+                                            if (selectedStockIds.length === 1) {
+                                                const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
+                                                const campaign = item?.campaignId ? campaigns.find(c => c.id === item.campaignId) : null;
+
+                                                if (campaign?.mode === 'GRAIN') {
+                                                    alert('No se permiten ventas en campañas de modo COSECHA. Los socios deben realizar retiros.');
                                                     return;
                                                 }
 
-                                                if (selectedStockIds.length === 1) {
-                                                    const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
-                                                    const campaign = item?.campaignId ? campaigns.find(c => c.id === item.campaignId) : null;
-
-                                                    if (campaign?.mode === 'GRAIN') {
-                                                        alert('No se permiten ventas en campañas de modo COSECHA. Los socios deben realizar retiros.');
-                                                        return;
-                                                    }
-
-                                                    if (item) {
-                                                        setSellingStockId(item.id);
-                                                        setSaleQuantity(item.quantity.toString());
-                                                    }
-                                                } else {
-                                                    alert('Por favor selecciona un solo producto para vender.');
+                                                if (item) {
+                                                    setSellingStockId(item.id);
+                                                    setSaleQuantity(item.quantity.toString());
                                                 }
-                                            }}
-                                            variant={sellingStockId ? "secondary" : "primary"}
-                                            className={`${sellingStockId ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"} animate-fadeIn`}
-                                        >
-                                            {sellingStockId ? 'Cancelar Vender' : 'Vender'}
-                                        </Button>
-                                    )}
+                                            } else {
+                                                alert('Por favor selecciona un solo producto para vender.');
+                                            }
+                                        }}
+                                        variant={sellingStockId ? "secondary" : "primary"}
+                                        className={`${sellingStockId ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"} animate-fadeIn`}
+                                    >
+                                    </Button>
                                 </>
                             )}
                             <Button
@@ -1345,6 +1355,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setSaleGrossWeight={setSaleGrossWeight}
                 saleTareWeight={saleTareWeight}
                 setSaleTareWeight={setSaleTareWeight}
+                salePrimarySaleCuit={salePrimarySaleCuit}
+                setSalePrimarySaleCuit={setSalePrimarySaleCuit}
+                saleDepartureDateTime={saleDepartureDateTime}
+                setSaleDepartureDateTime={setSaleDepartureDateTime}
+                saleDistanceKm={saleDistanceKm}
+                setSaleDistanceKm={setSaleDistanceKm}
+                saleFreightTariff={saleFreightTariff}
+                setSaleFreightTariff={setSaleFreightTariff}
+                saleDestinationCompany={saleDestinationCompany}
+                setSaleDestinationCompany={setSaleDestinationCompany}
+                saleDestinationAddress={saleDestinationAddress}
+                setSaleDestinationAddress={setSaleDestinationAddress}
                 showSaleNote={showSaleNote}
                 setShowSaleNote={setShowSaleNote}
                 saleNote={saleNote}

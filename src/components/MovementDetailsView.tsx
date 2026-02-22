@@ -12,18 +12,24 @@ interface MovementDetailsViewProps {
 }
 
 export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel }: MovementDetailsViewProps) {
+    const logistics = movement.logistics || (movement as any);
     const hasLogistics =
-        movement.truckDriver ||
-        movement.plateNumber ||
-        movement.trailerPlate ||
-        movement.destinationCompany ||
-        movement.destinationAddress ||
-        movement.transportCompany ||
-        movement.dischargeNumber ||
-        movement.humidity !== undefined ||
-        movement.hectoliterWeight !== undefined ||
-        movement.grossWeight !== undefined ||
-        movement.tareWeight !== undefined;
+        logistics.truckDriver ||
+        logistics.plateNumber ||
+        logistics.trailerPlate ||
+        logistics.destinationCompany ||
+        logistics.destinationAddress ||
+        logistics.deliveryLocation ||
+        logistics.transportCompany ||
+        logistics.dischargeNumber ||
+        logistics.humidity !== undefined ||
+        logistics.hectoliterWeight !== undefined ||
+        logistics.grossWeight !== undefined ||
+        logistics.tareWeight !== undefined ||
+        logistics.primarySaleCuit ||
+        logistics.departureDateTime ||
+        logistics.distanceKm !== undefined ||
+        logistics.freightTariff !== undefined;
 
     return (
         <div className="bg-white p-6 relative">
@@ -89,17 +95,21 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                             <table className="w-full text-sm">
                                 <tbody className="divide-y divide-slate-50">
                                     {[
-                                        { label: 'Chofer', value: movement.truckDriver },
-                                        { label: 'Patente Camión', value: movement.plateNumber },
-                                        { label: 'Patente Acoplado', value: movement.trailerPlate },
-                                        { label: 'Empresa Transp.', value: movement.transportCompany },
-                                        { label: 'Empresa Destino', value: movement.destinationCompany },
-                                        { label: 'Dirección Destino', value: movement.destinationAddress },
-                                        { label: 'Nº Descarga', value: movement.dischargeNumber },
-                                        { label: 'Humedad', value: movement.humidity !== undefined ? `${movement.humidity} %` : null },
-                                        { label: 'P. Hectolítrico', value: movement.hectoliterWeight !== undefined ? movement.hectoliterWeight : null },
-                                        { label: 'Peso Bruto', value: movement.grossWeight !== undefined ? `${movement.grossWeight.toLocaleString()} Kg` : null },
-                                        { label: 'Peso Tara', value: movement.tareWeight !== undefined ? `${movement.tareWeight.toLocaleString()} Kg` : null },
+                                        { label: 'Chofer', value: logistics.truckDriver },
+                                        { label: 'Patente Camión', value: logistics.plateNumber },
+                                        { label: 'Patente Acoplado', value: logistics.trailerPlate },
+                                        { label: 'Empresa Transp.', value: logistics.transportCompany },
+                                        { label: 'Empresa Destino', value: logistics.destinationCompany || logistics.deliveryLocation },
+                                        { label: 'Dirección Destino', value: logistics.destinationAddress },
+                                        { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
+                                        { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
+                                        { label: 'Distancia (Km)', value: logistics.distanceKm !== undefined ? `${logistics.distanceKm} Km` : null },
+                                        { label: 'Tarifa Flete', value: logistics.freightTariff !== undefined ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
+                                        { label: 'Nº Descarga', value: logistics.dischargeNumber },
+                                        { label: 'Humedad', value: logistics.humidity !== undefined ? `${logistics.humidity} %` : null },
+                                        { label: 'P. Hectolítrico', value: logistics.hectoliterWeight !== undefined ? logistics.hectoliterWeight : null },
+                                        { label: 'Peso Bruto', value: logistics.grossWeight !== undefined ? `${logistics.grossWeight.toLocaleString()} Kg` : null },
+                                        { label: 'Peso Tara', value: logistics.tareWeight !== undefined ? `${logistics.tareWeight.toLocaleString()} Kg` : null },
                                     ].filter(row => row.value).map((row, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="py-3 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">{row.label}</td>

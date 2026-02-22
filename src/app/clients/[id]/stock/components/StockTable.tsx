@@ -66,6 +66,18 @@ interface StockTableProps {
     setSaleGrossWeight: (val: string) => void;
     saleTareWeight: string;
     setSaleTareWeight: (val: string) => void;
+    salePrimarySaleCuit: string;
+    setSalePrimarySaleCuit: (val: string) => void;
+    saleDepartureDateTime: string;
+    setSaleDepartureDateTime: (val: string) => void;
+    saleDistanceKm: string;
+    setSaleDistanceKm: (val: string) => void;
+    saleFreightTariff: string;
+    setSaleFreightTariff: (val: string) => void;
+    saleDestinationCompany: string;
+    setSaleDestinationCompany: (val: string) => void;
+    saleDestinationAddress: string;
+    setSaleDestinationAddress: (val: string) => void;
     products: Product[];
     clearSelection: () => void;
 }
@@ -114,6 +126,18 @@ export function StockTable({
     setSaleGrossWeight,
     saleTareWeight,
     setSaleTareWeight,
+    salePrimarySaleCuit,
+    setSalePrimarySaleCuit,
+    saleDepartureDateTime,
+    setSaleDepartureDateTime,
+    saleDistanceKm,
+    setSaleDistanceKm,
+    saleFreightTariff,
+    setSaleFreightTariff,
+    saleDestinationCompany,
+    setSaleDestinationCompany,
+    saleDestinationAddress,
+    setSaleDestinationAddress,
     products,
     clearSelection
 }: StockTableProps) {
@@ -199,9 +223,7 @@ export function StockTable({
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Precio PPP</th>
-                                {!(activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos') && (
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (USD)</th>
-                                )}
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Valor Total (USD)</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Stock Total</th>
                             </tr>
                         </thead>
@@ -239,11 +261,9 @@ export function StockTable({
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-medium text-slate-400">
                                             USD {(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
-                                        {!(activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos') && (
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
-                                                USD {(item.quantity * (item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                        )}
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
+                                            USD {(item.quantity * (item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold text-emerald-600">
                                             {item.quantity} <span className="text-slate-400 text-xs ml-1 font-normal group-hover:text-emerald-300 transition-colors uppercase tracking-tight">{item.unit}</span>
                                         </td>
@@ -289,179 +309,228 @@ export function StockTable({
                                     {sellingStockId === item.id && (
                                         <tr className="bg-emerald-50/50 animate-fadeIn">
                                             <td colSpan={10} className="px-6 py-4">
-                                                <form onSubmit={handleSaleSubmit} className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-emerald-200 shadow-sm" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex flex-wrap items-end gap-4">
-                                                        <div className="flex-1 min-w-[120px]">
-                                                            <Input
-                                                                label="Cantidad a Vender (Tons)"
-                                                                type="text"
-                                                                inputMode="decimal"
-                                                                value={saleQuantity}
-                                                                onChange={e => setSaleQuantity(e.target.value)}
-                                                                required
-                                                            />
-                                                        </div>
-                                                        <div className="flex-1 min-w-[120px]">
-                                                            <Input
-                                                                label="Precio de Venta (USD/Tons)"
-                                                                type="text"
-                                                                inputMode="decimal"
-                                                                value={salePrice}
-                                                                onChange={e => setSalePrice(e.target.value)}
-                                                                required
-                                                            />
-                                                        </div>
-                                                        <div className="flex gap-2 mb-1">
-                                                            <Button type="submit" size="sm" disabled={isSubmitting || facturaUploading}>Confirmar Venta</Button>
-                                                        </div>
-                                                    </div>
+                                                <form onSubmit={handleSaleSubmit} className="flex flex-col gap-4 bg-white p-6 rounded-xl border border-emerald-200 shadow-lg relative" onClick={e => e.stopPropagation()}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => clearSelection()}
+                                                        className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors"
+                                                    >
+                                                        ✕
+                                                    </button>
 
-                                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                    <h4 className="text-xs font-black text-emerald-800 uppercase tracking-[0.2em] mb-2">Registrar Detalle de Venta</h4>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-2">
                                                         <Input
-                                                            label="Chofer (Transportista)"
-                                                            value={saleTruckDriver}
-                                                            onChange={e => setSaleTruckDriver(e.target.value)}
-                                                            placeholder="Nombre Completo"
-                                                            className="bg-white h-9"
+                                                            label="Cantidad a Vender (Tons)"
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={saleQuantity}
+                                                            onChange={e => setSaleQuantity(e.target.value)}
+                                                            required
+                                                            className="h-11 font-bold text-lg"
                                                         />
                                                         <Input
-                                                            label="Patente Camión"
-                                                            value={salePlateNumber}
-                                                            onChange={e => setSalePlateNumber(e.target.value)}
-                                                            placeholder="AAA 123"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <Input
-                                                            label="Patente Acoplado"
-                                                            value={saleTrailerPlate}
-                                                            onChange={e => setSaleTrailerPlate(e.target.value)}
-                                                            placeholder="BBB 456"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <Input
-                                                            label="Destino"
-                                                            value={saleDestination}
-                                                            onChange={e => setSaleDestination(e.target.value)}
-                                                            placeholder="Localidad"
-                                                            className="bg-white h-9"
+                                                            label="Precio de Venta (USD/Tons)"
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={salePrice}
+                                                            onChange={e => setSalePrice(e.target.value)}
+                                                            required
+                                                            className="h-11 font-bold text-lg"
                                                         />
                                                     </div>
 
-                                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                        <Input
-                                                            label="Emb. Transportista"
-                                                            value={saleTransportCompany}
-                                                            onChange={e => setSaleTransportCompany(e.target.value)}
-                                                            placeholder="Empresa"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <Input
-                                                            label="Nro de descarga"
-                                                            value={saleDischargeNumber}
-                                                            onChange={e => setSaleDischargeNumber(e.target.value)}
-                                                            placeholder="0001"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <Input
-                                                            label="Humedad (%)"
-                                                            value={saleHumidity}
-                                                            onChange={e => setSaleHumidity(e.target.value)}
-                                                            placeholder="14.5"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <Input
-                                                            label="P. Hectolítrico"
-                                                            value={saleHectoliterWeight}
-                                                            onChange={e => setSaleHectoliterWeight(e.target.value)}
-                                                            placeholder="78"
-                                                            className="bg-white h-9"
-                                                        />
-                                                        <div className="grid grid-cols-2 gap-2 flex-grow sm:col-span-1 min-w-[150px]">
+                                                    <div className="space-y-4">
+                                                        {/* Logistics Section 1 */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                                            <Input
+                                                                label="Empresa de Destino"
+                                                                value={saleDestinationCompany}
+                                                                onChange={e => setSaleDestinationCompany(e.target.value)}
+                                                                placeholder="Planta / Acopio..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="Dirección / Localidad"
+                                                                value={saleDestinationAddress}
+                                                                onChange={e => setSaleDestinationAddress(e.target.value)}
+                                                                placeholder="Ruta, Localidad..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="CUIT Venta Primaria"
+                                                                value={salePrimarySaleCuit}
+                                                                onChange={e => setSalePrimarySaleCuit(e.target.value)}
+                                                                placeholder="..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                        </div>
+
+                                                        {/* Logistics Section 2 */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                                            <Input
+                                                                label="Chofer"
+                                                                value={saleTruckDriver}
+                                                                onChange={e => setSaleTruckDriver(e.target.value)}
+                                                                placeholder="Nombre..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="Patente Camión"
+                                                                value={salePlateNumber}
+                                                                onChange={e => setSalePlateNumber(e.target.value)}
+                                                                placeholder="..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="Patente Acoplado"
+                                                                value={saleTrailerPlate}
+                                                                onChange={e => setSaleTrailerPlate(e.target.value)}
+                                                                placeholder="..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="Empresa Transporte"
+                                                                value={saleTransportCompany}
+                                                                onChange={e => setSaleTransportCompany(e.target.value)}
+                                                                placeholder="..."
+                                                                className="bg-white h-10"
+                                                            />
+                                                        </div>
+
+                                                        {/* Logistics Section 3 */}
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                                            <Input
+                                                                label="Nro Descarga"
+                                                                value={saleDischargeNumber}
+                                                                onChange={e => setSaleDischargeNumber(e.target.value)}
+                                                                className="bg-white h-10 text-center"
+                                                            />
+                                                            <Input
+                                                                label="Humedad (%)"
+                                                                value={saleHumidity}
+                                                                onChange={e => setSaleHumidity(e.target.value)}
+                                                                className="bg-white h-10 text-center"
+                                                            />
+                                                            <Input
+                                                                label="P. Hectolítrico"
+                                                                value={saleHectoliterWeight}
+                                                                onChange={e => setSaleHectoliterWeight(e.target.value)}
+                                                                className="bg-white h-10 text-center"
+                                                            />
                                                             <Input
                                                                 label="Peso Bruto"
                                                                 value={saleGrossWeight}
                                                                 onChange={e => setSaleGrossWeight(e.target.value)}
-                                                                placeholder="30000"
-                                                                className="bg-white h-9"
+                                                                className="bg-white h-10 text-right font-mono"
                                                             />
                                                             <Input
                                                                 label="Peso Tara"
                                                                 value={saleTareWeight}
                                                                 onChange={e => setSaleTareWeight(e.target.value)}
-                                                                placeholder="10000"
-                                                                className="bg-white h-9"
+                                                                className="bg-white h-10 text-right font-mono"
+                                                            />
+                                                            <Input
+                                                                label="Km Recorridos"
+                                                                value={saleDistanceKm}
+                                                                onChange={e => setSaleDistanceKm(e.target.value)}
+                                                                className="bg-white h-10 text-center"
+                                                            />
+                                                        </div>
+
+                                                        {/* Logistics Section 4 */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                            <Input
+                                                                label="Fecha y Hora Partida"
+                                                                type="datetime-local"
+                                                                value={saleDepartureDateTime}
+                                                                onChange={e => setSaleDepartureDateTime(e.target.value)}
+                                                                className="bg-white h-10"
+                                                            />
+                                                            <Input
+                                                                label="Tarifa Flete (USD)"
+                                                                value={saleFreightTariff}
+                                                                onChange={e => setSaleFreightTariff(e.target.value)}
+                                                                className="bg-white h-10 text-right"
+                                                                placeholder="0.00"
                                                             />
                                                         </div>
                                                     </div>
 
-                                                    <div className="flex flex-col sm:flex-row items-center justify-start gap-4 mt-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowSaleNote(!showSaleNote)}
-                                                            className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
-                                                        >
-                                                            {showSaleNote ? 'Cancelar' : (saleNote ? 'Editar Nota' : '+ Agregar Nota')}
-                                                        </button>
-
-                                                        <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                                                            <label htmlFor={`factura-upload-sale-${item.id}`} className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1">
-                                                                {saleFacturaFile ? (
-                                                                    <span className="text-emerald-700 font-bold truncate max-w-[120px]">{saleFacturaFile.name}</span>
+                                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-6 border-t border-slate-100">
+                                                        <div className="flex items-center gap-6">
+                                                            <div className="min-w-[120px]">
+                                                                {!showSaleNote ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setShowSaleNote(true)}
+                                                                        className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
+                                                                    >
+                                                                        + Agregar Nota
+                                                                    </button>
                                                                 ) : (
-                                                                    <span>+ Adjuntar factura</span>
+                                                                    <div className="flex items-center gap-2 animate-fadeIn">
+                                                                        <Input
+                                                                            placeholder="Nota..."
+                                                                            value={saleNote}
+                                                                            onChange={e => setSaleNote(e.target.value)}
+                                                                            className="h-10 text-sm bg-white border-slate-200 shadow-sm w-48 focus:border-emerald-500 focus:ring-emerald-500"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setShowSaleNote(false)}
+                                                                            className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-100 transition-colors border border-emerald-100"
+                                                                            title="Quitar Nota"
+                                                                        >
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                                        </button>
+                                                                    </div>
                                                                 )}
-                                                            </label>
-                                                            <input
-                                                                id={`factura-upload-sale-${item.id}`}
-                                                                type="file"
-                                                                accept="image/*,application/pdf"
-                                                                onChange={(e) => {
-                                                                    if (e.target.files && e.target.files[0]) {
-                                                                        setSaleFacturaFile(e.target.files[0]);
-                                                                    }
-                                                                }}
-                                                                className="hidden"
-                                                            />
-                                                            {saleFacturaFile && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setSaleFacturaFile(null)}
-                                                                    className="text-red-400 hover:text-red-600 font-bold px-1"
-                                                                >
-                                                                    ✕
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {showSaleNote && (
-                                                        <div className="animate-fadeIn w-full mt-2 flex gap-2">
-                                                            <div className="flex-1">
-                                                                <label className="block text-xs font-medium text-slate-500 mb-1">Nota de Venta</label>
-                                                                <textarea
-                                                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3"
-                                                                    rows={2}
-                                                                    placeholder="Escribe una nota para este movimiento..."
-                                                                    value={saleNote}
-                                                                    onChange={(e) => setSaleNote(e.target.value)}
-                                                                    autoFocus
-                                                                />
                                                             </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setShowSaleNote(false);
-                                                                }}
-                                                                className="h-10 mt-5 w-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
-                                                                title="Confirmar nota"
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                                                    <polyline points="12 5 19 12 12 19"></polyline>
-                                                                </svg>
-                                                            </button>
+
+                                                            <div className="flex items-center gap-3">
+                                                                <label htmlFor={`factura-upload-sale-${item.id}`} className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2">
+                                                                    {saleFacturaFile ? (
+                                                                        <span className="text-emerald-700 truncate max-w-[150px]">{saleFacturaFile.name}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                                                            Adjuntar Factura
+                                                                        </>
+                                                                    )}
+                                                                </label>
+                                                                <input
+                                                                    id={`factura-upload-sale-${item.id}`}
+                                                                    type="file"
+                                                                    accept="image/*,application/pdf"
+                                                                    onChange={(e) => {
+                                                                        if (e.target.files && e.target.files[0]) {
+                                                                            setSaleFacturaFile(e.target.files[0]);
+                                                                        }
+                                                                    }}
+                                                                    className="hidden"
+                                                                />
+                                                                {saleFacturaFile && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setSaleFacturaFile(null)}
+                                                                        className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"
+                                                                    >
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    )}
+
+                                                        <Button
+                                                            type="submit"
+                                                            disabled={isSubmitting || facturaUploading}
+                                                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 px-8 shadow-md"
+                                                        >
+                                                            {isSubmitting ? 'Procesando...' : 'Confirmar Venta'}
+                                                        </Button>
+                                                    </div>
                                                 </form>
                                             </td>
                                         </tr>

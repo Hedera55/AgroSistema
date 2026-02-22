@@ -45,6 +45,10 @@ export function StockMovementPanel({
     const [hectoliterWeight, setHectoliterWeight] = useState('');
     const [grossWeight, setGrossWeight] = useState('');
     const [tareWeight, setTareWeight] = useState('');
+    const [primarySaleCuit, setPrimarySaleCuit] = useState('');
+    const [departureDateTime, setDepartureDateTime] = useState('');
+    const [distanceKm, setDistanceKm] = useState('');
+    const [freightTariff, setFreightTariff] = useState('');
 
     // Track which product groups (selected items) are expanded
     const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -212,6 +216,10 @@ export function StockMovementPanel({
                 hectoliterWeight: hectoliterWeight ? parseFloat(hectoliterWeight.replace(',', '.')) : undefined,
                 grossWeight: grossWeight ? parseFloat(grossWeight.replace(',', '.')) : undefined,
                 tareWeight: tareWeight ? parseFloat(tareWeight.replace(',', '.')) : undefined,
+                primarySaleCuit: primarySaleCuit || undefined,
+                departureDateTime: departureDateTime || undefined,
+                distanceKm: distanceKm ? parseFloat(distanceKm.replace(',', '.')) : undefined,
+                freightTariff: freightTariff ? parseFloat(freightTariff.replace(',', '.')) : undefined,
             } : undefined;
 
             await onConfirm(action, absoluteQuantities, destinationId || undefined, note, receiverName, logisticsInfo);
@@ -229,11 +237,11 @@ export function StockMovementPanel({
         <div className="bg-white p-4 rounded-xl shadow-lg border border-indigo-100 animate-fadeIn mb-4 relative">
             <button
                 onClick={onCancel}
-                className="absolute top-2 right-2 text-slate-400 hover:text-red-500 z-10"
+                className="absolute top-4 right-4 text-slate-400 hover:text-red-500 z-10 transition-colors"
             >
                 ✕
             </button>
-            <h3 className="text-lg font-semibold text-slate-800 mb-3">
+            <h3 className="text-lg font-black text-slate-800 mb-6 uppercase tracking-wider">
                 Mover Stock Seleccionado ({selectedItems.length})
             </h3>
 
@@ -450,41 +458,72 @@ export function StockMovementPanel({
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                             <Input
                                 label="Nº Descarga"
                                 value={dischargeNumber}
                                 onChange={e => setDischargeNumber(e.target.value)}
-                                className="bg-white h-9"
-                                labelClassName="text-[10px] text-orange-700/80"
+                                className="bg-white h-9 text-center"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Humedad (%)"
                                 value={humidity}
                                 onChange={e => setHumidity(e.target.value)}
-                                className="bg-white h-9"
-                                labelClassName="text-[10px] text-orange-700/80"
+                                className="bg-white h-9 text-center"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="P. Hectolítrico"
                                 value={hectoliterWeight}
                                 onChange={e => setHectoliterWeight(e.target.value)}
-                                className="bg-white h-9"
-                                labelClassName="text-[10px] text-orange-700/80"
+                                className="bg-white h-9 text-center"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Peso Bruto"
                                 value={grossWeight}
                                 onChange={e => setGrossWeight(e.target.value)}
                                 className="bg-white h-9 text-right font-mono"
-                                labelClassName="text-[10px] text-orange-700/80"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Peso Tara"
                                 value={tareWeight}
                                 onChange={e => setTareWeight(e.target.value)}
                                 className="bg-white h-9 text-right font-mono"
-                                labelClassName="text-[10px] text-orange-700/80"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
+                            />
+                            <Input
+                                label="Km Recorridos"
+                                value={distanceKm}
+                                onChange={e => setDistanceKm(e.target.value)}
+                                className="bg-white h-9 text-center"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
+                            />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                            <Input
+                                label="CUIT Venta Primaria"
+                                value={primarySaleCuit}
+                                onChange={e => setPrimarySaleCuit(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
+                            />
+                            <Input
+                                label="Fecha y Hora Partida"
+                                type="datetime-local"
+                                value={departureDateTime}
+                                onChange={e => setDepartureDateTime(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
+                            />
+                            <Input
+                                label="Tarifa Flete (USD)"
+                                value={freightTariff}
+                                onChange={e => setFreightTariff(e.target.value)}
+                                className="bg-white h-9 text-right"
+                                labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                         </div>
                     </div>

@@ -74,6 +74,24 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [sellerInputValue, setSellerInputValue] = useState('');
     const { campaigns } = useCampaigns(clientId);
     const [selectedCampaignId, setSelectedCampaignId] = useState('');
+    // Logistics & Sale Edit States
+    const [saleQuantity, setSaleQuantity] = useState('');
+    const [salePrice, setSalePrice] = useState('');
+    const [saleTruckDriver, setSaleTruckDriver] = useState('');
+    const [salePlateNumber, setSalePlateNumber] = useState('');
+    const [saleTrailerPlate, setSaleTrailerPlate] = useState('');
+    const [saleDestinationCompany, setSaleDestinationCompany] = useState('');
+    const [saleDestinationAddress, setSaleDestinationAddress] = useState('');
+    const [saleTransportCompany, setSaleTransportCompany] = useState('');
+    const [saleDischargeNumber, setSaleDischargeNumber] = useState('');
+    const [saleHumidity, setSaleHumidity] = useState('');
+    const [saleHectoliterWeight, setSaleHectoliterWeight] = useState('');
+    const [saleGrossWeight, setSaleGrossWeight] = useState('');
+    const [saleTareWeight, setSaleTareWeight] = useState('');
+    const [salePrimarySaleCuit, setSalePrimarySaleCuit] = useState('');
+    const [saleDepartureDateTime, setSaleDepartureDateTime] = useState('');
+    const [saleDistanceKm, setSaleDistanceKm] = useState('');
+    const [saleFreightTariff, setSaleFreightTariff] = useState('');
 
     async function loadData() {
         const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
@@ -225,6 +243,35 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             return;
         }
 
+        if (m.type === 'SALE' || m.type === 'OUT') {
+            setEditingMovement(m);
+            setSelectedWarehouseId(m.warehouseId || '');
+            setNote(m.notes || '');
+            setSaleQuantity(m.quantity.toString());
+            setSalePrice(m.salePrice?.toString() || '');
+
+            const logs = m.logistics || (m as any);
+            setSaleTruckDriver(logs.truckDriver || '');
+            setSalePlateNumber(logs.plateNumber || '');
+            setSaleTrailerPlate(logs.trailerPlate || '');
+            setSaleDestinationCompany(logs.destinationCompany || logs.deliveryLocation || '');
+            setSaleDestinationAddress(logs.destinationAddress || '');
+            setSaleTransportCompany(logs.transportCompany || '');
+            setSaleDischargeNumber(logs.dischargeNumber || '');
+            setSaleHumidity(logs.humidity?.toString() || '');
+            setSaleHectoliterWeight(logs.hectoliterWeight?.toString() || '');
+            setSaleGrossWeight(logs.grossWeight?.toString() || '');
+            setSaleTareWeight(logs.tareWeight?.toString() || '');
+            setSalePrimarySaleCuit(logs.primarySaleCuit || '');
+            setSaleDepartureDateTime(logs.departureDateTime || '');
+            setSaleDistanceKm(logs.distanceKm?.toString() || '');
+            setSaleFreightTariff(logs.freightTariff?.toString() || '');
+
+            setShowEditForm(true);
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            return;
+        }
+
         setEditingMovement(m);
         setSelectedWarehouseId(m.warehouseId || '');
         setNote(m.notes || '');
@@ -264,6 +311,51 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         if (validItems.length === 0) return;
         setIsSubmitting(true);
         try {
+            if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
+                const isSale = editingMovement.type === 'SALE';
+                const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
+                const priceNum = parseFloat(salePrice.replace(',', '.'));
+
+                // Revert old quantity
+                const oldSt = stock.find(s => s.productId === editingMovement.productId && s.warehouseId === editingMovement.warehouseId);
+                if (oldSt) await updateStock({ ...oldSt, quantity: oldSt.quantity + editingMovement.quantity });
+
+                // Apply new quantity
+                const newSt = stock.find(s => s.productId === editingMovement.productId && s.warehouseId === selectedWarehouseId);
+                if (newSt) await updateStock({ ...newSt, quantity: newSt.quantity - qtyNum });
+
+                await db.put('movements', {
+                    ...editingMovement,
+                    warehouseId: selectedWarehouseId || undefined,
+                    quantity: qtyNum,
+                    salePrice: isSale ? priceNum : undefined,
+                    notes: note,
+                    updatedAt: new Date().toISOString(),
+                    logistics: {
+                        truckDriver: saleTruckDriver || undefined,
+                        plateNumber: salePlateNumber || undefined,
+                        trailerPlate: saleTrailerPlate || undefined,
+                        destinationCompany: saleDestinationCompany || undefined,
+                        destinationAddress: saleDestinationAddress || undefined,
+                        transportCompany: saleTransportCompany || undefined,
+                        dischargeNumber: saleDischargeNumber || undefined,
+                        humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
+                        hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
+                        grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
+                        tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined,
+                        primarySaleCuit: salePrimarySaleCuit || undefined,
+                        departureDateTime: saleDepartureDateTime || undefined,
+                        distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.replace(',', '.')) : undefined,
+                        freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.replace(',', '.')) : undefined,
+                    }
+                });
+                await loadData();
+                setShowEditForm(false);
+                setEditingMovement(null);
+                syncService.pushChanges();
+                return;
+            }
+
             if (editingMovement.type === 'IN' || editingMovement.type === 'HARVEST') {
                 const oldItems = editingMovement.items || [{ productId: editingMovement.productId, quantity: editingMovement.quantity, presentationLabel: (editingMovement as any).presentationLabel, presentationContent: (editingMovement as any).presentationContent }];
                 for (const it of oldItems) {
@@ -575,8 +667,55 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
             {showEditForm && (
                 <div className="mt-8 bg-white p-6 rounded-2xl shadow-xl border-4 border-emerald-500/20 animate-slideUp">
-                    <div className="flex justify-between items-center mb-6"><div><h2 className="text-xl font-bold text-slate-900">Editar Movimiento</h2></div><button onClick={() => { setShowEditForm(false); setEditingMovement(null); }} className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-red-500 transition-colors">✕</button></div>
-                    <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData)} activeStockItem={activeStockItem as any} updateActiveStockItem={(f, v) => { setActiveStockItem(prev => ({ ...prev, [f]: v })); }} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} />
+                    <div className="flex justify-between items-center mb-6"><div><h2 className="text-xl font-bold text-slate-900">Editar {editingMovement.type === 'SALE' ? 'Venta' : (editingMovement.type === 'OUT' ? 'Retiro / Egreso' : 'Movimiento')}</h2></div><button onClick={() => { setShowEditForm(false); setEditingMovement(null); }} className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-red-500 transition-colors">✕</button></div>
+
+                    {editingMovement.type === 'SALE' || editingMovement.type === 'OUT' ? (
+                        <form onSubmit={handleEditSave} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-2">
+                                <Input label="Cantidad (Tons)" type="text" value={saleQuantity} onChange={e => setSaleQuantity(e.target.value)} required className="h-11 font-bold text-lg" />
+                                {editingMovement.type === 'SALE' && <Input label="Precio USD/Ton" type="text" value={salePrice} onChange={e => setSalePrice(e.target.value)} required className="h-11 font-bold text-lg" />}
+                            </div>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                    <Input label="Empresa Destino" value={saleDestinationCompany} onChange={e => setSaleDestinationCompany(e.target.value)} className="bg-white h-10" />
+                                    <Input label="Dirección / Localidad" value={saleDestinationAddress} onChange={e => setSaleDestinationAddress(e.target.value)} className="bg-white h-10" />
+                                    <Input label="CUIT Venta Primaria" value={salePrimarySaleCuit} onChange={e => setSalePrimarySaleCuit(e.target.value)} className="bg-white h-10" />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                    <Input label="Chofer" value={saleTruckDriver} onChange={e => setSaleTruckDriver(e.target.value)} className="bg-white h-10" />
+                                    <Input label="Patente Camión" value={salePlateNumber} onChange={e => setSalePlateNumber(e.target.value)} className="bg-white h-10" />
+                                    <Input label="Patente Acoplado" value={saleTrailerPlate} onChange={e => setSaleTrailerPlate(e.target.value)} className="bg-white h-10" />
+                                    <Input label="Empresa Transporte" value={saleTransportCompany} onChange={e => setSaleTransportCompany(e.target.value)} className="bg-white h-10" />
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                    <Input label="Nro Descarga" value={saleDischargeNumber} onChange={e => setSaleDischargeNumber(e.target.value)} className="bg-white h-10 text-center" />
+                                    <Input label="Humedad (%)" value={saleHumidity} onChange={e => setSaleHumidity(e.target.value)} className="bg-white h-10 text-center" />
+                                    <Input label="P. Hectolítrico" value={saleHectoliterWeight} onChange={e => setSaleHectoliterWeight(e.target.value)} className="bg-white h-10 text-center" />
+                                    <Input label="Peso Bruto" value={saleGrossWeight} onChange={e => setSaleGrossWeight(e.target.value)} className="bg-white h-10 text-right font-mono" />
+                                    <Input label="Peso Tara" value={saleTareWeight} onChange={e => setSaleTareWeight(e.target.value)} className="bg-white h-10 text-right font-mono" />
+                                    <Input label="Km Recorridos" value={saleDistanceKm} onChange={e => setSaleDistanceKm(e.target.value)} className="bg-white h-10 text-center" />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <Input label="Notas" value={note} onChange={e => setNote(e.target.value)} className="bg-white h-10" />
+                                    </div>
+                                    <Input label="Fecha y Hora Partida" type="datetime-local" value={saleDepartureDateTime} onChange={e => setSaleDepartureDateTime(e.target.value)} className="bg-white h-10" />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <Input label="Galpón" value={selectedWarehouseId} onChange={(e) => setSelectedWarehouseId(e.target.value)} type="select" className="bg-white h-10">
+                                        <option value="">Selección...</option>
+                                        {warehousesFull.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                    </Input>
+                                    <Input label="Tarifa Flete (USD)" value={saleFreightTariff} onChange={e => setSaleFreightTariff(e.target.value)} className="bg-white h-10 text-right" placeholder="0.00" />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-slate-100">
+                                <Button type="submit" isLoading={isSubmitting} className="px-8 bg-emerald-600 hover:bg-emerald-700">Guardar Cambios</Button>
+                            </div>
+                        </form>
+                    ) : (
+                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData)} activeStockItem={activeStockItem as any} updateActiveStockItem={(f, v) => { setActiveStockItem(prev => ({ ...prev, [f]: v })); }} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} />
+                    )}
                 </div>
             )}
 

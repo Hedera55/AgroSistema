@@ -176,8 +176,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         // If clicking same history lot, toggle close
         if (type === 'history' && activePanel?.type === 'history' && activePanel.lotId === lotId) {
             setActivePanel(null);
-            setSelectedEvent(null);
-            setSelectedMovement(null);
+            // We KEEP selectedEvent and selectedMovement open as per the user's request
             return;
         }
 
@@ -1634,8 +1633,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 harvestMovements={harvestMovements}
                                                 client={profile as any}
                                                 warehouses={warehouses}
-                                                farmName={farms.find(f => f.id === selectedFarmId)?.name}
-                                                lotName={lots.find(l => l.id === activePanel.id)?.name}
+                                                farms={farms}
+                                                lots={lots}
+                                                campaigns={campaigns}
                                                 onClose={() => setActivePanel(null)}
                                                 onEdit={() => setIsEditingHarvestPanel(true)}
                                                 isReadOnly={isReadOnly}
