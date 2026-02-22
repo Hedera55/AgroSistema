@@ -1283,7 +1283,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             fetchSowingDetails(lot.id);
                                                                                             setIsHarvesting(true);
                                                                                             setHarvestPlanOrder(null);
-                                                                                            setIsEditingHarvestPanel(true);
+                                                                                            setIsEditingHarvestPanel(false);
                                                                                             setSelectedLotId(lot.id);
                                                                                             setHarvestDate(new Date().toISOString().split('T')[0]);
 
@@ -1310,7 +1310,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
-                                                                                                    setIsEditingHarvestPanel(true);
+                                                                                                    setIsEditingHarvestPanel(false);
                                                                                                     setHarvestDate(lotHarvestPlan.date);
                                                                                                     setHarvestContractor(lotHarvestPlan.contractorName || '');
                                                                                                     setHarvestLaborPrice(lotHarvestPlan.servicePrice?.toString() || '');
@@ -1433,7 +1433,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
                                 <div className="flex items-center gap-2 overflow-hidden text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
-                                    <span>{activePanel.id} - {activePanel.name}</span>
+                                    <span>{activePanel.subtitle ? `${activePanel.subtitle.replace('Lote de ', '')} - ` : ''}{activePanel.name}</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1634,6 +1634,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 harvestMovements={harvestMovements}
                                                 client={profile as any}
                                                 warehouses={warehouses}
+                                                farmName={farms.find(f => f.id === selectedFarmId)?.name}
+                                                lotName={lots.find(l => l.id === activePanel.id)?.name}
                                                 onClose={() => setActivePanel(null)}
                                                 onEdit={() => setIsEditingHarvestPanel(true)}
                                                 isReadOnly={isReadOnly}
@@ -1719,68 +1721,36 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             {selectedEvent && (
                 <div ref={detailSectionRef} className="container mx-auto max-w-7xl px-4 lg:px-8 mt-8 pb-10 scroll-mt-6">
                     {selectedEvent.type === 'HARVEST' ? (
-                        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 border-t-blue-500">
-                            <div className="bg-slate-50 px-8 py-4 border-b border-slate-200 flex justify-between items-center">
-                                <div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-100 text-blue-700">Cosecha</span>
-                                    <h3 className="font-bold text-slate-800 text-lg mt-1">Cosecha de `{selectedEvent.crop}`</h3>
-                                </div>
-                                <button onClick={() => setSelectedEvent(null)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400">✕</button>
-                            </div>
-                            <div>
-                                {/* Grid section with standard content padding */}
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 px-8 pt-8 pb-8">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha</label>
-                                        <p className="text-sm font-bold text-slate-700">{selectedEvent.date}</p>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Obtenido</label>
-                                        <p className="text-sm font-bold text-blue-600">{(selectedEvent.observedYield || 0).toLocaleString()} kg</p>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Contratista</label>
-                                        <p className="text-sm font-bold text-slate-700">{selectedEvent.contractorName || '-'}</p>
-                                    </div>
-                                </div>
-
-                                {/* Table with bottom whitespace */}
-                                <div className="pb-8">
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="bg-white text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50">
-                                                <th className="px-8 py-3 text-left">Destino</th>
-                                                <th className="px-8 py-3 text-right">Cantidad</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50 bg-white">
-                                            {selectedEvent.movements.map((m: any) => (
-                                                <tr
-                                                    key={m.id}
-                                                    className="hover:bg-blue-50/50 cursor-pointer transition-colors"
-                                                    onClick={() => {
-                                                        setSelectedMovement({
-                                                            m,
-                                                            destName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'
-                                                        });
-                                                        setTimeout(() => {
-                                                            logisticsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                        }, 100);
-                                                    }}
-                                                >
-                                                    <td className="px-8 py-4 font-bold text-slate-800">
-                                                        {m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'}
-                                                    </td>
-                                                    <td className="px-8 py-4 text-right font-mono font-black text-blue-700 text-sm">
-                                                        {m.quantity.toLocaleString()} kg
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                        <HarvestDetailsView
+                            harvestMovement={selectedEvent.movements[0]}
+                            harvestMovements={selectedEvent.movements}
+                            client={profile as any}
+                            warehouses={warehouses}
+                            farms={farms}
+                            lots={lots}
+                            onClose={() => setSelectedEvent(null)}
+                            onEdit={() => {
+                                // Logic to trigger HarvestWizard in edit mode
+                                setHarvestDate(selectedEvent.date);
+                                setHarvestContractor(selectedEvent.movements[0].contractorName || '');
+                                setHarvestLaborPrice(selectedEvent.movements[0].harvestLaborPricePerHa?.toString() || '');
+                                setObservedYield(selectedEvent.observedYield.toString());
+                                setSelectedLotId(selectedEvent.movements[0].referenceId?.split('_')[0] || '');
+                                setHarvestPlanOrder(null); // It's a real harvest, not a plan
+                                setIsHarvesting(true);
+                                setSelectedEvent(null);
+                            }}
+                            onSelectMovement={(m) => {
+                                setSelectedMovement({
+                                    m,
+                                    destName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'
+                                });
+                                setTimeout(() => {
+                                    logisticsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
+                            }}
+                            isReadOnly={isReadOnly}
+                        />
                     ) : (
                         selectedEvent.rawOrder && (
                             <OrderDetailView

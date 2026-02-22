@@ -148,7 +148,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const getLogisticsValue = (distId: string, field: keyof InventoryMovement): string | number => {
         if (distId === 'general') {
             // Include farm defaults if not set in general
-            if (field === 'originAddress' && (generalLogistics[field] === undefined || generalLogistics[field] === '')) return farm?.address || '';
+            if (field === 'originAddress' && (generalLogistics[field] === undefined || generalLogistics[field] === '')) return farm.address || '';
             if (field === 'departureDateTime' && (generalLogistics[field] === undefined || generalLogistics[field] === '')) return harvestDate;
             const val = generalLogistics[field];
             if (typeof val === 'string' || typeof val === 'number') return val;
@@ -168,7 +168,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         }
 
         // Farm Fallbacks
-        if (field === 'originAddress') return farm?.address || '';
+        if (field === 'originAddress') return farm.address || '';
         if (field === 'departureDateTime') return harvestDate;
 
         return '';
@@ -198,7 +198,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                 if (finalLogistics[f] === undefined) {
                     if (generalLogistics[f] !== undefined) {
                         (finalLogistics as any)[f] = generalLogistics[f];
-                    } else if (f === 'originAddress' && farm?.address) {
+                    } else if (f === 'originAddress' && farm.address) {
                         (finalLogistics as any)[f] = farm.address;
                     } else if (f === 'departureDateTime' && harvestDate) {
                         (finalLogistics as any)[f] = harvestDate;
@@ -276,7 +276,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         {totalYieldNum > 0 && (
                             <div className="flex items-end pb-2">
                                 <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-100 px-2 py-1 rounded">
-                                    Rinde Estimado: {lot?.hectares ? Math.round(totalYieldNum / lot.hectares) : 'N/A'} kg/ha
+                                    Rinde Estimado: {Math.round(totalYieldNum / lot.hectares)} kg/ha
                                 </span>
                             </div>
                         )}
@@ -321,7 +321,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
                             <h3 className="font-bold text-slate-800 text-sm">Distribución de Granos</h3>
-                            <div className={`text-xs font-black uppercase px-2 py-1 rounded ${availableYield < 0 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                            <div className={`text-xs font-black uppercase px-2 py-1 rounded ${availableYield < 0 ? 'bg-red-100 text-red-700' : availableYield === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
                                 {assignedYield} / {totalYieldNum} kg asignados
                             </div>
                         </div>
@@ -354,7 +354,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             <button
                                 type="button"
                                 onClick={handleAddDistribution}
-                                className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
                             >
                                 +
                             </button>
@@ -411,7 +411,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl sticky top-0 z-30">
                             <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Destino a Editar</label>
                             <select
-                                className="w-full border-slate-200 text-sm font-bold bg-white text-slate-800"
+                                className="w-full px-3 py-2 text-sm font-bold rounded-lg border border-slate-200 bg-white text-slate-800 shadow-sm"
                                 value={activeTabId}
                                 onChange={e => setActiveTabId(e.target.value)}
                             >
