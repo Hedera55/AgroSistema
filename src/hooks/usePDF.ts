@@ -111,54 +111,113 @@ export function usePDF() {
         }
 
         // --- Table Section ---
-        const tableColumn = ["Nombre Comercial", "P.A. / Cultivo", "Marca", "Dosis / Distribución", "Total"];
-        const tableRows: (string | number)[][] = [];
+        const containsSeeds = order.items.some(i => i.productType === 'SEED');
 
-        order.items.forEach((item) => {
-            let distribDetail = '';
-            // Only show dosage if it's not a seed, or if it doesn't have planting info
-            if (item.productType !== 'SEED' && item.dosage && item.dosage > 0) {
-                distribDetail = `${formatNumber(item.dosage)} ${item.unit}/ha`;
+        if (containsSeeds) {
+            // SOWING ORDER: Split tables
+            const seedItems = order.items.filter(i => i.productType === 'SEED');
+            const otherItems = order.items.filter(i => i.productType !== 'SEED');
+
+            // Table 1: Cultivo
+            if (seedItems.length > 0) {
+                const seedColumns = ["Cultivo", "Nombre comercial (marca)", "Distribución", "Total"];
+                const seedRows = seedItems.map(item => {
+                    const isMaiz = item.productName.toUpperCase().includes('MAIZ');
+                    const bags = isMaiz && item.dosage ? (item.dosage / 80000).toFixed(2) : null;
+
+                    let distrib = `${formatNumber(item.dosage)} ${item.unit}/ha`;
+                    if (bags) distrib += ` (${bags} bolsas)`;
+
+                    if (item.plantingSpacing) {
+                        distrib += `\nEspaciamiento: ${formatNumber(item.plantingSpacing)} cm`;
+                    }
+
+                    return [
+                        item.productName,
+                        `${item.commercialName || '-'}${item.brandName ? ` (${item.brandName})` : ''}`,
+                        distrib,
+                        `${formatNumber(item.totalQuantity)} ${item.unit}`
+                    ];
+                });
+
+                autoTable(doc, {
+                    head: [seedColumns],
+                    body: seedRows,
+                    startY: lastY,
+                    theme: 'grid',
+                    headStyles: { fillColor: [16, 185, 129] },
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    columnStyles: {
+                        0: { cellWidth: 40 },
+                        1: { cellWidth: 60 },
+                        2: { cellWidth: 55 },
+                        3: { cellWidth: 30 }
+                    }
+                });
+                lastY = (doc as any).lastAutoTable.finalY + 10;
             }
 
-            if (item.plantingDensity || item.plantingSpacing) {
-                const parts = [];
-                if (item.plantingDensity) parts.push(`Densidad: ${formatNumber(item.plantingDensity)} kg/ha`);
-                if (item.plantingSpacing) parts.push(`Espaciamiento: ${formatNumber(item.plantingSpacing)} cm`);
-                const seedInfo = parts.join('\n');
-                // For seeds, planting info is the primary distribution detail
-                distribDetail = (distribDetail && item.productType !== 'SEED') ? `${distribDetail}\n${seedInfo}` : seedInfo;
+            // Table 2: Fertilizers / Others
+            if (otherItems.length > 0) {
+                const otherColumns = ["Nombre comercial", "P.A.", "Marca", "Dosis", "Total"];
+                const otherRows = otherItems.map(item => {
+                    let dosageStr = `${formatNumber(item.dosage)} ${item.unit}/ha`;
+                    if (item.fertilizerPlacement) {
+                        dosageStr += ` - ${item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}`;
+                    }
+
+                    return [
+                        item.commercialName || item.productName || '-',
+                        item.activeIngredient || '-',
+                        item.brandName || '-',
+                        dosageStr,
+                        `${formatNumber(item.totalQuantity)} ${item.unit}`
+                    ];
+                });
+
+                autoTable(doc, {
+                    head: [otherColumns],
+                    body: otherRows,
+                    startY: lastY,
+                    theme: 'grid',
+                    headStyles: { fillColor: [16, 185, 129] },
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    columnStyles: {
+                        0: { cellWidth: 40 },
+                        1: { cellWidth: 45 },
+                        2: { cellWidth: 35 },
+                        3: { cellWidth: 40 },
+                        4: { cellWidth: 25 }
+                    }
+                });
             }
-            if (!distribDetail) distribDetail = '-';
-
-            const nameDisplay = item.productType === 'SEED'
-                ? `${item.productName}${item.brandName ? ` (${item.brandName})` : ''}`
-                : (item.commercialName || item.productName || '-');
-
-            tableRows.push([
-                nameDisplay,
-                item.activeIngredient || item.productName || '-',
+        } else {
+            // SPRAYING ORDER: Single table
+            const tableColumn = ["Nombre Comercial", "P.A.", "Marca", "Dosis", "Total"];
+            const tableRows = order.items.map(item => [
+                item.commercialName || item.productName || '-',
+                item.activeIngredient || '-',
                 item.brandName || '-',
-                distribDetail,
+                `${formatNumber(item.dosage)} ${item.unit}/ha`,
                 `${formatNumber(item.totalQuantity)} ${item.unit}`
             ]);
-        });
 
-        autoTable(doc, {
-            head: [tableColumn],
-            body: tableRows,
-            startY: lastY,
-            theme: 'grid',
-            headStyles: { fillColor: [16, 185, 129] },
-            styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: {
-                0: { cellWidth: 40 },
-                1: { cellWidth: 40 },
-                2: { cellWidth: 30 },
-                3: { cellWidth: 50 },
-                4: { cellWidth: 25 }
-            }
-        });
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: lastY,
+                theme: 'grid',
+                headStyles: { fillColor: [16, 185, 129] },
+                styles: { fontSize: 8, cellPadding: 2 },
+                columnStyles: {
+                    0: { cellWidth: 40 },
+                    1: { cellWidth: 45 },
+                    2: { cellWidth: 35 },
+                    3: { cellWidth: 40 },
+                    4: { cellWidth: 25 }
+                }
+            });
+        }
 
         lastY = (doc as any).lastAutoTable.finalY + 10;
 
@@ -242,7 +301,7 @@ export function usePDF() {
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
         doc.text(`Orden: #${order.orderNumber || '-'}`, 14, 30);
-        doc.text(`Fecha: ${formatDate(order.date)}`, pageWidth - 40, 30);
+        doc.text(`Fecha de emisión: ${formatDate(order.date)}`, pageWidth - 60, 30);
         doc.text(`Cliente: ${client.name}`, 14, 35);
 
         const tableColumn = ["Galpón", "Producto", "Presentación", "Cantidad"];
@@ -336,12 +395,5 @@ export function usePDF() {
         doc.save(`Remito_${client.name}_${orderNum}.pdf`);
     };
 
-    const generateCartaDePortePDF = async (movement: InventoryMovement, client: Client, warehouseName: string) => {
-        // Keeping as is or updating if needed. Currently focusing on the 3 requested.
-        const doc = new jsPDF();
-        // ... (rest of implementation)
-        doc.save(`CP_${movement.productName}_${movement.date}.pdf`);
-    };
-
-    return { generateOrderPDF, generateRemitoPDF, generateInsumosPDF, generateCartaDePortePDF };
+    return { generateOrderPDF, generateRemitoPDF, generateInsumosPDF };
 }

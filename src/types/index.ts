@@ -19,6 +19,7 @@ export interface Client {
     cuit?: string; // Government ID
     investors?: { name: string; percentage: number }[]; // Legacy/To be removed
     partners?: { name: string; cuit?: string }[]; // List of available partner objects for expenditures
+    defaultHarvestWarehouseId?: string;
     campaigns?: Campaign[]; // List of available campaigns
     synced?: boolean;
     enabledUnits?: string[];
@@ -46,6 +47,9 @@ export interface Farm { // Campo
     id: string;
     clientId: string;
     name: string;
+    address?: string;
+    city?: string;
+    province?: string;
     location?: { lat: number; lng: number }; // General centroid
     boundary?: GeoJSON.FeatureCollection | string;
     kmlData?: string; // Original KML file content for download
@@ -173,6 +177,7 @@ export interface OrderItem {
     multiplier?: number;
     groupId?: string;
     isVirtualDéficit?: boolean;
+    fertilizerPlacement?: 'LINE' | 'SIDE';
 }
 
 export interface MovementItem {
@@ -224,12 +229,37 @@ export interface InventoryMovement {
     plateNumber?: string; // Truck plate number
     deliveryLocation?: string; // Destination location (for Sales)
     receiverName?: string; // Name of person receiving/withdrawing (for Remito)
+    // Sale Metadata Extension
+    originAddress?: string;
+    primarySaleCuit?: string;
+    destinationCompany?: string;
+    destinationAddress?: string;
+    departureDateTime?: string;
+    distanceKm?: number;
+    freightTariff?: number;
+    trailerPlate?: string;
+    humidity?: number;
+    dischargeNumber?: string;
+    transportCompany?: string;
+    hectoliterWeight?: number;
+    grossWeight?: number;
+    tareWeight?: number;
     deleted?: boolean;
     deletedAt?: string;
     deletedBy?: string;
     items?: MovementItem[]; // For consolidated entries
     investors?: { name: string; percentage: number }[]; // Multi-investor support
     campaignId?: string; // Link to Campaign
+    isTransfer?: boolean;
+    originName?: string;
+    destName?: string;
+    partnerId?: string;
+    transportName?: string;
+    transportCuit?: string;
+    driverName?: string;
+    driverCuit?: string;
+    truckPlate?: string;
+    warehouseName?: string;
 }
 
 export interface Order {

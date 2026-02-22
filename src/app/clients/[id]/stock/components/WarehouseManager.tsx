@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Warehouse } from '@/types';
@@ -28,6 +29,8 @@ interface WarehouseManagerProps {
     isReadOnly: boolean;
     warehouseContainerRef: React.RefObject<HTMLDivElement | null>;
     stock: any[]; // ClientStock[]
+    defaultHarvestWarehouseId?: string;
+    onSetDefaultWarehouse?: (id: string) => void;
 }
 
 export function WarehouseManager({
@@ -53,14 +56,28 @@ export function WarehouseManager({
     setShowMovePanel,
     isReadOnly,
     warehouseContainerRef,
-    stock
+    stock,
+    defaultHarvestWarehouseId,
+    onSetDefaultWarehouse
 }: WarehouseManagerProps) {
+    const [showDefaultSelector, setShowDefaultSelector] = useState(false);
     if (!showWarehouses || isReadOnly) return null;
 
     return (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-6">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-slate-900">Galpones Disponibles</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-slate-900">Galpones Disponibles</h3>
+                    {!isReadOnly && (
+                        <button
+                            onClick={() => setShowDefaultSelector(!showDefaultSelector)}
+                            className={`p-1 rounded-full transition-colors ${showDefaultSelector ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-slate-600'}`}
+                            title="Seleccionar galpón default de cosecha"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                    )}
+                </div>
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => {
@@ -87,6 +104,32 @@ export function WarehouseManager({
                     </button>
                 </div>
             </div>
+
+            {showDefaultSelector && !isReadOnly && (
+                <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200 animate-fadeIn">
+                    <label className="block text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">
+                        Seleccionar galpón default de cosecha
+                    </label>
+                    <select
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                        value={defaultHarvestWarehouseId || ''}
+                        onChange={(e) => {
+                            if (onSetDefaultWarehouse) {
+                                onSetDefaultWarehouse(e.target.value);
+                                setShowDefaultSelector(false);
+                            }
+                        }}
+                    >
+                        <option value="">Seleccionar un galpón...</option>
+                        {warehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                    </select>
+                    <p className="mt-2 text-[10px] text-slate-400 italic">
+                        Los remanentes de cosecha sin asignar se enviarán automáticamente a este galpón.
+                    </p>
+                </div>
+            )}
 
             {showWarehouseForm && (
                 <div className="flex items-center gap-2 mb-6 animate-fadeIn">
@@ -139,8 +182,13 @@ export function WarehouseManager({
                     >
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3 flex-1">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                     📦
+                                    {defaultHarvestWarehouseId === w.id && (
+                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full p-0.5 shadow-sm" title="Galpón default de cosecha">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex-1">
                                     {editingWarehouseId === w.id ? (

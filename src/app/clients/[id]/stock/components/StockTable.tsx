@@ -52,7 +52,22 @@ interface StockTableProps {
     setSaleNote: (val: string) => void;
     saleFacturaFile: File | null;
     setSaleFacturaFile: (val: File | null) => void;
+    saleTrailerPlate: string;
+    setSaleTrailerPlate: (val: string) => void;
+    saleHumidity: string;
+    setSaleHumidity: (val: string) => void;
+    saleDischargeNumber: string;
+    setSaleDischargeNumber: (val: string) => void;
+    saleTransportCompany: string;
+    setSaleTransportCompany: (val: string) => void;
+    saleHectoliterWeight: string;
+    setSaleHectoliterWeight: (val: string) => void;
+    saleGrossWeight: string;
+    setSaleGrossWeight: (val: string) => void;
+    saleTareWeight: string;
+    setSaleTareWeight: (val: string) => void;
     products: Product[];
+    clearSelection: () => void;
 }
 
 export function StockTable({
@@ -85,11 +100,59 @@ export function StockTable({
     setSaleNote,
     saleFacturaFile,
     setSaleFacturaFile,
-    products
+    saleTrailerPlate,
+    setSaleTrailerPlate,
+    saleHumidity,
+    setSaleHumidity,
+    saleDischargeNumber,
+    setSaleDischargeNumber,
+    saleTransportCompany,
+    setSaleTransportCompany,
+    saleHectoliterWeight,
+    setSaleHectoliterWeight,
+    saleGrossWeight,
+    setSaleGrossWeight,
+    saleTareWeight,
+    setSaleTareWeight,
+    products,
+    clearSelection
 }: StockTableProps) {
     const [expandedRows, setExpandedRows] = React.useState<string[]>([]);
 
-    const toggleExpand = (id: string, e: React.MouseEvent) => {
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('button')) return;
+            if (target.closest('form')) return;
+            if (target.closest('.stock-row')) return;
+
+            clearSelection();
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [clearSelection]);
+
+    const handleRowClick = (id: string, e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('a') || (e.target as HTMLElement).closest('.chevron-area')) return;
+
+        const isSelected = selectedStockIds.includes(id);
+        const isExpanded = expandedRows.includes(id);
+
+        if (!isSelected) {
+            toggleStockSelection(id, e);
+            if (!isExpanded) {
+                setExpandedRows(prev => [...prev, id]);
+            }
+        } else {
+            toggleStockSelection(id, e);
+            if (isExpanded) {
+                setExpandedRows(prev => prev.filter(rowId => rowId !== id));
+            }
+        }
+    };
+
+    const handleChevronClick = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setExpandedRows(prev =>
             prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
@@ -100,8 +163,8 @@ export function StockTable({
             <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
                 <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
                     {activeWarehouseIds.length === 1
-                        ? `Existencias - ${warehouses.find(w => w.id === activeWarehouseIds[0])?.name || 'Galpón'}`
-                        : `Existencias Combinadas (${activeWarehouseIds.length} Galpones)`
+                        ? `Inventario - ${warehouses.find(w => w.id === activeWarehouseIds[0])?.name || 'Galpón'}`
+                        : 'Inventario'
                     }
                 </h3>
             </div>
@@ -114,7 +177,7 @@ export function StockTable({
                 <div className="p-8 text-center text-slate-500">Cargando stock...</div>
             ) : enrichedStock.length === 0 ? (
                 <div className="p-12 text-center text-slate-500">
-                    <h3 className="text-lg font-medium text-slate-900">Sin existencias</h3>
+                    <h3 className="text-lg font-medium text-slate-900">Sin inventario</h3>
                     <p>No hay productos cargados en los galpones seleccionados.</p>
                 </div>
             ) : (
@@ -146,20 +209,17 @@ export function StockTable({
                             {enrichedStock.map((item) => (
                                 <React.Fragment key={item.id}>
                                     <tr
-                                        onClick={(e) => {
-                                            toggleStockSelection(item.id, e);
-                                            toggleExpand(item.id, e);
-                                        }}
-                                        className={`transition-colors cursor-pointer group ${selectedStockIds.includes(item.id) ? 'bg-blue-50/80' : 'hover:bg-slate-50'}`}
+                                        onClick={(e) => handleRowClick(item.id, e)}
+                                        className={`stock-row transition-colors cursor-pointer group ${selectedStockIds.includes(item.id) ? 'bg-blue-50/80' : 'hover:bg-slate-50'}`}
                                     >
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-400">
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-400 chevron-area" onClick={(e) => handleChevronClick(item.id, e)}>
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 width="16" height="16"
                                                 viewBox="0 0 24 24" fill="none"
                                                 stroke="currentColor" strokeWidth="2.5"
                                                 strokeLinecap="round" strokeLinejoin="round"
-                                                className={`transition-transform duration-200 ${expandedRows.includes(item.id) ? 'rotate-90 text-emerald-500' : ''}`}
+                                                className={`transition-transform duration-200 cursor-pointer hover:text-emerald-500 ${expandedRows.includes(item.id) ? 'rotate-90 text-emerald-500' : ''}`}
                                             >
                                                 <polyline points="9 18 15 12 9 6"></polyline>
                                             </svg>
@@ -256,7 +316,7 @@ export function StockTable({
                                                         </div>
                                                     </div>
 
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                                         <Input
                                                             label="Chofer (Transportista)"
                                                             value={saleTruckDriver}
@@ -272,12 +332,66 @@ export function StockTable({
                                                             className="bg-white h-9"
                                                         />
                                                         <Input
-                                                            label="Destino / Entrega"
-                                                            value={saleDestination}
-                                                            onChange={e => setSaleDestination(e.target.value)}
-                                                            placeholder="Localidad / Acopio"
+                                                            label="Patente Acoplado"
+                                                            value={saleTrailerPlate}
+                                                            onChange={e => setSaleTrailerPlate(e.target.value)}
+                                                            placeholder="BBB 456"
                                                             className="bg-white h-9"
                                                         />
+                                                        <Input
+                                                            label="Destino"
+                                                            value={saleDestination}
+                                                            onChange={e => setSaleDestination(e.target.value)}
+                                                            placeholder="Localidad"
+                                                            className="bg-white h-9"
+                                                        />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                        <Input
+                                                            label="Emb. Transportista"
+                                                            value={saleTransportCompany}
+                                                            onChange={e => setSaleTransportCompany(e.target.value)}
+                                                            placeholder="Empresa"
+                                                            className="bg-white h-9"
+                                                        />
+                                                        <Input
+                                                            label="Nro de descarga"
+                                                            value={saleDischargeNumber}
+                                                            onChange={e => setSaleDischargeNumber(e.target.value)}
+                                                            placeholder="0001"
+                                                            className="bg-white h-9"
+                                                        />
+                                                        <Input
+                                                            label="Humedad (%)"
+                                                            value={saleHumidity}
+                                                            onChange={e => setSaleHumidity(e.target.value)}
+                                                            placeholder="14.5"
+                                                            className="bg-white h-9"
+                                                        />
+                                                        <Input
+                                                            label="P. Hectolítrico"
+                                                            value={saleHectoliterWeight}
+                                                            onChange={e => setSaleHectoliterWeight(e.target.value)}
+                                                            placeholder="78"
+                                                            className="bg-white h-9"
+                                                        />
+                                                        <div className="grid grid-cols-2 gap-2 flex-grow sm:col-span-1 min-w-[150px]">
+                                                            <Input
+                                                                label="Peso Bruto"
+                                                                value={saleGrossWeight}
+                                                                onChange={e => setSaleGrossWeight(e.target.value)}
+                                                                placeholder="30000"
+                                                                className="bg-white h-9"
+                                                            />
+                                                            <Input
+                                                                label="Peso Tara"
+                                                                value={saleTareWeight}
+                                                                onChange={e => setSaleTareWeight(e.target.value)}
+                                                                placeholder="10000"
+                                                                className="bg-white h-9"
+                                                            />
+                                                        </div>
                                                     </div>
 
                                                     {showSaleNote && (

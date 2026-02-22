@@ -98,7 +98,8 @@ export function OrderConfirmationStep({
                                 <div>
                                     <span className="text-slate-500 block text-xs uppercase font-bold tracking-tight">Densidad</span>
                                     <span className="font-medium">
-                                        {seedItem.plantingDensity || '-'} {seedItem.plantingDensityUnit === 'PLANTS_HA' ? 'plant/ha' : 'kg/ha'}
+                                        {seedItem.plantingDensity || '-'} {seedItem.plantingDensityUnit === 'PLANTS_HA' ? 'plant/ha' : seedItem.unit || 'kg/ha'}
+                                        {seedItem.productName.toUpperCase().includes('MAIZ') && seedItem.plantingDensity && ` (${(seedItem.plantingDensity / 80000).toFixed(2)} bolsas)`}
                                     </span>
                                 </div>
                                 <div>
@@ -139,20 +140,30 @@ export function OrderConfirmationStep({
                                             ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
                                             : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                     </span>
-                                    <span className="font-mono font-bold text-emerald-600">{totalInGroup.toFixed(2)} {first.unit}</span>
+                                    <span className="font-mono font-bold text-emerald-600">
+                                        {totalInGroup.toFixed(2)} {first.unit}
+                                        {first.productName.toUpperCase().includes('MAIZ') && ` (${(totalInGroup / 80000).toFixed(2)} bolsas)`}
+                                    </span>
                                 </div>
                                 <div className="space-y-1 pl-4">
                                     {groupItems.map(item => (
-                                        <div key={item.id} className={`flex justify-between items-center text-xs italic ${item.isVirtualDéficit ? 'text-orange-500 border-l-2 border-orange-200 pl-2' : 'text-slate-500'}`}>
-                                            <span>
-                                                {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                {item.isVirtualDéficit
-                                                    ? 'Faltan'
-                                                    : (item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`))}
-                                                {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
-                                            </span>
-                                            <span className="font-mono font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                        <div key={item.id} className={`flex flex-col text-xs italic ${item.isVirtualDéficit ? 'text-orange-500 border-l-2 border-orange-200 pl-2' : 'text-slate-500'}`}>
+                                            <div className="flex justify-between items-center w-full">
+                                                <span>
+                                                    {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                    {item.isVirtualDéficit
+                                                        ? 'Faltan'
+                                                        : (item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`))}
+                                                    {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                    {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
+                                                </span>
+                                                <span className="font-mono font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                            </div>
+                                            {item.fertilizerPlacement && (
+                                                <div className="text-[9px] font-bold text-emerald-600/70 uppercase not-italic">
+                                                    Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

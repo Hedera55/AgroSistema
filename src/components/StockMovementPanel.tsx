@@ -11,7 +11,7 @@ interface StockMovementPanelProps {
     investors?: { name: string; percentage?: number }[];
     campaigns?: any[];
     movements?: any[];
-    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => Promise<void>;
+    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => Promise<void>;
     onCancel: () => void;
 }
 
@@ -32,6 +32,19 @@ export function StockMovementPanel({
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    // Logistics fields for WITHDRAW
+    const [truckDriver, setTruckDriver] = useState('');
+    const [plateNumber, setPlateNumber] = useState('');
+    const [trailerPlate, setTrailerPlate] = useState('');
+    const [destinationCompany, setDestinationCompany] = useState('');
+    const [destinationAddress, setDestinationAddress] = useState('');
+    const [transportCompany, setTransportCompany] = useState('');
+    const [dischargeNumber, setDischargeNumber] = useState('');
+    const [humidity, setHumidity] = useState('');
+    const [hectoliterWeight, setHectoliterWeight] = useState('');
+    const [grossWeight, setGrossWeight] = useState('');
+    const [tareWeight, setTareWeight] = useState('');
 
     // Track which product groups (selected items) are expanded
     const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -187,7 +200,21 @@ export function StockMovementPanel({
 
         setLoading(true);
         try {
-            await onConfirm(action, absoluteQuantities, destinationId || undefined, note, receiverName);
+            const logisticsInfo = action === 'WITHDRAW' ? {
+                truckDriver: truckDriver || undefined,
+                plateNumber: plateNumber || undefined,
+                trailerPlate: trailerPlate || undefined,
+                destinationCompany: destinationCompany || undefined,
+                destinationAddress: destinationAddress || undefined,
+                transportCompany: transportCompany || undefined,
+                dischargeNumber: dischargeNumber || undefined,
+                humidity: humidity ? parseFloat(humidity.replace(',', '.')) : undefined,
+                hectoliterWeight: hectoliterWeight ? parseFloat(hectoliterWeight.replace(',', '.')) : undefined,
+                grossWeight: grossWeight ? parseFloat(grossWeight.replace(',', '.')) : undefined,
+                tareWeight: tareWeight ? parseFloat(tareWeight.replace(',', '.')) : undefined,
+            } : undefined;
+
+            await onConfirm(action, absoluteQuantities, destinationId || undefined, note, receiverName, logisticsInfo);
         } catch (e) {
             console.error(e);
             alert('Error al procesar movimiento');
@@ -374,6 +401,93 @@ export function StockMovementPanel({
                                 </div>
                             </div>
                         )}
+
+                    <div className="mt-4 pt-4 border-t border-orange-200/50">
+                        <label className="block text-xs font-bold text-orange-800 uppercase mb-3">Datos Logísticos (Opcional)</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                            <Input
+                                label="Chofer"
+                                value={truckDriver}
+                                onChange={e => setTruckDriver(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Patente Camión"
+                                value={plateNumber}
+                                onChange={e => setPlateNumber(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Patente Acoplado"
+                                value={trailerPlate}
+                                onChange={e => setTrailerPlate(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Empresa Transp."
+                                value={transportCompany}
+                                onChange={e => setTransportCompany(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                            <Input
+                                label="Empresa Destino"
+                                value={destinationCompany}
+                                onChange={e => setDestinationCompany(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Dirección / Localidad"
+                                value={destinationAddress}
+                                onChange={e => setDestinationAddress(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                            <Input
+                                label="Nº Descarga"
+                                value={dischargeNumber}
+                                onChange={e => setDischargeNumber(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Humedad (%)"
+                                value={humidity}
+                                onChange={e => setHumidity(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="P. Hectolítrico"
+                                value={hectoliterWeight}
+                                onChange={e => setHectoliterWeight(e.target.value)}
+                                className="bg-white h-9"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Peso Bruto"
+                                value={grossWeight}
+                                onChange={e => setGrossWeight(e.target.value)}
+                                className="bg-white h-9 text-right font-mono"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                            <Input
+                                label="Peso Tara"
+                                value={tareWeight}
+                                onChange={e => setTareWeight(e.target.value)}
+                                className="bg-white h-9 text-right font-mono"
+                                labelClassName="text-[10px] text-orange-700/80"
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
 

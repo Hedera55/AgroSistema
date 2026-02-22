@@ -175,6 +175,12 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                     <p className="text-sm font-bold text-slate-700">{order.expectedYield.toLocaleString()} kg</p>
                                 </div>
                             )}
+                            {order.type === 'SOWING' && order.expectedYield && (
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Esperado</label>
+                                    <p className="text-sm font-bold text-emerald-700">{order.expectedYield.toLocaleString()} kg/ha</p>
+                                </div>
+                            )}
                             {order.campaignId && (
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 uppercase">Campaña</label>
@@ -226,7 +232,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                         {farmGroups[fName].map((lot: any) => (
                                             <div key={lot.id} className="flex flex-col">
                                                 <span className="text-sm font-bold text-slate-700">
-                                                    {lot.name} <span className="text-slate-400 font-medium ml-1">({lot.hectares || 0} ha)</span>
+                                                    {lot.id} - {lot.name} <span className="text-slate-400 font-medium ml-1">({lot.hectares || 0} ha)</span>
                                                 </span>
                                                 {order.lotObservations?.[lot.id] && (
                                                     <span className="text-[10px] text-slate-400 italic leading-tight">{order.lotObservations[lot.id]}</span>
@@ -291,7 +297,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                 <div className="flex items-center gap-2">
                     <div className={`h-2 w-2 rounded-full ${order.status === 'DONE' ? 'bg-emerald-500' : 'bg-yellow-500'}`}></div>
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                        {order.status === 'DONE' ? 'Aplicada' : order.status === 'PENDING' ? 'Pendiente' : order.status}
+                        {order.status === 'DONE' ? (order.type === 'SOWING' ? 'Sembrada' : 'Aplicada') : order.status === 'PENDING' ? 'Pendiente' : order.status}
                     </span>
                 </div>
                 <div className="text-[10px] text-slate-400 font-medium tracking-tight">

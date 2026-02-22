@@ -154,6 +154,13 @@ export const db = {
         return db.get(storeName, key);
     },
     async put<Name extends StoreNames<AgronomicDB>>(storeName: Name, value: AgronomicDB[Name]['value']) {
+        // Dev-mode safeguard: ensure clientId is present for mandatory fields
+        const mandatoryClientIdStores = ['orders', 'movements', 'stock', 'farms', 'lots', 'warehouses', 'observations', 'order_activities'];
+        if (mandatoryClientIdStores.includes(storeName) && !(value as any).clientId) {
+            console.error(`❌ DB: Attempted to put item into "${storeName}" without clientId! This will break sync. Item ID: ${(value as any).id}`);
+            // We still allow the put to prevent UI crashes, but the console error will alert developers.
+        }
+
         cache.delete(storeName);
         const db = await dbPromise;
         if (!db) return;

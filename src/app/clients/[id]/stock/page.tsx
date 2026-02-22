@@ -57,6 +57,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [selectedInManagerId, setSelectedInManagerId] = useState<string | null>(null); // For click interaction
     const [editName, setEditName] = useState('');
 
+
     // Stock Selection state
     const [selectedStockIds, setSelectedStockIds] = useState<string[]>([]);
     const [showMovePanel, setShowMovePanel] = useState(false);
@@ -126,15 +127,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [saleDestination, setSaleDestination] = useState('');
     const [saleTruckDriver, setSaleTruckDriver] = useState('');
     const [salePlateNumber, setSalePlateNumber] = useState('');
+    const [saleTrailerPlate, setSaleTrailerPlate] = useState('');
+    const [saleHumidity, setSaleHumidity] = useState('');
+    const [saleDischargeNumber, setSaleDischargeNumber] = useState('');
+    const [saleTransportCompany, setSaleTransportCompany] = useState('');
+    const [saleHectoliterWeight, setSaleHectoliterWeight] = useState('');
+    const [saleGrossWeight, setSaleGrossWeight] = useState('');
+    const [saleTareWeight, setSaleTareWeight] = useState('');
     const [selectedSeller, setSelectedSeller] = useState('');
-    const [client, setClient] = useState<any>(null);
 
     // Success Ribbon State
     const [lastMovement, setLastMovement] = useState<InventoryMovement | null>(null);
     const [lastAction, setLastAction] = useState<'IN' | 'WITHDRAW' | 'TRANSFER' | 'SALE' | null>(null);
     const [lastTransferOrigin, setLastTransferOrigin] = useState<string>('');
 
-    const { generateRemitoPDF, generateCartaDePortePDF } = usePDF();
+    const { generateRemitoPDF } = usePDF();
 
     const unitInputRef = useRef<HTMLDivElement>(null);
     const warehouseContainerRef = useRef<HTMLDivElement>(null);
@@ -162,10 +169,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         return publicUrlData.publicUrl;
     };
 
-    // Fetch client data for partners list
+    const [client, setClient] = useState<any>(null);
     useEffect(() => {
         db.get('clients', id).then(setClient);
     }, [id]);
+
+    const handleSetDefaultWarehouse = async (warehouseId: string) => {
+        if (!client) return;
+        const updatedClient = { ...client, defaultHarvestWarehouseId: warehouseId, updatedAt: new Date().toISOString(), synced: false };
+        await db.put('clients', updatedClient);
+        setClient(updatedClient);
+        syncService.pushChanges();
+    };
 
     // Persistence for form state
     useEffect(() => {
@@ -787,7 +802,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 synced: false,
                 truckDriver: saleTruckDriver || undefined,
                 plateNumber: salePlateNumber || undefined,
-                deliveryLocation: saleDestination || undefined
+                deliveryLocation: saleDestination || undefined,
+                trailerPlate: saleTrailerPlate || undefined,
+                humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
+                dischargeNumber: saleDischargeNumber || undefined,
+                transportCompany: saleTransportCompany || undefined,
+                hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
+                grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
+                tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined
             };
 
             await db.put('movements', movementData);
@@ -815,7 +837,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     };
 
-    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string) => {
+    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => {
         // quantities here is a map of specific stock IDs to their selected quantities
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
@@ -853,7 +875,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
-                receiverName: action === 'WITHDRAW' ? (receiverName || undefined) : undefined
+                receiverName: action === 'WITHDRAW' ? (receiverName || undefined) : undefined,
+                ...(action === 'WITHDRAW' && logistics ? logistics : {})
             };
 
             await db.put('movements', movementData);
@@ -1268,20 +1291,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                 📄 Descargar Remito
                             </Button>
                         )}
-                        {lastAction === 'SALE' && (
-                            <Button
-                                onClick={async () => {
-                                    const client = await db.get('clients', id) as any;
-                                    const warehouse = warehouses.find(w => w.id === lastMovement.warehouseId);
-                                    if (client && warehouse) {
-                                        generateCartaDePortePDF(lastMovement, client, warehouse.name);
-                                    }
-                                }}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            >
-                                🚛 Descargar Carta de Porte
-                            </Button>
-                        )}
                         <button
                             onClick={() => {
                                 setLastMovement(null);
@@ -1322,6 +1331,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 setSalePlateNumber={setSalePlateNumber}
                 saleDestination={saleDestination}
                 setSaleDestination={setSaleDestination}
+                saleTrailerPlate={saleTrailerPlate}
+                setSaleTrailerPlate={setSaleTrailerPlate}
+                saleHumidity={saleHumidity}
+                setSaleHumidity={setSaleHumidity}
+                saleDischargeNumber={saleDischargeNumber}
+                setSaleDischargeNumber={setSaleDischargeNumber}
+                saleTransportCompany={saleTransportCompany}
+                setSaleTransportCompany={setSaleTransportCompany}
+                saleHectoliterWeight={saleHectoliterWeight}
+                setSaleHectoliterWeight={setSaleHectoliterWeight}
+                saleGrossWeight={saleGrossWeight}
+                setSaleGrossWeight={setSaleGrossWeight}
+                saleTareWeight={saleTareWeight}
+                setSaleTareWeight={setSaleTareWeight}
                 showSaleNote={showSaleNote}
                 setShowSaleNote={setShowSaleNote}
                 saleNote={saleNote}
@@ -1329,6 +1352,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 saleFacturaFile={saleFacturaFile}
                 setSaleFacturaFile={setSaleFacturaFile}
                 products={products}
+                clearSelection={handleClearSelection}
             />
 
 
@@ -1396,6 +1420,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 isReadOnly={isReadOnly}
                 warehouseContainerRef={warehouseContainerRef}
                 stock={stock}
+                defaultHarvestWarehouseId={client?.defaultHarvestWarehouseId}
+                onSetDefaultWarehouse={handleSetDefaultWarehouse}
             />
 
             <ProductCatalog

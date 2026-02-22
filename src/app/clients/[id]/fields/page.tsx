@@ -22,6 +22,12 @@ import { supabase } from '@/lib/supabase';
 import { FarmCard } from './components/FarmCard';
 import { LotCard } from './components/LotCard';
 import { SidePanels } from './components/SidePanels';
+import { HarvestWizard } from '@/components/HarvestWizard';
+import { OrderDetailView } from '@/components/OrderDetailView';
+import { MovementDetailsView } from '@/components/MovementDetailsView';
+import { HarvestDetailsView } from '@/components/HarvestDetailsView';
+
+type PanelType = 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details';
 
 export default function FieldsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -37,6 +43,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const [showFarmForm, setShowFarmForm] = useState(false);
     const [newFarmName, setNewFarmName] = useState('');
+    const [newFarmAddress, setNewFarmAddress] = useState('');
+    const [newFarmCity, setNewFarmCity] = useState('');
+    const [newFarmProvince, setNewFarmProvince] = useState('');
     const [editingFarmId, setEditingFarmId] = useState<string | null>(null);
 
     // Selected Farm for adding lots
@@ -59,6 +68,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [harvestDate, setHarvestDate] = useState('');
     const [sowingOrder, setSowingOrder] = useState<Order | null>(null);
     const [harvestMovement, setHarvestMovement] = useState<InventoryMovement | null>(null);
+    const [harvestMovements, setHarvestMovements] = useState<InventoryMovement[]>([]);
     const [harvestPlanOrder, setHarvestPlanOrder] = useState<Order | null>(null);
     const [isEditingHarvestPanel, setIsEditingHarvestPanel] = useState(false);
     const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
@@ -122,15 +132,21 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     // Unified Panel State (Observations, Crop Assignment, History)
     const [activePanel, setActivePanel] = useState<{
-        type: 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details';
-        id: string; // The specific lot or farm ID
-        farmId: string;
-        lotId?: string;
-        name: string;
-        subtitle?: string;
+        type: PanelType | null;
+        id: string | null;
+        farmId: string | null;
+        lotId: string | null;
+        name: string | null;
+        subtitle?: string | null;
     } | null>(null);
 
+    const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+    const [selectedMovement, setSelectedMovement] = useState<any | null>(null);
+
     const obsSectionRef = useRef<HTMLDivElement>(null);
+    const historySectionRef = useRef<HTMLDivElement>(null);
+    const detailSectionRef = useRef<HTMLDivElement>(null);
+    const logisticsSectionRef = useRef<HTMLDivElement>(null);
 
     // Auto-close panel when parent context is deselected
     useEffect(() => {
@@ -149,18 +165,34 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     }, [selectedFarmId, selectedLotId, activePanel]);
 
-    const openPanel = (type: 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details', id: string, farmId: string, lotId: string | undefined, name: string, subtitle?: string) => {
-        // Toggle if already open with same type and ID
-        if (activePanel?.type === type && activePanel?.id === id) {
+    const openPanel = (
+        type: PanelType,
+        id: string,
+        farmId: string | null,
+        lotId: string | null,
+        name: string,
+        subtitle?: string | null
+    ) => {
+        // If clicking same history lot, toggle close
+        if (type === 'history' && activePanel?.type === 'history' && activePanel.lotId === lotId) {
             setActivePanel(null);
+            setSelectedEvent(null);
+            setSelectedMovement(null);
             return;
         }
 
         setActivePanel({ type, id, farmId, lotId, name, subtitle });
-        // Smooth scroll to section
-        setTimeout(() => {
+        setSelectedEvent(null);
+        setSelectedMovement(null);
+
+        // Scroll to history if needed
+        if (type === 'history') {
+            setTimeout(() => {
+                historySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        } else {
             obsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
+        }
     };
 
     const handleAddLot = async (e: React.FormEvent) => {
@@ -198,17 +230,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setShowLotForm(false);
     };
 
-    const handleMarkHarvested = async (lot: Lot) => {
-        if (!harvestDate) return alert('Ingrese la fecha de cosecha');
-
-        if (!observedYield) return alert('Ingrese el rinde observado');
-        const yieldVal = parseFloat(observedYield);
+    const handleMarkHarvested = async (lot: Lot, data: any) => {
+        const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions } = data;
 
         const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
-        const productName = harvestType === 'SEMILLA' ? cropBaseName : `${cropBaseName} (GRANO)`;
-        const productType = harvestType === 'SEMILLA' ? 'SEED' : 'OTHER'; // Using OTHER for Grano to avoid sowing logic
+        const productName = selectedHarvestType === 'SEMILLA' ? cropBaseName : `${cropBaseName} (GRANO)`;
+        const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'OTHER';
 
-        // Fix: Strictly search for "Propia" brand to isolate harvest from commercial products
         let product = products.find(p =>
             p.name.toLowerCase() === productName.toLowerCase() &&
             p.type === productType &&
@@ -217,13 +245,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         );
 
         if (!product && lot.cropSpecies) {
-            // Create "Propia" seed/grain if it doesn't exist
             product = await addProduct({
                 clientId: id,
                 name: productName,
                 type: productType,
-                brandName: 'Propia', // Enforced
-                commercialName: 'Propia', // Fix: Set commercial name to ensure visibility
+                brandName: 'Propia',
+                commercialName: 'Propia',
                 unit: 'kg',
                 createdAt: new Date().toISOString(),
                 synced: false
@@ -235,78 +262,116 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             return;
         }
 
-        const harvestWarehouse = warehouses.find(w => w.id === selectedHarvestWarehouseId);
-        if (!harvestWarehouse) {
-            alert('Seleccione un depósito para la cosecha.');
-            return;
-        }
-
         try {
+            // --- MOVEMENT TRACING (REVERSAL) ---
+            if (isEditingHarvestPanel && harvestPlanOrder) {
+                const oldMovements = (harvestPlanOrder as any).movements || [];
+                const allStock = await db.getAll('stock') as ClientStock[];
+
+                for (const m of oldMovements) {
+                    if (m.warehouseId && !m.deleted) {
+                        const existingStock = allStock.find(s => s.clientId === id && s.productId === m.productId && s.warehouseId === m.warehouseId);
+                        if (existingStock) {
+                            await updateStock({
+                                ...existingStock,
+                                quantity: existingStock.quantity - m.quantity,
+                                lastUpdated: new Date().toISOString()
+                            });
+                        }
+                    }
+                    // Soft delete old movement
+                    await db.put('movements', { ...m, deleted: true, updatedAt: new Date().toISOString(), synced: false, clientId: id });
+                }
+            }
+
             // 1. Update Lot Status
             await updateLot({
                 ...lot,
                 status: 'HARVESTED',
-                observedYield: yieldVal,
+                observedYield: totalYield,
                 lastUpdatedBy: displayName || 'Sistema'
             });
 
-            // 2. Update Stock (IN)
-            const allStock = await db.getAll('stock') as ClientStock[];
-            const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
-            const existingStock = clientStock.find((s: ClientStock) => s.productId === product.id && s.warehouseId === harvestWarehouse.id);
-            const currentQty = existingStock?.quantity || 0;
-
-            await updateStock({
-                id: existingStock?.id,
-                clientId: id,
-                warehouseId: harvestWarehouse.id,
-                campaignId: selectedHarvestCampaignId || undefined,
-                productId: product.id,
-                quantity: currentQty + yieldVal,
-                lastUpdated: new Date().toISOString()
-            });
-
-            const movementDate = harvestDate || new Date().toISOString().split('T')[0];
-
-            // 3. Record Movement: HARVEST (Consolidated)
+            const movementDate = date || new Date().toISOString().split('T')[0];
             const farm = farms.find(f => f.id === lot.farmId);
-            const pricePerHa = harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0;
+            const pricePerHa = laborPricePerHa || 0;
             const totalCost = pricePerHa * lot.hectares;
 
-            await db.put('movements', {
-                id: generateId(),
-                clientId: id,
-                warehouseId: harvestWarehouse.id,
-                productId: product.id,
-                productName: product.name,
-                type: 'HARVEST',
-                quantity: yieldVal,
-                unit: product.unit,
-                date: movementDate,
-                time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                referenceId: lot.id,
-                campaignId: selectedHarvestCampaignId || undefined,
-                notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'})`,
-                contractorName: harvestContractor || undefined,
-                harvestLaborPricePerHa: pricePerHa || undefined,
-                harvestLaborCost: totalCost || undefined,
-                investorName: selectedHarvestInvestor || undefined,
-                createdBy: displayName || 'Sistema',
-                createdAt: new Date().toISOString(),
-                synced: false
-            });
+            // --- AUTO-ASSIGN REMAINDER ---
+            const assignedAmount = distributions.reduce((sum: number, d: any) => sum + d.amount, 0);
+            const remaining = totalYield - assignedAmount;
+            const finalDistributions = [...distributions];
 
-            // Step 4 (Labor movement) was removed to avoid physical stock confusion
+            if (remaining > 5 && client?.defaultHarvestWarehouseId) {
+                const defWarehouse = warehouses.find(w => w.id === client.defaultHarvestWarehouseId);
+                finalDistributions.push({
+                    type: 'WAREHOUSE',
+                    targetId: client.defaultHarvestWarehouseId,
+                    targetName: defWarehouse?.name || 'Acopio por Defecto',
+                    amount: remaining,
+                    logistics: { notes: 'Asignación automática por remanente' }
+                });
+            }
+
+            for (const dist of finalDistributions) {
+                if (dist.type === 'WAREHOUSE') {
+                    // Update Stock (IN)
+                    const allStock = await db.getAll('stock') as ClientStock[];
+                    const existingStock = allStock.find(s => s.clientId === id && s.productId === product!.id && s.warehouseId === dist.targetId);
+                    const currentQty = existingStock?.quantity || 0;
+
+                    await updateStock({
+                        id: existingStock?.id,
+                        clientId: id,
+                        warehouseId: dist.targetId,
+                        campaignId: campaignId || undefined,
+                        productId: product!.id,
+                        quantity: currentQty + dist.amount,
+                        lastUpdated: new Date().toISOString()
+                    });
+                }
+
+                // Record Movement for this distribution
+                await db.put('movements', {
+                    id: generateId(),
+                    clientId: id,
+                    warehouseId: dist.type === 'WAREHOUSE' ? dist.targetId : undefined,
+                    productId: product!.id,
+                    productName: product!.name,
+                    type: 'HARVEST',
+                    quantity: dist.amount,
+                    unit: product!.unit,
+                    date: movementDate,
+                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                    referenceId: lot.id,
+                    campaignId: campaignId || undefined,
+                    notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'}) -> Destino: ${dist.targetName}`,
+                    contractorName: contractor || undefined,
+                    harvestLaborPricePerHa: pricePerHa || undefined,
+                    harvestLaborCost: totalCost || undefined,
+                    investorName: investor || undefined,
+                    receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
+                    createdBy: displayName || 'Sistema',
+                    createdAt: new Date().toISOString(),
+                    synced: false,
+                    ...dist.logistics
+                });
+            }
 
             // 5. Update Order Status
             if (harvestPlanOrder) {
                 await db.put('orders', {
                     ...harvestPlanOrder,
+                    clientId: id,
                     status: 'DONE',
+                    date: movementDate, // Update to current selection
                     appliedAt: new Date().toISOString(),
                     appliedBy: displayName || 'Sistema',
-                    investorName: selectedHarvestInvestor || undefined,
-                    campaignId: selectedHarvestCampaignId || undefined,
+                    contractorName: contractor || undefined,
+                    investorName: investor || undefined,
+                    campaignId: campaignId || undefined,
+                    servicePrice: pricePerHa || undefined,
+                    expectedYield: totalYield,
                     updatedAt: new Date().toISOString(),
                     synced: false,
                     notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
@@ -325,17 +390,17 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     status: 'DONE',
                     date: movementDate,
                     time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    expectedYield: yieldVal,
-                    servicePrice: harvestLaborPrice ? parseFloat(harvestLaborPrice) : 0,
-                    contractorName: harvestContractor,
-                    investorName: selectedHarvestInvestor,
-                    applicatorId: contractors.find(c => c.username === harvestContractor)?.id,
+                    expectedYield: totalYield,
+                    servicePrice: pricePerHa,
+                    contractorName: contractor,
+                    investorName: investor,
+                    applicatorId: contractors.find(c => c.username === contractor)?.id,
                     items: [],
                     treatedArea: lot.hectares,
                     plantingDensity: 0,
                     plantingSpacing: 0,
                     sowingOrderId: lastSowing?.id,
-                    campaignId: selectedHarvestCampaignId || undefined,
+                    campaignId: campaignId || undefined,
                     createdBy: displayName || 'Sistema',
                     appliedBy: displayName || 'Sistema',
                     appliedAt: new Date().toISOString(),
@@ -346,7 +411,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 });
             }
 
-            await refreshOrders(); // Fixed: ensuring state refresh
+            await refreshOrders();
             syncService.pushChanges();
             setIsHarvesting(false);
             setConfirmStep(false);
@@ -355,12 +420,42 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             setHarvestContractor('');
             setHarvestDate('');
             setHarvestPlanOrder(null);
+            setIsEditingHarvestPanel(false);
             setSelectedHarvestInvestor('');
             setSelectedHarvestCampaignId('');
         } catch (error) {
             console.error('Error marking harvested:', error);
             alert('Error al registrar la cosecha.');
         }
+    };
+
+    const handleEditHarvest = (event: any) => {
+        // Find lot and farm
+        const lotId = activePanel?.lotId || activePanel?.id;
+        const lot = lots.find(l => l.id === lotId);
+        const farm = farms.find(f => f.id === selectedFarmId);
+
+        if (!lot || !farm) return;
+
+        // 1. Prepare wizard states
+        setHarvestDate(event.date);
+        setHarvestContractor(event.contractorName || '');
+        setObservedYield(event.observedYield?.toString() || '');
+        setHarvestLaborPrice(event.movements?.[0]?.harvestLaborPricePerHa?.toString() || '');
+        setSelectedHarvestInvestor(event.movements?.[0]?.investorName || '');
+        setSelectedHarvestCampaignId(event.movements?.[0]?.campaignId || '');
+
+        // 2. Open Wizard in Edit Mode
+        setHarvestPlanOrder(event); // Reusing this for the wizard source
+        setIsEditingHarvestPanel(true);
+        setIsHarvesting(true);
+        setSelectedLotId(lot.id);
+
+        // 3. Scroll to it
+        setTimeout(() => {
+            const anchor = document.getElementById('harvest-wizard-scroll-anchor');
+            anchor?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     };
 
     const handleCancelHarvest = async (lot: Lot) => {
@@ -582,26 +677,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const fetchHarvestDetails = async (lotId: string) => {
         try {
             const allMovements = await db.getAll('movements') as InventoryMovement[];
-            const harvestMovements = allMovements
-                .filter(m => m.referenceId === lotId && m.type === 'HARVEST')
-                .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+            const hms = allMovements.filter(m => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha');
+            setHarvestMovements(hms);
 
-            if (harvestMovements.length > 0) {
-                // Find associated expense movement if any (same date/time or reference logic)
-                // Actually we just need to display the harvest movement which contains some metadata, 
-                // but wait, we didn't store cost in HARVEST movement, we stored it in OUT movement.
-                // BUT we added harvestLaborCost to InventoryMovement, so maybe we SHOULD store it in the HARVEST one too for easier display?
-                // In my previous edit I removed line 189 `harvestLaborCost` from HARVEST movement and put it in OUT movement.
-                // This makes fetching harder. 
-                // Let's modify the fetch to find the OUT movement too, OR fix the previous edit to store metadata in HARVEST too.
-                // Storing metadata in HARVEST is redundant but easier for UI.
-                // Let's look for the OUT movement with same referenceId.
-                const outMovements = allMovements.filter(m => m.referenceId === lotId && m.type === 'OUT' && m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+            if (hms.length > 0) {
+                const harvest = hms[0];
+                // rough matching for expense
+                const expense = allMovements.find(m => m.referenceId === lotId && m.type === 'OUT' && m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' && m.date === harvest.date);
 
-                const harvest = harvestMovements[0];
-                const expense = outMovements.find(m => m.date === harvest.date); // rough matching
-
-                // Combine for display
                 setHarvestMovement({
                     ...harvest,
                     harvestLaborCost: expense?.purchasePrice || 0,
@@ -720,6 +803,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 await updateFarm({
                     ...farmToUpdate,
                     name: newFarmName,
+                    address: newFarmAddress,
+                    city: newFarmCity,
+                    province: newFarmProvince,
                     lastUpdatedBy: displayName || 'Sistema'
                 });
             }
@@ -730,16 +816,25 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 id: generateId(),
                 clientId: id,
                 name: newFarmName,
+                address: newFarmAddress,
+                city: newFarmCity,
+                province: newFarmProvince,
                 createdBy: displayName || 'Sistema',
                 lastUpdatedBy: displayName || 'Sistema'
             });
         }
         setNewFarmName('');
+        setNewFarmAddress('');
+        setNewFarmCity('');
+        setNewFarmProvince('');
         setShowFarmForm(false);
     };
 
     const handleEditFarm = (farm: Farm) => {
         setNewFarmName(farm.name);
+        setNewFarmAddress(farm.address || '');
+        setNewFarmCity(farm.city || '');
+        setNewFarmProvince(farm.province || '');
         setEditingFarmId(farm.id);
         setShowFarmForm(true);
         // Clear lot editing
@@ -758,6 +853,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setShowFarmForm(false);
         setEditingFarmId(null);
         setNewFarmName('');
+        setNewFarmAddress('');
+        setNewFarmCity('');
+        setNewFarmProvince('');
     };
 
     if (role === 'CONTRATISTA') {
@@ -801,14 +899,36 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     <h2 className="text-lg font-semibold text-slate-800 mb-4">{editingFarmId ? 'Editar Campo' : 'Nuevo Campo'}</h2>
                     <form onSubmit={handleAddFarm} className="space-y-4">
                         <div className="flex gap-4 items-end">
-                            <Input
-                                label="Nombre del Campo"
-                                placeholder="ej. La Estelita"
-                                value={newFarmName}
-                                onChange={e => setNewFarmName(e.target.value)}
-                                required
-                            />
+                            <div className="flex-1">
+                                <Input
+                                    label="Nombre del Campo"
+                                    placeholder="ej. La Estelita"
+                                    value={newFarmName}
+                                    onChange={e => setNewFarmName(e.target.value)}
+                                    required
+                                />
+                            </div>
                             <Button type="submit">{editingFarmId ? '➜' : 'Guardar Campo'}</Button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <Input
+                                label="Dirección (Opcional)"
+                                placeholder="ej. Ruta 8 Km 10"
+                                value={newFarmAddress}
+                                onChange={e => setNewFarmAddress(e.target.value)}
+                            />
+                            <Input
+                                label="Ciudad (Opcional)"
+                                placeholder="ej. Pergamino"
+                                value={newFarmCity}
+                                onChange={e => setNewFarmCity(e.target.value)}
+                            />
+                            <Input
+                                label="Provincia (Opcional)"
+                                placeholder="ej. Buenos Aires"
+                                value={newFarmProvince}
+                                onChange={e => setNewFarmProvince(e.target.value)}
+                            />
                         </div>
 
                         {editingFarmId && (
@@ -900,7 +1020,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    openPanel('observations', farm.id, farm.id, undefined, farm.name);
+                                                    openPanel('observations', farm.id, farm.id, null, farm.name);
                                                 }}
                                                 className={`text-xs font-bold px-3 py-1.5 rounded border transition-all ${activePanel?.type === 'observations' && activePanel?.id === farm.id
                                                     ? 'bg-emerald-600 text-white border-emerald-600'
@@ -1244,153 +1364,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             )}
                                                                         </div>
                                                                     )}
-
-                                                                    {/* Inline Harvest Form */}
-                                                                    {isHarvesting && selectedLotId === lot.id && (
-                                                                        <div className="mt-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100 shadow-sm animate-fadeIn cursor-default" onClick={e => e.stopPropagation()}>
-                                                                            <div className="flex items-center justify-between mb-3">
-                                                                                <h4 className="text-xs font-black text-blue-800 uppercase tracking-wide">
-                                                                                    Registrar Cosecha
-                                                                                </h4>
-
-                                                                                {/* Compact Harvest Type Toggle */}
-                                                                                <div className="flex bg-blue-100/50 p-0.5 rounded-md border border-blue-200 min-w-[120px]">
-                                                                                    <button
-                                                                                        onClick={() => setHarvestType('GRANO')}
-                                                                                        className={`flex-1 py-0.5 px-2 text-[9px] font-black uppercase tracking-widest rounded transition-all ${harvestType === 'GRANO' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-200/50'}`}
-                                                                                    >
-                                                                                        Grano
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => setHarvestType('SEMILLA')}
-                                                                                        className={`flex-1 py-0.5 px-2 text-[9px] font-black uppercase tracking-widest rounded transition-all ${harvestType === 'SEMILLA' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-200/50'}`}
-                                                                                    >
-                                                                                        Semilla
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                                                                <Input
-                                                                                    label="Fecha (DD/MM/YYYY)"
-                                                                                    type="date"
-                                                                                    value={harvestDate}
-                                                                                    onChange={e => setHarvestDate(e.target.value)}
-                                                                                    className="bg-white"
-                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
-                                                                                />
-                                                                                <div>
-                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Contratista</label>
-                                                                                    <select
-                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                                                                                        value={harvestContractor}
-                                                                                        onChange={e => setHarvestContractor(e.target.value)}
-                                                                                    >
-                                                                                        <option value="">Seleccionar...</option>
-                                                                                        {contractors.map(c => (
-                                                                                            <option key={c.id} value={c.username}>{c.username}</option>
-                                                                                        ))}
-                                                                                    </select>
-                                                                                </div>
-
-                                                                                <div>
-                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Campaña</label>
-                                                                                    <select
-                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                                                                                        value={selectedHarvestCampaignId}
-                                                                                        onChange={e => setSelectedHarvestCampaignId(e.target.value)}
-                                                                                    >
-                                                                                        <option value="">Seleccionar...</option>
-                                                                                        {campaigns.map(c => (
-                                                                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                                                                        ))}
-                                                                                    </select>
-                                                                                </div>
-
-                                                                                <div>
-                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Depósito Destino</label>
-                                                                                    <select
-                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                                                                                        value={selectedHarvestWarehouseId}
-                                                                                        onChange={e => setSelectedHarvestWarehouseId(e.target.value)}
-                                                                                    >
-                                                                                        <option value="">Seleccionar...</option>
-                                                                                        {warehouses.map(w => (
-                                                                                            <option key={w.id} value={w.id}>{w.name}</option>
-                                                                                        ))}
-                                                                                    </select>
-                                                                                </div>
-
-                                                                                <Input
-                                                                                    label="PRODUCCIÓN TOTAL (kg)"
-                                                                                    type="number"
-                                                                                    value={observedYield}
-                                                                                    onChange={e => {
-                                                                                        setObservedYield(e.target.value);
-                                                                                        setConfirmStep(false);
-                                                                                    }}
-                                                                                    className="bg-white"
-                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
-                                                                                />
-                                                                                <Input
-                                                                                    label="Precio Labor (USD/ha)"
-                                                                                    type="number"
-                                                                                    value={harvestLaborPrice}
-                                                                                    onChange={e => setHarvestLaborPrice(e.target.value)}
-                                                                                    className="bg-white"
-                                                                                    labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
-                                                                                />
-                                                                                <div>
-                                                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Pagado por</label>
-                                                                                    <select
-                                                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
-                                                                                        value={selectedHarvestInvestor}
-                                                                                        onChange={e => setSelectedHarvestInvestor(e.target.value)}
-                                                                                    >
-                                                                                        <option value="">Seleccionar...</option>
-                                                                                        {client?.partners?.map((p: any) => (
-                                                                                            <option key={p.name} value={p.name}>{p.name}</option>
-                                                                                        ))}
-                                                                                        {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
-                                                                                            <option key={inv.name} value={inv.name}>{inv.name}</option>
-                                                                                        ))}
-                                                                                    </select>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="flex flex-col gap-3">
-                                                                                {observedYield && parseFloat(observedYield) > 0 && (
-                                                                                    <div className="flex justify-end pr-1">
-                                                                                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
-                                                                                            Rinde Estimado: {Math.round(parseFloat(observedYield) / lot.hectares)} kg/ha
-                                                                                        </span>
-                                                                                    </div>
-                                                                                )}
-                                                                                <div className="flex justify-end gap-2">
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            setIsHarvesting(false);
-                                                                                            setConfirmStep(false);
-                                                                                        }}
-                                                                                        className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-500 hover:bg-slate-50 uppercase tracking-wider"
-                                                                                    >
-                                                                                        Cancelar
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            if (!confirmStep) {
-                                                                                                setConfirmStep(true);
-                                                                                            } else {
-                                                                                                handleMarkHarvested(lot);
-                                                                                            }
-                                                                                        }}
-                                                                                        className={`px-3 py-1.5 rounded-lg text-white text-xs font-bold shadow-sm uppercase tracking-wider transition-all
-                                                                                            ${confirmStep ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-500/20' : 'bg-blue-600 hover:bg-blue-700'}`}
-                                                                                    >
-                                                                                        {confirmStep ? 'Confirmar Ahora' : 'Confirmar Cosecha'}
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1400,12 +1373,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     )}
                                 </div>
 
-                                {confirmStep && (
+                                {confirmStep && isHarvesting && (
                                     <div className="mt-4 bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-3 animate-fadeIn shadow-sm border-l-4 border-l-amber-500">
                                         <span className="text-xl">⚠️</span>
                                         <div>
-                                            <p className="text-xs font-black text-amber-900 uppercase tracking-widest leading-none mb-1">Recordatorio Importante</p>
-                                            <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight">es producción total (kg de todo el lote), no rinde por hectárea.</p>
+                                            <p className="text-xs font-black text-amber-900 uppercase tracking-widest leading-none mb-1">Confirmar Distribución y Logística</p>
+                                            <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight mt-1">
+                                                Revisó los destinos asignados y los datos logísticos? Click en Confirmar Cosecha nuevamente para asentar la operación.
+                                            </p>
                                         </div>
                                     </div>
                                 )}
@@ -1431,12 +1406,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 }
                             }}
                             className={`px-4 py-2 rounded-lg border-2 font-bold text-xs uppercase tracking-wider transition-all shadow-sm
-                                ${activePanel?.type === 'history'
+                                ${activePanel?.type === 'history' && activePanel.lotId === selectedLotId
                                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
                                     : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-300 hover:text-emerald-700 hover:shadow-md'
                                 }`}
                         >
-                            Ver Historial del Lote
+                            {activePanel?.type === 'history' && activePanel.lotId === selectedLotId ? 'Cerrar Historial del Lote' : 'Ver Historial del Lote'}
                         </button>
                     </div>
                 </div>
@@ -1454,18 +1429,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     {activePanel.type === 'observations' ? 'Observaciones' :
                                         activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') :
                                             activePanel.type === 'sowing_details' ? 'Detalle de Siembra' :
-                                                activePanel.type === 'harvest_details' ? `Detalle de Cosecha - ${activePanel.name}` : 'Historial del Lote'}
+                                                activePanel.type === 'harvest_details' ? 'Detalle de Cosecha' : 'Historial del Lote'}
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
-                                        {activePanel.name}
-                                    </span>
-                                    {activePanel.subtitle && (
-                                        <span className="text-xs text-slate-500 truncate">
-                                            {activePanel.subtitle}
-                                        </span>
-                                    )}
+                                <div className="flex items-center gap-2 overflow-hidden text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
+                                    <span>{activePanel.id} - {activePanel.name}</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1558,8 +1526,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 </div>
                             )}
                             {activePanel.type === 'history' && (
-                                <div className="p-6 bg-white max-h-[600px] overflow-y-auto">
-                                    <LotHistory clientId={id} lotId={activePanel.id} />
+                                <div ref={historySectionRef} className="p-0 bg-white shadow-inner">
+                                    <LotHistory
+                                        clientId={id}
+                                        lotId={activePanel.id!}
+                                        onSelectEvent={(event) => {
+                                            setSelectedEvent(event);
+                                            setSelectedMovement(null);
+                                            setTimeout(() => {
+                                                detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            }, 100);
+                                        }}
+                                        onEditEvent={handleEditHarvest}
+                                    />
                                 </div>
                             )}
                             {activePanel.type === 'sowing_details' && (
@@ -1650,42 +1629,15 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 <div className="p-6 bg-white animate-fadeIn">
                                     {harvestMovement ? (
                                         !isEditingHarvestPanel ? (
-                                            <div className="space-y-6">
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Fecha de Cosecha</div>
-                                                        <div className="font-mono text-slate-800">{new Date(harvestMovement.date).toLocaleDateString()}</div>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Rinde Total</div>
-                                                        <div className="font-mono text-slate-800 font-bold">{harvestMovement.quantity.toLocaleString()} {harvestMovement.unit}</div>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Contratista</div>
-                                                        <div className="text-sm text-slate-800 truncate">{harvestMovement.contractorName || '-'}</div>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Costo Labor Total</div>
-                                                        <div className="font-mono text-slate-800">
-                                                            {harvestMovement.harvestLaborCost
-                                                                ? `USD ${harvestMovement.harvestLaborCost.toLocaleString()}`
-                                                                : '-'}
-                                                        </div>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pagado por</div>
-                                                        <div className="text-sm text-slate-800 truncate">{harvestMovement.investorName || '-'}</div>
-                                                    </div>
-                                                </div>
-
-                                                {!isReadOnly && (
-                                                    <div className="flex justify-end pt-4 border-t border-slate-100">
-                                                        <Button size="sm" variant="secondary" onClick={() => setIsEditingHarvestPanel(true)}>
-                                                            Editar Datos
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            <HarvestDetailsView
+                                                harvestMovement={harvestMovement}
+                                                harvestMovements={harvestMovements}
+                                                client={profile as any}
+                                                warehouses={warehouses}
+                                                onClose={() => setActivePanel(null)}
+                                                onEdit={() => setIsEditingHarvestPanel(true)}
+                                                isReadOnly={isReadOnly}
+                                            />
                                         ) : (
                                             <form
                                                 onSubmit={(e) => {
@@ -1761,8 +1713,148 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         </div>
                     </div>
                 </div>
-            )
-            }
-        </div >
+            )}
+
+            {/* LEVEL 3: DETALLES DE ORDEN / COSECHA */}
+            {selectedEvent && (
+                <div ref={detailSectionRef} className="container mx-auto max-w-7xl px-4 lg:px-8 mt-8 pb-10 scroll-mt-6">
+                    {selectedEvent.type === 'HARVEST' ? (
+                        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 border-t-blue-500">
+                            <div className="bg-slate-50 px-8 py-4 border-b border-slate-200 flex justify-between items-center">
+                                <div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-100 text-blue-700">Cosecha</span>
+                                    <h3 className="font-bold text-slate-800 text-lg mt-1">Cosecha de `{selectedEvent.crop}`</h3>
+                                </div>
+                                <button onClick={() => setSelectedEvent(null)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400">✕</button>
+                            </div>
+                            <div>
+                                {/* Grid section with standard content padding */}
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 px-8 pt-8 pb-8">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha</label>
+                                        <p className="text-sm font-bold text-slate-700">{selectedEvent.date}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Obtenido</label>
+                                        <p className="text-sm font-bold text-blue-600">{(selectedEvent.observedYield || 0).toLocaleString()} kg</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Contratista</label>
+                                        <p className="text-sm font-bold text-slate-700">{selectedEvent.contractorName || '-'}</p>
+                                    </div>
+                                </div>
+
+                                {/* Table with bottom whitespace */}
+                                <div className="pb-8">
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="bg-white text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50">
+                                                <th className="px-8 py-3 text-left">Destino</th>
+                                                <th className="px-8 py-3 text-right">Cantidad</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 bg-white">
+                                            {selectedEvent.movements.map((m: any) => (
+                                                <tr
+                                                    key={m.id}
+                                                    className="hover:bg-blue-50/50 cursor-pointer transition-colors"
+                                                    onClick={() => {
+                                                        setSelectedMovement({
+                                                            m,
+                                                            destName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'
+                                                        });
+                                                        setTimeout(() => {
+                                                            logisticsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                        }, 100);
+                                                    }}
+                                                >
+                                                    <td className="px-8 py-4 font-bold text-slate-800">
+                                                        {m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'}
+                                                    </td>
+                                                    <td className="px-8 py-4 text-right font-mono font-black text-blue-700 text-sm">
+                                                        {m.quantity.toLocaleString()} kg
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        selectedEvent.rawOrder && (
+                            <OrderDetailView
+                                order={selectedEvent.rawOrder}
+                                client={client!}
+                                warehouses={warehouses}
+                                lots={lots}
+                                campaigns={campaigns}
+                                onClose={() => setSelectedEvent(null)}
+                            />
+                        )
+                    )}
+                </div>
+            )}
+
+            {/* LEVEL 4: DETALLES DEL MOVIMIENTO (LOGISTICA) */}
+            {selectedMovement && client && (
+                <div ref={logisticsSectionRef} className="container mx-auto max-w-7xl px-4 lg:px-8 mt-4 pb-32 animate-slideUp scroll-mt-6">
+                    <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden border-t-4 border-t-amber-500">
+                        <div className="bg-slate-50 px-8 py-3 border-b border-slate-200 flex justify-between items-center">
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Detalles del Movimiento</h3>
+                            <button onClick={() => setSelectedMovement(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                        </div>
+                        <MovementDetailsView
+                            movement={selectedMovement.m}
+                            client={client}
+                            destName={selectedMovement.destName}
+                            typeLabel="Distribución de Cosecha"
+                            onClose={() => setSelectedMovement(null)}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* WIZARD CONTAINER (Always at bottom of flow) */}
+            <div id="harvest-wizard-scroll-anchor" className="container mx-auto max-w-7xl px-4 lg:px-8 pb-32">
+                {isHarvesting && selectedLotId && (
+                    <div className="mt-8 animate-fadeIn">
+                        <HarvestWizard
+                            lot={lots.find(l => l.id === selectedLotId)!}
+                            farm={farms.find(f => f.id === selectedFarmId)!}
+                            contractors={contractors}
+                            campaigns={campaigns}
+                            warehouses={warehouses}
+                            partners={client?.partners || []}
+                            investors={client?.investors || []}
+                            onCancel={() => {
+                                setIsHarvesting(false);
+                                setConfirmStep(false);
+                            }}
+                            onComplete={(data) => {
+                                if (!confirmStep) {
+                                    setConfirmStep(true);
+                                } else {
+                                    handleMarkHarvested(lots.find(l => l.id === selectedLotId)!, data);
+                                }
+                            }}
+                            initialDate={harvestDate}
+                            initialContractor={harvestContractor}
+                            initialLaborPrice={harvestLaborPrice}
+                            initialYield={observedYield}
+                            isExecutingPlan={!isEditingHarvestPanel}
+                            initialDistributions={(harvestPlanOrder as any)?.movements?.map((m: any) => ({
+                                id: m.id,
+                                type: m.receiverName ? 'PARTNER' : 'WAREHOUSE',
+                                targetId: m.warehouseId || m.receiverName,
+                                targetName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido',
+                                amount: m.quantity,
+                                logistics: m
+                            })) || []}
+                        />
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }

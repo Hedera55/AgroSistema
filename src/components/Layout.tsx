@@ -7,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { syncService, SyncStatus } from '@/services/sync';
 import { db } from '@/services/db';
+import { generateId } from '@/lib/uuid';
+import { Warehouse } from '@/types';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -93,20 +95,77 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             setCurrentClientName(null);
         }
     }, [effectiveId]);
+    // Phase 15: Auto-initialize warehouses for new companies (Optimized)
+    useEffect(() => {
+        if (!effectiveId) return;
+
+        // Optimization: Check session storage to avoid redundant DB calls on every navigation
+        const hasChecked = sessionStorage.getItem(`warehouse_init_${effectiveId}`);
+        if (hasChecked) return;
+
+        const checkAndInitWarehouses = async () => {
+            try {
+                // Get ALL warehouses for this client (including deleted ones)
+                const allWarehouses = await db.getAll('warehouses');
+                const hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
+
+                if (!hasAnyRecord) {
+                    console.log(`🚀 Initializing default warehouses for company ${effectiveId}...`);
+                    const now = new Date().toISOString();
+
+                    const harvestWarehouse = {
+                        id: generateId(),
+                        clientId: effectiveId,
+                        name: 'Acopio de Granos',
+                        createdAt: now,
+                        updatedAt: now,
+                        synced: false,
+                        deleted: false
+                    };
+
+                    const defaultWarehouse = {
+                        id: generateId(),
+                        clientId: effectiveId,
+                        name: 'Galpón',
+                        createdAt: now,
+                        updatedAt: now,
+                        synced: false,
+                        deleted: false
+                    };
+
+                    await Promise.all([
+                        db.put('warehouses', harvestWarehouse),
+                        db.put('warehouses', defaultWarehouse)
+                    ]);
+
+                    // Trigger sync to persist these new warehouses
+                    syncService.pushChanges();
+                    console.log('✅ Default warehouses created.');
+                }
+
+                // Mark as checked for this session
+                sessionStorage.setItem(`warehouse_init_${effectiveId}`, 'true');
+            } catch (err) {
+                console.error('Error in warehouse auto-initialization:', err);
+            }
+        };
+
+        checkAndInitWarehouses();
+    }, [effectiveId]);
 
     // Show client menu items if we have a context
     const showClientMenu = !!effectiveId;
 
     const navigation = useMemo(() => [
-        // For Admin/Master: General Client list
-        { name: 'Empresas', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CONTRATISTA' },
+        // For Admin/Master: General Client list. Now also for CLIENT to switch companies.
+        { name: 'Empresas', href: '/clients', show: isMaster || role === 'ADMIN' || role === 'CLIENT' },
         // For Master: User management
         { name: 'Usuarios', href: '/admin/users', show: isMaster },
         // For Client Context (available to all if viewing a client)
         { name: 'Galpón', href: `/clients/${effectiveId}/stock`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Contaduría', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
-        { name: 'Órdenes', href: `/clients/${effectiveId}/orders`, show: showClientMenu },
+        { name: 'Órdenes', href: role === 'CONTRATISTA' ? '/orders' : `/clients/${effectiveId}/orders`, show: role === 'CONTRATISTA' || showClientMenu },
     ].filter(item => item.show), [isMaster, role, effectiveId, showClientMenu]);
 
     if (loading) {

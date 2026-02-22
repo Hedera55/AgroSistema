@@ -23,7 +23,7 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
   If you need me to run the code in another program that isn't powershell, I can also do that, just specify it for me
 	For example, *powershell doesn't have grep*, which you've asked me to run a couple times
   For supabase, I prefer you give me the code and I'll run it in the sql editor in supabase's website
-
+- pd: Some update happened, now you crash only sometimes, but here's a command that you CAN run yourself: npm run build, and its reiteration to it's success.
 
 - **Automatic tests adding**: The agent is authorized to add automated tests whenever deemed reasonable. The USER does not have knowledge on how many it's reasonable to add, but likes not wasting resources for little benefit.
 

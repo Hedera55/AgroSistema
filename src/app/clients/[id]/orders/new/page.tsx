@@ -133,6 +133,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [isMechanicalLabor, setIsMechanicalLabor] = useState(false);
     const [mechanicalLaborName, setMechanicalLaborName] = useState('');
     const [currLoadingOrder, setCurrLoadingOrder] = useState('');
+    const [fertilizerPlacement, setFertilizerPlacement] = useState<'LINE' | 'SIDE' | undefined>(undefined);
 
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
@@ -198,7 +199,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             expectedYield: product?.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
             warehouseId: isMechanicalLabor ? undefined : currWarehouseId,
             warehouseName: isMechanicalLabor ? undefined : warehouses.find(w => w.id === currWarehouseId)?.name,
-            productType: product?.type
+            productType: product?.type,
+            fertilizerPlacement: product?.type === 'FERTILIZER' ? fertilizerPlacement : undefined
         };
 
         const newItemGroupId = generateId();
@@ -503,6 +505,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     mechanicalLaborName={mechanicalLaborName} setMechanicalLaborName={setMechanicalLaborName}
                     plantingSpacing={plantingSpacing} setPlantingSpacing={setPlantingSpacing}
                     expectedYield={expectedYield} setExpectedYield={setExpectedYield}
+                    fertilizerPlacement={fertilizerPlacement} setFertilizerPlacement={setFertilizerPlacement}
                     editingItemId={editingItemId}
                     selectedApplicatorId={selectedApplicatorId} setSelectedApplicatorId={setSelectedApplicatorId}
                     servicePrice={servicePrice} setServicePrice={setServicePrice}

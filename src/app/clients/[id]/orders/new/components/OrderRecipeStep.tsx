@@ -27,6 +27,8 @@ interface OrderRecipeStepProps {
     setPlantingSpacing: (val: string) => void;
     expectedYield: string;
     setExpectedYield: (val: string) => void;
+    fertilizerPlacement?: 'LINE' | 'SIDE';
+    setFertilizerPlacement: (val: 'LINE' | 'SIDE' | undefined) => void;
     editingItemId: string | null;
     selectedApplicatorId: string;
     setSelectedApplicatorId: (val: string) => void;
@@ -76,6 +78,8 @@ export function OrderRecipeStep({
     setPlantingSpacing,
     expectedYield,
     setExpectedYield,
+    fertilizerPlacement,
+    setFertilizerPlacement,
     editingItemId,
     selectedApplicatorId,
     setSelectedApplicatorId,
@@ -131,6 +135,9 @@ export function OrderRecipeStep({
         const num = parseInt(val) || 0;
         setSubQuantities({ ...subQuantities, [stockId]: num });
     };
+
+    const isMaiz = selectedProduct?.name.toUpperCase().includes('MAIZ');
+    const bagsCount = isMaiz && currDosage ? (parseFloat(currDosage) / 80000).toFixed(2) : null;
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -207,13 +214,27 @@ export function OrderRecipeStep({
                                         {(currProdId) && (
                                             <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
                                                 <span className="text-[10px] font-black text-slate-400 uppercase">
-                                                    {selectedProduct?.type === 'SEED'
-                                                        ? 'KG/ha'
-                                                        : `${selectedProduct?.unit || 'u'}/ha`}
+                                                    {isMaiz ? (bagsCount ? `${selectedProduct?.unit || 'sem'}/ha (${bagsCount} bolsas)` : `${selectedProduct?.unit || 'sem'}/ha`) : (selectedProduct?.type === 'SEED' ? 'KG/ha' : `${selectedProduct?.unit || 'u'}/ha`)}
                                                 </span>
                                             </div>
                                         )}
                                     </div>
+                                    {selectedProduct?.type === 'FERTILIZER' && (
+                                        <div className="flex gap-2 mt-2">
+                                            <button
+                                                onClick={() => setFertilizerPlacement(fertilizerPlacement === 'LINE' ? undefined : 'LINE')}
+                                                className={`flex-1 py-1 px-2 rounded-md border text-[10px] font-bold uppercase tracking-tight transition-all ${fertilizerPlacement === 'LINE' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-400'}`}
+                                            >
+                                                En la línea
+                                            </button>
+                                            <button
+                                                onClick={() => setFertilizerPlacement(fertilizerPlacement === 'SIDE' ? undefined : 'SIDE')}
+                                                className={`flex-1 py-1 px-2 rounded-md border text-[10px] font-bold uppercase tracking-tight transition-all ${fertilizerPlacement === 'SIDE' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-400'}`}
+                                            >
+                                                Al costado
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -387,9 +408,19 @@ export function OrderRecipeStep({
                                                     </div>
                                                     {(item.plantingDensity || item.plantingSpacing || item.expectedYield) && (
                                                         <div className="flex flex-wrap gap-x-3 text-emerald-600/70 font-bold uppercase text-[8px] leading-none">
-                                                            {item.plantingDensity && <span>Densidad: {item.plantingDensity} kg/ha</span>}
+                                                            {item.plantingDensity && (
+                                                                <span>
+                                                                    Densidad: {item.plantingDensity} {item.unit}/ha
+                                                                    {item.productName.toUpperCase().includes('MAIZ') && ` (${(item.plantingDensity / 80000).toFixed(2)} bolsas)`}
+                                                                </span>
+                                                            )}
                                                             {item.plantingSpacing && <span>Espaciamiento: {item.plantingSpacing} cm</span>}
                                                             {item.expectedYield && <span>Rendimiento: {item.expectedYield} kg/ha</span>}
+                                                        </div>
+                                                    )}
+                                                    {item.fertilizerPlacement && (
+                                                        <div className="text-emerald-600/70 font-bold uppercase text-[8px] leading-none mt-1">
+                                                            Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
                                                         </div>
                                                     )}
                                                 </div>

@@ -45,10 +45,21 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         db.get('clients', id).then(c => {
             setClient(c || null);
             if (c?.partners && c.partners.length > 0) {
-                // Migration: handle string[] if encountered
-                const migrated = c.partners.map((p: any) =>
-                    typeof p === 'string' ? { name: p, cuit: '' } : p
-                );
+                // Migration: handle string[] or JSON strings if encountered
+                const migrated = c.partners.map((p: any) => {
+                    if (typeof p === 'string') {
+                        try {
+                            const parsed = JSON.parse(p);
+                            if (parsed && parsed.name) {
+                                return { name: parsed.name, cuit: parsed.cuit || '' };
+                            }
+                        } catch (e) {
+                            // Valid bare string
+                        }
+                        return { name: p, cuit: '' };
+                    }
+                    return p;
+                });
                 setPartners(migrated);
             } else if (c?.investors && c.investors.length > 0) {
                 // Automatic migration: extract names from old investors
@@ -161,7 +172,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 }
                 investedMovements += amount;
 
-                const pName = m.investorName || 'Sin Asignar';
+                let pName = m.investorName || 'Sin Asignar';
+                if (pName.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(pName);
+                        if (parsed && parsed.name) pName = parsed.name;
+                    } catch (e) { }
+                }
+
                 perPartner[pName] = (perPartner[pName] || 0) + amount;
             } else if (m.type === 'SALE') {
                 sold += (m.quantity * (m.salePrice || 0));
@@ -176,7 +194,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 const amount = (o.servicePrice * o.treatedArea);
                 serviceCosts += amount;
 
-                const pName = o.investorName || 'Sin Asignar';
+                let pName = o.investorName || 'Sin Asignar';
+                if (pName.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(pName);
+                        if (parsed && parsed.name) pName = parsed.name;
+                    } catch (e) { }
+                }
+
                 perPartner[pName] = (perPartner[pName] || 0) + amount;
             }
         });
@@ -414,18 +439,34 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
     const investorBreakdown = useMemo(() => {
         const partnersMap = stats.perPartner;
-        const totalInvested = stats.totalInvested || 1;
+        const totalInvested = stats.totalInvested || 0;
 
-        return Object.entries(partnersMap).map(([name, amount]) => {
-            const percentage = (amount / totalInvested) * 100;
+        // Ensure all defined partners are shown
+        const breakdown = partners.map(p => {
+            const amount = partnersMap[p.name] || 0;
+            const percentage = totalInvested > 0 ? (amount / totalInvested) * 100 : 0;
             return {
-                name,
+                name: p.name,
                 percentage,
-                shareValue: (stats.total * percentage) / 100,
+                shareValue: totalInvested > 0 ? (stats.total * percentage) / 100 : 0,
                 shareInvestment: amount
             };
-        }).sort((a, b) => b.shareInvestment - a.shareInvestment);
-    }, [stats]);
+        });
+
+        // Add "Sin Asignar" if it has balance and is not in partners
+        if (partnersMap['Sin Asignar']) {
+            const amount = partnersMap['Sin Asignar'];
+            const percentage = totalInvested > 0 ? (amount / totalInvested) * 100 : 0;
+            breakdown.push({
+                name: 'Sin Asignar',
+                percentage,
+                shareValue: totalInvested > 0 ? (stats.total * percentage) / 100 : 0,
+                shareInvestment: amount
+            });
+        }
+
+        return breakdown.sort((a, b) => b.shareInvestment - a.shareInvestment);
+    }, [stats, partners]);
 
     if (loading || movementsLoading || productsLoading || ordersLoading) {
         return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;

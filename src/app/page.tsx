@@ -17,8 +17,8 @@ export default function Home() {
       router.push(`/clients/${assignedId}`);
     } else if (isMaster || role === 'ADMIN') {
       router.push('/clients');
-    } else if (isContratista && assignedId) {
-      router.push(`/clients/${assignedId}/orders`);
+    } else if (isContratista) {
+      router.push('/orders');
     }
   }, [role, isMaster, isContratista, assignedId, router, authLoading]);
 

@@ -218,10 +218,10 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     appliedAt: new Date(statusPopupDate + 'T12:00:00Z').toISOString()
                 };
                 const orderWithInvestor = { ...priceModalOrder, investorName: tempInvestor };
-                await db.put('orders', { ...orderWithInvestor, status: 'DONE', servicePrice: price, ...auditData, updatedAt: new Date().toISOString(), synced: false });
+                await db.put('orders', { ...orderWithInvestor, clientId: id, status: 'DONE', servicePrice: price, ...auditData, updatedAt: new Date().toISOString(), synced: false });
                 setIsApplyingFromStatus(false);
             } else {
-                await db.put('orders', { ...priceModalOrder, servicePrice: price, investorName: tempInvestor, updatedAt: new Date().toISOString(), synced: false });
+                await db.put('orders', { ...priceModalOrder, clientId: id, servicePrice: price, investorName: tempInvestor, updatedAt: new Date().toISOString(), synced: false });
             }
             setPriceModalOrder(null);
             setIsApplyingFromStatus(false);
