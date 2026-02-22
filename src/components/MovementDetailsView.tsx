@@ -8,11 +8,10 @@ interface MovementDetailsViewProps {
     originName?: string;
     destName?: string;
     onClose: () => void;
-    onViewOrder?: () => void;
     typeLabel: string;
 }
 
-export function MovementDetailsView({ movement, client, order, originName, destName, onClose, onViewOrder, typeLabel }: MovementDetailsViewProps) {
+export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel }: MovementDetailsViewProps) {
     const hasLogistics =
         movement.truckDriver ||
         movement.plateNumber ||
@@ -27,41 +26,39 @@ export function MovementDetailsView({ movement, client, order, originName, destN
         movement.tareWeight !== undefined;
 
     return (
-        <div className="bg-white p-8 relative">
-            <div className="space-y-8">
+        <div className="bg-white p-6 relative">
+            <div className="space-y-5">
                 {/* Section 1: General Info */}
                 <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Información General</h3>
-                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div>
-                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Fecha / Hora</span>
-                                <span className="text-sm font-bold text-slate-800">{movement.createdAt ? new Date(movement.createdAt).toLocaleString() : (movement.date || '-')}</span>
-                            </div>
-                            {(movement as any).isTransfer ? (
-                                <div>
-                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Trayecto</span>
-                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                        {originName || '...'} <span className="text-slate-300">→</span> {destName || '...'}
-                                    </span>
-                                </div>
-                            ) : (
-                                <div>
-                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Galpón</span>
-                                    <span className="text-sm font-bold text-slate-800">{destName || originName || 'Desconocido'}</span>
-                                </div>
-                            )}
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Información General</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8 px-2 py-4">
+                        <div>
+                            <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Fecha / Hora</span>
+                            <span className="text-sm font-bold text-slate-700">{movement.createdAt ? new Date(movement.createdAt).toLocaleString() : (movement.date || '-')}</span>
                         </div>
+                        {(movement as any).isTransfer ? (
+                            <div>
+                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Trayecto</span>
+                                <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    {originName || '...'} <span className="text-slate-300">→</span> {destName || '...'}
+                                </span>
+                            </div>
+                        ) : (
+                            <div>
+                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Galpón</span>
+                                <span className="text-sm font-bold text-slate-700">{destName || originName || 'Desconocido'}</span>
+                            </div>
+                        )}
 
                         {movement.sellerName && (
-                            <div className="pt-4 border-t border-slate-200/50">
+                            <div>
                                 <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Comercial / Vendedor</span>
                                 <span className="text-sm font-bold text-blue-600">{movement.sellerName}</span>
                             </div>
                         )}
 
                         {movement.investors && movement.investors.length > 0 && (
-                            <div className="pt-4 border-t border-slate-200/50">
+                            <div className="sm:col-span-2 lg:col-span-3">
                                 <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Socios Involucrados</span>
                                 <div className="flex flex-wrap gap-2">
                                     {movement.investors.map(inv => (
@@ -74,7 +71,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                         )}
 
                         {movement.receiverName && (
-                            <div className="pt-4 border-t border-slate-200/50">
+                            <div>
                                 <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Retirado Por</span>
                                 <span className="px-3 py-1 bg-orange-50 text-orange-700 text-[10px] font-black rounded-lg border border-orange-100 uppercase">
                                     {movement.receiverName}
@@ -86,7 +83,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
 
                 {/* Section 2: Logistics Info */}
                 <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Datos Logísticos</h3>
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Datos Logísticos</h3>
                     {hasLogistics ? (
                         <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
                             <table className="w-full text-sm">
@@ -122,7 +119,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                 {/* Section 3: Notes */}
                 {movement.notes && (
                     <div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Notas</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Notas</h3>
                         <div className="bg-amber-50/50 p-6 rounded-2xl border border-amber-100 text-sm text-slate-700 font-medium leading-relaxed italic">
                             "{movement.notes}"
                         </div>
@@ -130,22 +127,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                 )}
             </div>
 
-            <div className="mt-10 flex justify-between items-center pt-6 border-t border-slate-100">
-                {order && onViewOrder && (
-                    <button
-                        onClick={onViewOrder}
-                        className="text-emerald-600 hover:text-emerald-700 text-xs font-black uppercase tracking-widest flex items-center gap-2 group"
-                    >
-                        Ver Orden Vinculada
-                        <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </button>
-                )}
-                <button
-                    onClick={onClose}
-                    className="px-6 py-2 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95 ml-auto"
-                >
-                    Cerrar Detalles
-                </button>
+            <div className="mt-4 flex justify-end">
             </div>
         </div>
     );

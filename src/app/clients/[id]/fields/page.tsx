@@ -1432,7 +1432,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 activePanel.type === 'harvest_details' ? 'Detalle de Cosecha' : 'Historial del Lote'}
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
-                                <div className="flex items-center gap-2 overflow-hidden text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
+                                <div className="flex items-center gap-2 overflow-hidden text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">
                                     <span>{activePanel.subtitle ? `${activePanel.subtitle.replace('Lote de ', '')} - ` : ''}{activePanel.name}</span>
                                 </div>
                             </div>
@@ -1728,15 +1728,24 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             warehouses={warehouses}
                             farms={farms}
                             lots={lots}
+                            campaigns={campaigns}
                             onClose={() => setSelectedEvent(null)}
                             onEdit={() => {
-                                // Logic to trigger HarvestWizard in edit mode
-                                setHarvestDate(selectedEvent.date);
-                                setHarvestContractor(selectedEvent.movements[0].contractorName || '');
-                                setHarvestLaborPrice(selectedEvent.movements[0].harvestLaborPricePerHa?.toString() || '');
-                                setObservedYield(selectedEvent.observedYield.toString());
-                                setSelectedLotId(selectedEvent.movements[0].referenceId?.split('_')[0] || '');
-                                setHarvestPlanOrder(null); // It's a real harvest, not a plan
+                                // Correct way to trigger edit in fields/page.tsx
+                                const m = selectedEvent.movements[0];
+                                setHarvestDate(m.date);
+                                setHarvestContractor(m.contractorName || '');
+                                setHarvestLaborPrice(m.harvestLaborPricePerHa?.toString() || '');
+                                setObservedYield(m.quantity);
+                                setSelectedLotId(activePanel?.id || '');
+
+                                // Set distributions for the wizard
+                                setHarvestPlanOrder({
+                                    ...m,
+                                    movements: selectedEvent.movements
+                                } as any);
+
+                                setIsEditingHarvestPanel(true);
                                 setIsHarvesting(true);
                                 setSelectedEvent(null);
                             }}

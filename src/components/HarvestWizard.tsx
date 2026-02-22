@@ -329,8 +329,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         {availableYield > 0 && (
                             <div className="mb-4 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 animate-fadeIn">
                                 <span className="text-amber-600 text-sm">⚠️</span>
-                                <p className="text-[10px] text-amber-800 font-bold uppercase leading-tight">
-                                    Falta asignar cosecha: el remanente ({availableYield} kg) se enviará al galpón por default.
+                                <p className="text-xs font-bold text-blue-800 uppercase leading-none mb-1">
+                                    Falta asignar cosecha: el remanente ({totalYieldNum - assignedYield} kg) se enviará al galpón por default para cosechas
                                 </p>
                             </div>
                         )}
@@ -339,14 +339,14 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             <div className="flex-1">
                                 <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Agregar Destino</label>
                                 <select
-                                    className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white"
+                                    className="w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
                                     value={selectedDistribOption}
                                     onChange={e => setSelectedDistribOption(e.target.value)}
                                 >
                                     <option value="">Seleccionar destino...</option>
                                     {allDestinations.map((opt, i) => (
                                         <option key={i} value={opt.value} disabled={opt.disabled} className={opt.disabled ? 'font-bold bg-slate-50' : ''}>
-                                            {opt.label}
+                                            {opt.label.replace(/🌍 |🏢 |👤 /g, '')}
                                         </option>
                                     ))}
                                 </select>
@@ -402,24 +402,20 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             {/* STEP 3: LOGISTICS */}
             {step === 3 && (
                 <div className="space-y-4 animate-fadeIn relative z-40">
-                    <p className="text-xs text-slate-500 bg-white p-2 rounded border border-slate-200 shadow-sm leading-tight">
-                        <strong>Opcional:</strong> Ingrese los datos de logística y transporte. Los datos ingresados en <span className="text-blue-600 font-bold">"General"</span> se copiarán automáticamente a los demás destinos salvo que tengan los suyos propios.
-                    </p>
-
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible">
                         {/* Selector de Destino */}
                         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl sticky top-0 z-30">
-                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Destino a Editar</label>
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Detalles de Destino</label>
                             <select
-                                className="w-full border-slate-200 text-sm font-bold bg-white text-slate-800"
+                                className="w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
                                 value={activeTabId}
                                 onChange={e => setActiveTabId(e.target.value)}
                             >
-                                <option value="general">🌍 GENERAL (Aplica a todos)</option>
+                                <option value="general">GENERAL (Aplica a todos)</option>
                                 <option disabled>──────────</option>
                                 {distributions.map(d => (
                                     <option key={d.id} value={d.id}>
-                                        {d.type === 'WAREHOUSE' ? '🏢' : '👤'} {d.targetName} ({d.amount}kg)
+                                        {d.targetName} ({d.amount}kg)
                                     </option>
                                 ))}
                             </select>

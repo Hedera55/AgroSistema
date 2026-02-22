@@ -401,8 +401,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         const enrichedOrder = m.referenceId ? ordersData.find(o => o.id === m.referenceId) : null;
                                         const handleRowClick = async () => {
                                             if (label === 'I-COMPRA') { setSelectedMovement(null); setSelectedSubMovement(null); setHarvestMovements([]); return; }
+
+                                            // Direct jump for Sowing and Spraying
+                                            if (label === 'E-SIEMBRA' || label === 'E-APLICACIÓN') {
+                                                if (enrichedOrder) {
+                                                    setSelectedOrder({ ...enrichedOrder, farmName: farms.find(f => f.id === enrichedOrder.farmId)?.name || 'D.', lotName: lots.find(l => l.id === enrichedOrder.lotId)?.name || 'D.' });
+                                                    setSelectedMovement(null);
+                                                    return;
+                                                }
+                                            }
+
                                             setSelectedMovement({ movement: m, order: enrichedOrder ? { ...enrichedOrder, farmName: farms.find(f => f.id === enrichedOrder.farmId)?.name || 'D.', lotName: lots.find(l => l.id === enrichedOrder.lotId)?.name || 'D.' } : undefined, typeLabel: label });
-                                            setSelectedSubMovement(null); // Reset sub-selection when main row changes
+                                            setSelectedSubMovement(null);
                                             if (label === 'I-COSECHA' && m.referenceId) {
                                                 const related = (await db.getAll('movements')).filter((mov: any) => mov.referenceId === m.referenceId && mov.clientId === clientId && !mov.deleted);
                                                 setHarvestMovements(related);
@@ -429,26 +439,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className="px-6 py-2 whitespace-nowrap text-slate-400 font-medium text-[11px]">{m.createdBy || 'Sistema'}</td>
                                                     <td className="px-6 py-2 text-right">
                                                         <div className="flex items-center justify-end gap-2">
-                                                            {!isReadOnly && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleEditMovement(m); }}
-                                                                    className="w-8 h-8 text-slate-400 hover:text-emerald-500 p-2 transition-all"
-                                                                    title="Editar"
-                                                                >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-                                                                </button>
-                                                            )}
+                                                            {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); handleEditMovement(m); }} className="w-8 h-8 text-slate-400 hover:text-emerald-500 p-2 transition-all"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg></button>}
                                                             {m.facturaImageUrl ? <a href={m.facturaImageUrl} target="_blank" rel="noopener noreferrer" className="w-7 h-7 border border-emerald-500 text-emerald-500 rounded-md text-[11px] font-black flex items-center justify-center" onClick={e => e.stopPropagation()}>F</a> : (m.type !== 'HARVEST' && !isReadOnly && <div className="relative" onClick={e => e.stopPropagation()}><input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileUpload(e, m.id)} disabled={uploadingId === m.id} /><button className="w-7 h-7 border border-red-500 text-red-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'F'}</button></div>)}
                                                             {(m.type === 'SALE' || m.type === 'OUT' || m.isTransfer) && client && <button onClick={(e) => { e.stopPropagation(); generateRemitoPDF(m, client, m.isTransfer ? m.originName : warehousesKey[m.warehouseId || '']); }} className="w-7 h-7 border border-blue-500 text-blue-500 rounded-md text-[11px] font-black flex items-center justify-center ml-1">R</button>}
-                                                            {!isReadOnly && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteMovement(m.id, m.partnerId); }}
-                                                                    className="w-8 h-8 text-slate-400 hover:text-red-500 p-2 transition-all"
-                                                                    title="Eliminar"
-                                                                >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                                                </button>
-                                                            )}
+                                                            {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); handleDeleteMovement(m.id, m.partnerId); }} className="w-8 h-8 text-slate-400 hover:text-red-500 p-2 transition-all"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></button>}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -491,6 +485,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             warehouses={warehousesFull}
                             farms={farms}
                             lots={lots}
+                            campaigns={campaigns}
                             onClose={() => { setSelectedMovement(null); setSelectedSubMovement(null); }}
                             onEdit={() => handleEditMovement(selectedMovement.movement)}
                             onSelectMovement={(m) => {
@@ -509,22 +504,23 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                 order={selectedMovement.order}
                                 typeLabel={selectedMovement.typeLabel}
                                 onClose={() => setSelectedMovement(null)}
-                                onViewOrder={() => { setSelectedOrder(selectedMovement.order); setSelectedMovement(null); }}
                             />
                         </div>
                     )}
-                    {selectedSubMovement && client && (
-                        <div className="mt-4 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-slideUp">
-                            <MovementDetailsView
-                                movement={selectedSubMovement.movement}
-                                client={client}
-                                order={selectedSubMovement.order}
-                                typeLabel={selectedSubMovement.typeLabel}
-                                onClose={() => setSelectedSubMovement(null)}
-                                onViewOrder={() => { setSelectedOrder(selectedSubMovement.order); setSelectedSubMovement(null); }}
-                            />
-                        </div>
-                    )}
+                </div>
+            )}
+
+            {selectedSubMovement && client && (
+                <div className="mt-4 animate-slideUp">
+                    <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                        <MovementDetailsView
+                            movement={selectedSubMovement.movement}
+                            client={client}
+                            order={selectedSubMovement.order}
+                            typeLabel={selectedSubMovement.typeLabel}
+                            onClose={() => setSelectedSubMovement(null)}
+                        />
+                    </div>
                 </div>
             )}
 
