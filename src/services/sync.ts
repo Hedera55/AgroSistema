@@ -56,7 +56,7 @@ const mappers = {
             brand_name: p.brandName,
             commercial_name: p.commercialName,
             active_ingredient: p.activeIngredient,
-            type: (p.type as string) === 'GRAIN' ? 'SEED' : p.type,
+            type: p.type,
             unit: p.unit,
             created_at: p.createdAt || new Date().toISOString(),
             deleted: p.deleted || false,

@@ -104,6 +104,23 @@ export default function ClientDashboard({ params }: { params: Promise<{ id: stri
                     </Link>
                 ))}
             </div>
+
+            {(isMaster || role === 'ADMIN') && (
+                <div className="flex justify-end pt-4">
+                    <Link
+                        href={`/clients/${id}/admin/tables`}
+                        className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-slate-600 hover:bg-white transition-all"
+                    >
+                        Acceder a las tablas base
+                    </Link>
+                    <Link
+                        href={`/clients/${id}/analytics`}
+                        className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:text-slate-600 hover:bg-white transition-all"
+                    >
+                        Gráficos informativos
+                    </Link>
+                </div>
+            )}
         </div>
     );
 }

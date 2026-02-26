@@ -96,7 +96,7 @@ export interface Environment { // Ambiente (within a lot)
 
 // --- Inventory ---
 
-export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'COADYUVANTE' | 'INOCULANTE' | 'OTHER';
+export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'COADYUVANTE' | 'INOCULANTE' | 'GRAIN' | 'OTHER';
 export type Unit = string;
 
 export interface Product {

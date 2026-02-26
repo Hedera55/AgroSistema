@@ -233,8 +233,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions } = data;
 
         const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
-        const productName = selectedHarvestType === 'SEMILLA' ? cropBaseName : `${cropBaseName} (GRANO)`;
-        const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'OTHER';
+        const productName = cropBaseName;
+        const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
 
         let product = products.find(p =>
             p.name.toLowerCase() === productName.toLowerCase() &&
@@ -308,7 +308,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     targetId: client.defaultHarvestWarehouseId,
                     targetName: defWarehouse?.name || 'Acopio por Defecto',
                     amount: remaining,
-                    logistics: { notes: 'Asignación automática por remanente' }
+                    logistics: { notes: 'Asignación automática por remanente' } as any
                 });
             }
 
@@ -1828,7 +1828,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 targetId: m.warehouseId || m.receiverName,
                                 targetName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido',
                                 amount: m.quantity,
-                                logistics: m
+                                logistics: m as any
                             })) || []}
                         />
                     </div>

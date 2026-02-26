@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ClientStock, Warehouse } from '@/types';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 interface StockMovementPanelProps {
     selectedIds: string[];
@@ -13,6 +13,7 @@ interface StockMovementPanelProps {
     movements?: any[];
     onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => Promise<void>;
     onCancel: () => void;
+    isSaleActive?: boolean;
 }
 
 export function StockMovementPanel({
@@ -24,7 +25,8 @@ export function StockMovementPanel({
     onCancel,
     investors = [],
     campaigns = [],
-    movements = []
+    movements = [],
+    isSaleActive = false
 }: StockMovementPanelProps) {
     const [action, setAction] = useState<'WITHDRAW' | 'TRANSFER'>('WITHDRAW');
     const [destinationId, setDestinationId] = useState('');
@@ -234,14 +236,14 @@ export function StockMovementPanel({
     const validWarehouses = warehouses.filter((w: Warehouse) => !activeWarehouseIds.includes(w.id));
 
     return (
-        <div className="bg-white p-4 rounded-xl shadow-lg border border-indigo-100 animate-fadeIn mb-4 relative">
+        <div className="bg-white border-indigo-100 shadow-lg p-4 rounded-xl animate-fadeIn mb-4 relative transition-all floating-panel">
             <button
                 onClick={onCancel}
                 className="absolute top-4 right-4 text-slate-400 hover:text-red-500 z-10 transition-colors"
             >
                 ✕
             </button>
-            <h3 className="text-lg font-black text-slate-800 mb-6 uppercase tracking-wider">
+            <h3 className="text-lg font-semibold text-slate-800 mb-6">
                 Mover Stock Seleccionado ({selectedItems.length})
             </h3>
 
@@ -566,6 +568,7 @@ export function StockMovementPanel({
                     <Button
                         onClick={handleSubmit}
                         isLoading={loading}
+                        size="sm"
                         className="bg-orange-600 hover:bg-orange-700 disabled:bg-slate-300 disabled:cursor-not-allowed w-full sm:w-auto"
                     >
                         {action === 'WITHDRAW' ? 'Confirmar Retiro' : 'Confirmar Traslado'}

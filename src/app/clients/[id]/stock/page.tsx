@@ -19,6 +19,7 @@ import { WarehouseManager } from './components/WarehouseManager';
 import { ProductCatalog } from './components/ProductCatalog';
 import { StockEntryForm } from './components/StockEntryForm';
 import { StockTable } from './components/StockTable';
+import { StockSalePanel } from './components/StockSalePanel';
 
 interface EnrichedStockItem extends ClientStock {
     productName: string;
@@ -806,23 +807,22 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false,
-                logistics: {
-                    truckDriver: saleTruckDriver || undefined,
-                    plateNumber: salePlateNumber || undefined,
-                    trailerPlate: saleTrailerPlate || undefined,
-                    destinationCompany: saleDestinationCompany || undefined,
-                    destinationAddress: saleDestinationAddress || undefined,
-                    transportCompany: saleTransportCompany || undefined,
-                    dischargeNumber: saleDischargeNumber || undefined,
-                    humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
-                    hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
-                    grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
-                    tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined,
-                    primarySaleCuit: salePrimarySaleCuit || undefined,
-                    departureDateTime: saleDepartureDateTime || undefined,
-                    distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.replace(',', '.')) : undefined,
-                    freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.replace(',', '.')) : undefined,
-                }
+                // Flattened Properties
+                truckDriver: saleTruckDriver || undefined,
+                plateNumber: salePlateNumber || undefined,
+                trailerPlate: saleTrailerPlate || undefined,
+                destinationCompany: saleDestinationCompany || undefined,
+                destinationAddress: saleDestinationAddress || undefined,
+                transportCompany: saleTransportCompany || undefined,
+                dischargeNumber: saleDischargeNumber || undefined,
+                humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
+                hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
+                grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
+                tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined,
+                primarySaleCuit: salePrimarySaleCuit || undefined,
+                departureDateTime: saleDepartureDateTime || undefined,
+                distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.replace(',', '.')) : undefined,
+                freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.replace(',', '.')) : undefined,
             };
 
             await db.put('movements', movementData);
@@ -1140,7 +1140,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         });
     };
 
-    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
+    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'GRAIN', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
 
     const typeLabels: Record<string, string> = {
         HERBICIDE: 'Herbicida',
@@ -1148,8 +1148,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         SEED: 'Semilla',
         FUNGICIDE: 'Fungicida',
         INSECTICIDE: 'Insecticida',
-        COADYUVANTE: 'Coadyuvante',
         INOCULANTE: 'Inoculante',
+        GRAIN: 'Grano',
         OTHER: 'Otro'
     };
 
@@ -1213,10 +1213,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                             {selectedStockIds.length > 0 && (
                                 <>
                                     <Button
-                                        onClick={() => setShowMovePanel(true)}
-                                        className="bg-emerald-600 hover:bg-emerald-700 animate-fadeIn"
+                                        onClick={() => setShowMovePanel(!showMovePanel)}
+                                        variant={showMovePanel ? "secondary" : "primary"}
+                                        className={`${showMovePanel ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700"} animate-fadeIn`}
                                     >
-                                        Mover Stock ({selectedStockIds.length})
+                                        {showMovePanel ? 'Cancelar Mover' : `Mover Stock (${selectedStockIds.length})`}
                                     </Button>
 
                                     {/* Sales allowed from ANY warehouse as per user request */}
@@ -1247,6 +1248,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                         variant={sellingStockId ? "secondary" : "primary"}
                                         className={`${sellingStockId ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"} animate-fadeIn`}
                                     >
+                                        {sellingStockId ? 'Cancelar Vender' : 'Vender'}
                                     </Button>
                                 </>
                             )}
@@ -1327,55 +1329,59 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 selectedStockIds={selectedStockIds}
                 handleEditBrand={handleEditBrand}
                 typeLabels={typeLabels}
-                sellingStockId={sellingStockId}
-                handleSaleSubmit={handleSaleSubmit}
-                saleQuantity={saleQuantity}
-                setSaleQuantity={setSaleQuantity}
-                salePrice={salePrice}
-                setSalePrice={setSalePrice}
-                isSubmitting={isSubmitting}
-                facturaUploading={facturaUploading}
-                saleTruckDriver={saleTruckDriver}
-                setSaleTruckDriver={setSaleTruckDriver}
-                salePlateNumber={salePlateNumber}
-                setSalePlateNumber={setSalePlateNumber}
-                saleDestination={saleDestination}
-                setSaleDestination={setSaleDestination}
-                saleTrailerPlate={saleTrailerPlate}
-                setSaleTrailerPlate={setSaleTrailerPlate}
-                saleHumidity={saleHumidity}
-                setSaleHumidity={setSaleHumidity}
-                saleDischargeNumber={saleDischargeNumber}
-                setSaleDischargeNumber={setSaleDischargeNumber}
-                saleTransportCompany={saleTransportCompany}
-                setSaleTransportCompany={setSaleTransportCompany}
-                saleHectoliterWeight={saleHectoliterWeight}
-                setSaleHectoliterWeight={setSaleHectoliterWeight}
-                saleGrossWeight={saleGrossWeight}
-                setSaleGrossWeight={setSaleGrossWeight}
-                saleTareWeight={saleTareWeight}
-                setSaleTareWeight={setSaleTareWeight}
-                salePrimarySaleCuit={salePrimarySaleCuit}
-                setSalePrimarySaleCuit={setSalePrimarySaleCuit}
-                saleDepartureDateTime={saleDepartureDateTime}
-                setSaleDepartureDateTime={setSaleDepartureDateTime}
-                saleDistanceKm={saleDistanceKm}
-                setSaleDistanceKm={setSaleDistanceKm}
-                saleFreightTariff={saleFreightTariff}
-                setSaleFreightTariff={setSaleFreightTariff}
-                saleDestinationCompany={saleDestinationCompany}
-                setSaleDestinationCompany={setSaleDestinationCompany}
-                saleDestinationAddress={saleDestinationAddress}
-                setSaleDestinationAddress={setSaleDestinationAddress}
-                showSaleNote={showSaleNote}
-                setShowSaleNote={setShowSaleNote}
-                saleNote={saleNote}
-                setSaleNote={setSaleNote}
-                saleFacturaFile={saleFacturaFile}
-                setSaleFacturaFile={setSaleFacturaFile}
                 products={products}
                 clearSelection={handleClearSelection}
             />
+
+            {sellingStockId && (
+                <StockSalePanel
+                    stockItem={enrichedStock.find(s => s.id === sellingStockId)}
+                    onClose={() => setSellingStockId(null)}
+                    onSubmit={handleSaleSubmit}
+                    saleQuantity={saleQuantity}
+                    setSaleQuantity={setSaleQuantity}
+                    salePrice={salePrice}
+                    setSalePrice={setSalePrice}
+                    isSubmitting={isSubmitting}
+                    facturaUploading={facturaUploading}
+                    saleTruckDriver={saleTruckDriver}
+                    setSaleTruckDriver={setSaleTruckDriver}
+                    salePlateNumber={salePlateNumber}
+                    setSalePlateNumber={setSalePlateNumber}
+                    saleTrailerPlate={saleTrailerPlate}
+                    setSaleTrailerPlate={setSaleTrailerPlate}
+                    saleDestinationCompany={saleDestinationCompany}
+                    setSaleDestinationCompany={setSaleDestinationCompany}
+                    saleDestinationAddress={saleDestinationAddress}
+                    setSaleDestinationAddress={setSaleDestinationAddress}
+                    salePrimarySaleCuit={salePrimarySaleCuit}
+                    setSalePrimarySaleCuit={setSalePrimarySaleCuit}
+                    saleTransportCompany={saleTransportCompany}
+                    setSaleTransportCompany={setSaleTransportCompany}
+                    saleDischargeNumber={saleDischargeNumber}
+                    setSaleDischargeNumber={setSaleDischargeNumber}
+                    saleHumidity={saleHumidity}
+                    setSaleHumidity={setSaleHumidity}
+                    saleHectoliterWeight={saleHectoliterWeight}
+                    setSaleHectoliterWeight={setSaleHectoliterWeight}
+                    saleGrossWeight={saleGrossWeight}
+                    setSaleGrossWeight={setSaleGrossWeight}
+                    saleTareWeight={saleTareWeight}
+                    setSaleTareWeight={setSaleTareWeight}
+                    saleDistanceKm={saleDistanceKm}
+                    setSaleDistanceKm={setSaleDistanceKm}
+                    saleDepartureDateTime={saleDepartureDateTime}
+                    setSaleDepartureDateTime={setSaleDepartureDateTime}
+                    saleFreightTariff={saleFreightTariff}
+                    setSaleFreightTariff={setSaleFreightTariff}
+                    showSaleNote={showSaleNote}
+                    setShowSaleNote={setShowSaleNote}
+                    saleNote={saleNote}
+                    setSaleNote={setSaleNote}
+                    saleFacturaFile={saleFacturaFile}
+                    setSaleFacturaFile={setSaleFacturaFile}
+                />
+            )}
 
 
             {/* Stock Movement Panel (Moved to bottom) */}
@@ -1390,6 +1396,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     investors={client?.investors || client?.partners || []}
                     campaigns={campaigns}
                     movements={movements}
+                    isSaleActive={!!sellingStockId}
                 />
             )}
 

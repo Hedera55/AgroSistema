@@ -12,7 +12,7 @@ interface MovementDetailsViewProps {
 }
 
 export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel }: MovementDetailsViewProps) {
-    const logistics = movement.logistics || (movement as any);
+    const logistics = movement as any;
     const hasLogistics =
         logistics.truckDriver ||
         logistics.plateNumber ||
@@ -33,6 +33,18 @@ export function MovementDetailsView({ movement, client, order, originName, destN
 
     return (
         <div className="bg-white p-6 relative">
+            <div className="mb-6 flex items-center justify-between border-b border-slate-100 pb-4">
+                <h3 className="font-bold text-slate-800 text-lg">
+                    {movement.type === 'SALE' ? 'Detalles del transporte' : 'Detalles del movimiento'}
+                </h3>
+                <button
+                    onClick={onClose}
+                    className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+                >
+                    ✕
+                </button>
+            </div>
+
             <div className="space-y-5">
                 {/* Section 1: General Info */}
                 <div>

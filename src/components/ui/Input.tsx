@@ -18,31 +18,44 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                     </label>
                 )}
                 <div className="relative">
-                    {prefix && (
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium z-10">
-                            {prefix}
-                        </span>
-                    )}
-                    <input
-                        ref={ref}
-                        className={`
-              block w-full rounded-lg border-slate-300 shadow-sm 
-              focus:border-emerald-500 focus:ring-emerald-500 
-              disabled:bg-slate-50 disabled:text-slate-500
-              placeholder:text-slate-400
-              transition-colors duration-200
-              [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
-              ${prefix ? 'pl-7' : ''}
-              ${suffix ? 'pr-10' : ''}
-              ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}
-              ${className}
-            `}
-                        {...props}
-                    />
-                    {suffix && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center z-10">
-                            {suffix}
-                        </div>
+                    {props.type === 'select' ? (
+                        <select
+                            ref={ref as any}
+                            className={`
+                block w-full rounded-lg border-slate-300 shadow-sm 
+                focus:border-emerald-500 focus:ring-emerald-500 
+                disabled:bg-slate-50 disabled:text-slate-500
+                transition-colors duration-200 h-10 px-3
+                ${className}
+              `}
+                            {...(props as any)}
+                        >
+                            {props.children}
+                        </select>
+                    ) : (
+                        <>
+                            <input
+                                ref={ref}
+                                className={`
+                  block w-full rounded-lg border-slate-300 shadow-sm 
+                  focus:border-emerald-500 focus:ring-emerald-500 
+                  disabled:bg-slate-50 disabled:text-slate-500
+                  placeholder:text-slate-400
+                  transition-colors duration-200
+                  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
+                  ${prefix ? 'pl-7' : ''}
+                  ${suffix ? 'pr-10' : ''}
+                  ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}
+                  ${className}
+                `}
+                                {...props}
+                            />
+                            {suffix && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center z-10">
+                                    {suffix}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
                 {error && (

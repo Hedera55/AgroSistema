@@ -26,6 +26,7 @@ const typeLabels: Record<ProductType, string> = {
     INSECTICIDE: 'Insecticida',
     COADYUVANTE: 'Coadyuvante',
     INOCULANTE: 'Inoculante',
+    GRAIN: 'Grano',
     OTHER: 'Otro'
 };
 

@@ -268,137 +268,139 @@ export default function UserManagementPage() {
             {/* Modal de Editar Perfil Removed */}
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Usuario / Email</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Rol</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Empresas Asignadas</th>
-                            {isMaster && <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider"></th>}
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
-                        {users.map((user) => (
-                            <tr key={user.id} className="hover:bg-slate-50 transition-colors group relative">
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center gap-3">
-                                        <div className="text-sm font-medium text-slate-900">
-                                            {user.role === 'CLIENT' ? (
-                                                user.email
-                                            ) : (
-                                                <>
-                                                    {user.username && user.username !== user.email && (
-                                                        <div className="text-slate-900 font-bold">{user.username}</div>
-                                                    )}
-                                                    <div className={user.username && user.username !== user.email ? "text-xs text-slate-500" : ""}>
-                                                        {user.email}
-                                                    </div>
-                                                </>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider text-nowrap">Usuario / Email</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider text-nowrap">Rol</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider text-nowrap">Empresas Asignadas</th>
+                                {isMaster && <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider text-nowrap"></th>}
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                            {users.map((user) => (
+                                <tr key={user.id} className="hover:bg-slate-50 transition-colors group relative">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-sm font-medium text-slate-900">
+                                                {user.role === 'CLIENT' ? (
+                                                    user.email
+                                                ) : (
+                                                    <>
+                                                        {user.username && user.username !== user.email && (
+                                                            <div className="text-slate-900 font-bold">{user.username}</div>
+                                                        )}
+                                                        <div className={user.username && user.username !== user.email ? "text-xs text-slate-500" : ""}>
+                                                            {user.email}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                            {isMaster && (
+                                                <Link
+                                                    href={`/admin/users/${user.id}`}
+                                                    className="text-slate-300 hover:text-emerald-500 transition-colors p-1"
+                                                    title="Gestionar perfil completo"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+                                                </Link>
                                             )}
                                         </div>
-                                        {isMaster && (
-                                            <Link
-                                                href={`/admin/users/${user.id}`}
-                                                className="text-slate-300 hover:text-emerald-500 transition-colors p-1"
-                                                title="Gestionar perfil completo"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
-                                            </Link>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {isMaster ? (
-                                        <select
-                                            className="text-sm rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 p-1 disabled:opacity-50"
-                                            value={user.role}
-                                            onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
-                                            disabled={savingId === user.id}
-                                        >
-                                            <option value="CLIENT">Cliente (Solo Lectura Stock)</option>
-                                            <option value="CONTRATISTA">Contratista (Solo Órdenes)</option>
-                                            <option value="ADMIN">Admin (Acceso total al cliente)</option>
-                                            <option value="MASTER_ADMIN">Master Admin (Sistema)</option>
-                                        </select>
-                                    ) : (
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'MASTER_ADMIN' ? 'bg-purple-100 text-purple-700' :
-                                            user.role === 'ADMIN' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-slate-100 text-slate-700'
-                                            }`}>
-                                            {user.role}
-                                        </span>
-                                    )}
-                                </td>
-                                {/* CUIT removed for users */}
-                                <td className="px-6 py-4">
-                                    {isMaster ? (
-                                        <div className="flex flex-wrap gap-2 max-w-md items-center">
-                                            {clients.map(client => {
-                                                const isAssigned = user.assigned_clients?.includes(client.id);
-                                                return (
-                                                    <button
-                                                        key={client.id}
-                                                        onClick={() => handleClientAssignment(user.id, client.id, !isAssigned)}
-                                                        disabled={savingId === user.id}
-                                                        className={`text-xs px-2 py-1 rounded-full border transition-all ${isAssigned
-                                                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200 font-medium'
-                                                            : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300'
-                                                            }`}
-                                                    >
-                                                        {client.name}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="text-sm text-slate-600">
-                                            {clients
-                                                .filter(c => user.assigned_clients?.includes(c.id))
-                                                .map(c => c.name)
-                                                .join(', ') || <span className="text-slate-400 italic font-light">Ninguno</span>}
-                                        </div>
-                                    )}
-                                </td>
-                                {isMaster && (
-                                    <td className="px-6 py-4 whitespace-nowrap text-right relative">
-                                        <div className="group/tooltip inline-block">
-                                            <button
-                                                onClick={async () => {
-                                                    if (user.role === 'MASTER_ADMIN') {
-                                                        alert('No se puede eliminar un Master Admin.');
-                                                        return;
-                                                    }
-                                                    if (confirm(`¿Eliminar usuario ${user.email}? Esta acción es irreversible.`)) {
-                                                        setSavingId(user.id);
-                                                        try {
-                                                            const { error } = await supabase.rpc('delete_user_entirely', {
-                                                                user_id_to_delete: user.id
-                                                            });
-                                                            if (error) throw error;
-                                                            setUsers(users.filter(u => u.id !== user.id));
-                                                        } catch (e) {
-                                                            console.error(e);
-                                                            alert('Error al eliminar usuario');
-                                                        } finally {
-                                                            setSavingId(null);
-                                                        }
-                                                    }
-                                                }}
-                                                className="h-8 w-8 rounded-full bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all font-bold text-lg"
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {isMaster ? (
+                                            <select
+                                                className="text-sm rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 p-1 disabled:opacity-50"
+                                                value={user.role}
+                                                onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
                                                 disabled={savingId === user.id}
                                             >
-                                                −
-                                            </button>
-                                            <div className="absolute right-10 top-1/2 -translate-y-1/2 px-2 py-1 bg-white text-slate-700 text-xs rounded border border-slate-200 shadow-md opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                                                Eliminar
-                                            </div>
-                                        </div>
+                                                <option value="CLIENT">Cliente (Solo Lectura Stock)</option>
+                                                <option value="CONTRATISTA">Contratista (Solo Órdenes)</option>
+                                                <option value="ADMIN">Admin (Acceso total al cliente)</option>
+                                                <option value="MASTER_ADMIN">Master Admin (Sistema)</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'MASTER_ADMIN' ? 'bg-purple-100 text-purple-700' :
+                                                user.role === 'ADMIN' ? 'bg-blue-100 text-blue-700' :
+                                                    'bg-slate-100 text-slate-700'
+                                                }`}>
+                                                {user.role}
+                                            </span>
+                                        )}
                                     </td>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                    {/* CUIT removed for users */}
+                                    <td className="px-6 py-4">
+                                        {isMaster ? (
+                                            <div className="flex flex-wrap gap-2 max-w-md items-center min-w-[300px]">
+                                                {clients.map(client => {
+                                                    const isAssigned = user.assigned_clients?.includes(client.id);
+                                                    return (
+                                                        <button
+                                                            key={client.id}
+                                                            onClick={() => handleClientAssignment(user.id, client.id, !isAssigned)}
+                                                            disabled={savingId === user.id}
+                                                            className={`text-xs px-2 py-1 rounded-full border transition-all ${isAssigned
+                                                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200 font-medium'
+                                                                : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300'
+                                                                }`}
+                                                        >
+                                                            {client.name}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-slate-600">
+                                                {clients
+                                                    .filter(c => user.assigned_clients?.includes(c.id))
+                                                    .map(c => c.name)
+                                                    .join(', ') || <span className="text-slate-400 italic font-light">Ninguno</span>}
+                                            </div>
+                                        )}
+                                    </td>
+                                    {isMaster && (
+                                        <td className="px-6 py-4 whitespace-nowrap text-right relative">
+                                            <div className="group/tooltip inline-block">
+                                                <button
+                                                    onClick={async () => {
+                                                        if (user.role === 'MASTER_ADMIN') {
+                                                            alert('No se puede eliminar un Master Admin.');
+                                                            return;
+                                                        }
+                                                        if (confirm(`¿Eliminar usuario ${user.email}? Esta acción es irreversible.`)) {
+                                                            setSavingId(user.id);
+                                                            try {
+                                                                const { error } = await supabase.rpc('delete_user_entirely', {
+                                                                    user_id_to_delete: user.id
+                                                                });
+                                                                if (error) throw error;
+                                                                setUsers(users.filter(u => u.id !== user.id));
+                                                            } catch (e) {
+                                                                console.error(e);
+                                                                alert('Error al eliminar usuario');
+                                                            } finally {
+                                                                setSavingId(null);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="h-8 w-8 rounded-full bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all font-bold text-lg"
+                                                    disabled={savingId === user.id}
+                                                >
+                                                    −
+                                                </button>
+                                                <div className="absolute right-10 top-1/2 -translate-y-1/2 px-2 py-1 bg-white text-slate-700 text-xs rounded border border-slate-200 shadow-md opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                                                    Eliminar
+                                                </div>
+                                            </div>
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {

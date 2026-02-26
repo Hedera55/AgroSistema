@@ -16,7 +16,7 @@ interface HarvestData {
         targetId: string;
         targetName: string;
         amount: number;
-        logistics: Partial<InventoryMovement>;
+        logistics: any;
     }>;
 }
 
@@ -73,13 +73,13 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         targetId: string;
         targetName: string;
         amount: number;
-        logistics: Partial<InventoryMovement>;
+        logistics: any;
     }>>(initialDistributions || []);
     const [selectedDistribOption, setSelectedDistribOption] = useState('');
 
     // Step 3 State
     const [activeTabId, setActiveTabId] = useState('general');
-    const [generalLogistics, setGeneralLogistics] = useState<Partial<InventoryMovement>>({});
+    const [generalLogistics, setGeneralLogistics] = useState<any>({});
 
     const totalYieldNum = parseFloat(observedYield) || 0;
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
@@ -134,9 +134,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
     const updateLogistics = (distId: string, field: keyof InventoryMovement, value: any) => {
         if (distId === 'general') {
-            setGeneralLogistics(prev => ({ ...prev, [field]: value }));
+            setGeneralLogistics((prev: any) => ({ ...prev, [field]: value }));
         } else {
-            setDistributions(prev => prev.map(d => {
+            setDistributions((prev: any[]) => prev.map(d => {
                 if (d.id === distId) {
                     return { ...d, logistics: { ...d.logistics, [field]: value } };
                 }

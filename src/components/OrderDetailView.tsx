@@ -34,7 +34,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
     };
 
     return (
-        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 w-full overflow-hidden animate-slideUp flex flex-col border-t-4 border-t-emerald-500 max-h-[800px]">
+        <div className={`bg-white rounded-3xl shadow-xl border border-slate-200 w-full overflow-hidden animate-slideUp flex flex-col max-h-[800px] border-t-4 ${order.type === 'HARVEST' ? 'border-t-blue-500' : 'border-t-emerald-500'}`}>
             {/* Header */}
             <div className="bg-slate-50 px-8 py-6 border-b border-slate-200 flex justify-between items-start">
                 <div className="flex-1">
@@ -95,7 +95,16 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                             </button>
                         )}
                     </div>
-                    <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors" title="Cerrar detalles">✕</button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => { /* onEdit handler will be passed eventually if needed, for now placeholders for the UI */ }}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                            title="Editar Orden"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                        <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors" title="Cerrar detalles">✕</button>
+                    </div>
                 </div>
             </div>
 
