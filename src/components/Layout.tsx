@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { syncService, SyncStatus } from '@/services/sync';
@@ -18,6 +18,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
     const [currentClientName, setCurrentClientName] = useState<string | null>(null);
     const [persistedClientId, setPersistedClientId] = useState<string | null>(null);
+    const isInitializing = useRef(false);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -109,7 +110,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 const allWarehouses = await db.getAll('warehouses');
                 const hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
 
-                if (!hasAnyRecord) {
+                if (!hasAnyRecord && !isInitializing.current) {
+                    isInitializing.current = true;
                     console.log(`🚀 Initializing default warehouses for company ${effectiveId}...`);
                     const now = new Date().toISOString();
 

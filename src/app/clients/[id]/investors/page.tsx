@@ -651,7 +651,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                             onClick={() => setShowEditCampaigns(!showEditCampaigns)}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
                         >
-                            {showEditCampaigns ? 'Cerrar' : '✏️ Gestionar campañas'}
+                            {showEditCampaigns ? 'Cerrar edición' : '✏️ Gestionar campañas'}
                         </button>
                     )}
                 </div>
@@ -789,7 +789,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                             onClick={() => setShowEditInvestors(!showEditInvestors)}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest"
                         >
-                            {showEditInvestors ? 'Cerrar' : '✏️ Gestionar socios'}
+                            {showEditInvestors ? 'Cerrar edición' : '✏️ Gestionar socios'}
                         </button>
                     )}
                 </div>

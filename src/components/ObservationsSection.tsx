@@ -5,6 +5,7 @@ import { Observation } from '@/types';
 import { db } from '@/services/db';
 import { Button } from './ui/Button';
 import { useAuth } from '@/hooks/useAuth';
+import { generateId } from '@/lib/uuid';
 
 interface ObservationsSectionProps {
     clientId: string;
@@ -73,10 +74,10 @@ export function ObservationsSection({
             } else {
                 // Create new
                 const newVal: Observation = {
-                    id: crypto.randomUUID(),
+                    id: generateId(),
                     clientId,
                     farmId,
-                    lotId,
+                    lotId: lotId || undefined,
                     userName,
                     date: formDate,
                     comments: formComments,

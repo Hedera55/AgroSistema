@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, UserRole, Client } from '@/types';
@@ -14,6 +14,7 @@ export default function UserManagementPage() {
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingId, setSavingId] = useState<string | null>(null);
+    const tableContainerRef = useRef<HTMLDivElement>(null);
 
     const sortUsers = (userList: UserProfile[]) => {
         const roleOrder: Record<string, number> = {
@@ -184,6 +185,23 @@ export default function UserManagementPage() {
         }
     };
 
+    const handleWheel = (e: React.WheelEvent) => {
+        if (!tableContainerRef.current) return;
+        const container = tableContainerRef.current;
+
+        // Horizontal scroll with wheel if not at edges
+        if (Math.abs(e.deltaY) > 0) {
+            const isAtLeft = container.scrollLeft <= 0;
+            const isAtRight = container.scrollLeft + container.clientWidth >= container.scrollWidth;
+
+            // Only prevent default if we can actually scroll horizontally
+            if (!(e.deltaY < 0 && isAtLeft) && !(e.deltaY > 0 && isAtRight)) {
+                e.preventDefault();
+                container.scrollLeft += e.deltaY;
+            }
+        }
+    };
+
     if (authLoading || loading) {
         return (
             <div className="p-8 text-center text-slate-500">Cargando gestión de usuarios...</div>
@@ -268,7 +286,11 @@ export default function UserManagementPage() {
             {/* Modal de Editar Perfil Removed */}
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
+                <div
+                    ref={tableContainerRef}
+                    onWheel={handleWheel}
+                    className="overflow-x-auto"
+                >
                     <table className="min-w-full divide-y divide-slate-200">
                         <thead className="bg-slate-50">
                             <tr>
@@ -333,7 +355,7 @@ export default function UserManagementPage() {
                                     {/* CUIT removed for users */}
                                     <td className="px-6 py-4">
                                         {isMaster ? (
-                                            <div className="flex flex-wrap gap-2 max-w-md items-center min-w-[300px]">
+                                            <div className="flex flex-wrap gap-2 max-w-4xl items-center min-w-[500px]">
                                                 {clients.map(client => {
                                                     const isAssigned = user.assigned_clients?.includes(client.id);
                                                     return (

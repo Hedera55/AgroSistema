@@ -201,21 +201,20 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
         if (editingLotId) {
             // Update
-            const lotToUpdate = lots.find(l => l.id === editingLotId);
-            if (lotToUpdate) {
-                await updateLot({
-                    ...lotToUpdate,
-                    name: lotName,
-                    hectares: parseFloat(lotHectares),
-                    lastUpdatedBy: displayName || 'Sistema'
-                });
-            }
-            setEditingLotId(null);
+            await updateLot({
+                id: editingLotId,
+                clientId: id,
+                farmId: selectedFarmId!,
+                name: lotName,
+                hectares: parseFloat(lotHectares),
+                lastUpdatedBy: displayName || 'Sistema'
+            });
         } else {
             // Create
             await addLot({
                 id: generateId(),
-                farmId: selectedFarmId,
+                clientId: id,
+                farmId: selectedFarmId!,
                 name: lotName,
                 hectares: parseFloat(lotHectares),
                 status: 'EMPTY',
@@ -911,19 +910,19 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <Input
-                                label="Dirección (Opcional)"
+                                label="Dirección"
                                 placeholder="ej. Ruta 8 Km 10"
                                 value={newFarmAddress}
                                 onChange={e => setNewFarmAddress(e.target.value)}
                             />
                             <Input
-                                label="Ciudad (Opcional)"
+                                label="Ciudad"
                                 placeholder="ej. Pergamino"
                                 value={newFarmCity}
                                 onChange={e => setNewFarmCity(e.target.value)}
                             />
                             <Input
-                                label="Provincia (Opcional)"
+                                label="Provincia"
                                 placeholder="ej. Buenos Aires"
                                 value={newFarmProvince}
                                 onChange={e => setNewFarmProvince(e.target.value)}
