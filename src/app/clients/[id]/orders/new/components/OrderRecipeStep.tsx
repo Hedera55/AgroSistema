@@ -190,7 +190,7 @@ export function OrderRecipeStep({
                                     {availableProducts.map(p => (
                                         <option key={p.id} value={p.id}>
                                             {p.type === 'SEED'
-                                                ? `${p.name}${p.brandName ? ` (${p.brandName})` : ''}`
+                                                ? `${p.name} - ${p.commercialName || 'Propia'}`
                                                 : `${p.commercialName || p.name}${p.activeIngredient ? ` (${p.activeIngredient})` : ''}`} ({typeLabels[p.type]})
                                         </option>
                                     ))}
@@ -347,12 +347,19 @@ export function OrderRecipeStep({
 
 
                     {editingItemId && (
-                        <div className="flex justify-end pt-0">
+                        <div className="flex justify-end pt-0 gap-4">
+                            <button
+                                onClick={handleAddItem}
+                                className="text-xs font-bold text-slate-400 hover:text-emerald-500 uppercase tracking-wider flex items-center gap-1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                <span>editar</span>
+                            </button>
                             <button
                                 onClick={handleCancelEdit}
                                 className="text-xs font-bold text-slate-400 hover:text-red-500 uppercase tracking-wider flex items-center gap-1"
                             >
-                                <span>✕ Cancelar edición</span>
+                                <span>✕ cancelar</span>
                             </button>
                         </div>
                     )}

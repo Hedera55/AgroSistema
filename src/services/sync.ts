@@ -567,6 +567,20 @@ export class SyncService {
                         // Auto-fix for legacy/invalid IDs or UUID syntax errors
                         const isInvalidUuid = error.message.includes('invalid input syntax for type uuid');
                         const isDuplicateKey = error.message.includes('duplicate key value violates unique constraint');
+                        const isFkViolation = (error as any).code === '23503' || error.message.includes('violates foreign key constraint');
+
+                        if (isFkViolation && tableName === 'orders' && error.message.includes('orders_lot_id_fkey')) {
+                            console.warn(`⚠️ Orphaned lot_id in order ${item.id}. Nullifying lot_id to unblock sync.`);
+                            const newPayload = { ...payload, lot_id: null };
+                            const { error: retryError } = await supabase.from(tableName).upsert(newPayload);
+                            if (!retryError) {
+                                console.log(`✅ Order ${item.id} synced with null lot_id.`);
+                                await db.markSynced(localStoreName, item.id);
+                                continue;
+                            } else {
+                                console.error(`❌ Retry failed for order ${item.id}:`, retryError.message);
+                            }
+                        }
 
                         if (isInvalidUuid ||
                             (isDuplicateKey && tableName !== 'stock') // If duplicate key on non-stock, might be bad ID

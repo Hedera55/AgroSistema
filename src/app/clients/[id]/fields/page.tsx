@@ -1255,7 +1255,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                         e.stopPropagation();
                                                                                         openPanel('observations', lot.id, selectedFarmId!, lot.id, lot.name, `Lote de ${farms.find(f => f.id === selectedFarmId)?.name}`);
                                                                                     }}
-                                                                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all ${activePanel?.type === 'observations' && activePanel?.id === lot.id
+                                                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all uppercase tracking-tight ${activePanel?.type === 'observations' && activePanel?.id === lot.id
                                                                                         ? 'bg-emerald-600 text-white border-emerald-600'
                                                                                         : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 shadow-sm'
                                                                                         }`}
@@ -1464,11 +1464,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             </div>
                         </div>
                         <div className="px-2 pb-2">
-                            {activePanel.type === 'observations' && activePanel.farmId && activePanel.lotId && (
+                            {activePanel.type === 'observations' && activePanel.farmId && (
                                 <ObservationsSection
                                     clientId={id}
                                     farmId={activePanel.farmId}
-                                    lotId={activePanel.lotId}
+                                    lotId={activePanel.lotId || undefined}
                                 />
                             )}
                             {activePanel.type === 'crop_assign' && (

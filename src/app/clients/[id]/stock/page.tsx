@@ -100,6 +100,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         presentationContent: '',
         presentationAmount: ''
     });
+
     const [stockItems, setStockItems] = useState<{
         productId: string;
         quantity: string;
@@ -323,7 +324,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     }, [showUnitInput, unitInputValue]);
 
     // Save available units to Client persistence
-    const saveClientUnits = async (newUnits: string[]) => {
+    const saveClientUnits = React.useCallback(async (newUnits: string[]) => {
         try {
             const client = await db.get('clients', id);
             if (client) {
@@ -338,9 +339,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } catch (error) {
             console.error('Error saving client units:', error);
         }
-    };
+    }, [id]);
 
-    const saveClientSellers = async (newSellers: string[]) => {
+    const saveClientSellers = React.useCallback(async (newSellers: string[]) => {
         try {
             const client = await db.get('clients', id);
             if (client) {
@@ -355,9 +356,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } catch (error) {
             console.error('Error saving client sellers:', error);
         }
-    };
+    }, [id]);
 
-    const handleAddUnit = () => {
+    const handleAddUnit = React.useCallback(() => {
         if (unitInputValue.trim()) {
             const upper = unitInputValue.trim().toUpperCase();
             if (!availableUnits.includes(upper)) {
@@ -369,9 +370,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setUnitInputValue('');
             setShowUnitInput(false);
         }
-    };
+    }, [unitInputValue, availableUnits, saveClientUnits]);
 
-    const handleAddSeller = () => {
+    const handleAddSeller = React.useCallback(() => {
         if (sellerInputValue.trim()) {
             const formatted = sellerInputValue.trim();
             if (!availableSellers.includes(formatted)) {
@@ -383,7 +384,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setSellerInputValue('');
             setShowSellerInput(false);
         }
-    };
+    }, [sellerInputValue, availableSellers, saveClientSellers, updateActiveStockItem]);
 
     // Filter products: show ONLY client-specific ones (Strict Per-Client Isolation)
     const availableProducts = useMemo(() => {
@@ -531,7 +532,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     }, [sellingStockId, saleQuantity, salePrice, enrichedStock]);
 
-    const handleProductSubmit = async (e: React.FormEvent) => {
+    const handleProductSubmit = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newProductName) return;
 
@@ -579,7 +580,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [newProductName, newProductBrand, newProductCommercialName, newProductPA, editingProductId, newProductType, newProductUnit, id, updateProduct, addProduct]);
 
     const handleStockSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -613,11 +614,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             for (const item of validItems) {
                 const product = availableProducts.find((p: Product) => p.id === item.productId);
-                const qtyNum = parseFloat(item.quantity.replace(',', '.'));
-                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : 0;
+                const qtyNum = parseFloat(item.quantity.toString().replace(',', '.'));
+                const priceNum = item.price ? parseFloat(item.price.toString().replace(',', '.')) : 0;
                 const pLabel = (item.presentationLabel || '').trim();
-                const pContent = item.presentationContent ? parseFloat(item.presentationContent.replace(',', '.')) : 0;
-                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.replace(',', '.')) : 0;
+                const pContent = item.presentationContent ? parseFloat(item.presentationContent.toString().replace(',', '.')) : 0;
+                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.toString().replace(',', '.')) : 0;
                 const pBrand = (item.tempBrand || product?.brandName || '').toLowerCase().trim();
 
                 // Find existing item, but also account for items already processed in this loop
@@ -1080,7 +1081,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     };
 
-    const addStockToBatch = () => {
+    const addStockToBatch = React.useCallback(() => {
         if (!activeStockItem.productId || !activeStockItem.quantity) return;
 
         // Normalize commas to dots before adding to batch
@@ -1092,7 +1093,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             presentationAmount: activeStockItem.presentationAmount.replace(',', '.')
         };
 
-        setStockItems([...stockItems, { ...normalizedItem }]);
+        setStockItems(prev => [...prev, { ...normalizedItem }]);
         setActiveStockItem({
             productId: '',
             quantity: '',
@@ -1102,24 +1103,28 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             presentationContent: '',
             presentationAmount: ''
         });
-    };
+    }, [activeStockItem]);
 
-    const removeBatchItem = (idx: number) => {
-        setStockItems(stockItems.filter((_, i) => i !== idx));
-    };
+    const removeBatchItem = React.useCallback((idx: number) => {
+        setStockItems(prev => prev.filter((_, i) => i !== idx));
+    }, []);
 
-    const editBatchItem = (idx: number) => {
-        const itemToEdit = stockItems[idx];
-        setActiveStockItem({
-            ...itemToEdit,
-            presentationLabel: itemToEdit.presentationLabel || '',
-            presentationContent: itemToEdit.presentationContent || '',
-            presentationAmount: itemToEdit.presentationAmount || ''
+    const editBatchItem = React.useCallback((idx: number) => {
+        setStockItems(prev => {
+            const itemToEdit = prev[idx];
+            if (itemToEdit) {
+                setActiveStockItem({
+                    ...itemToEdit,
+                    presentationLabel: itemToEdit.presentationLabel || '',
+                    presentationContent: itemToEdit.presentationContent || '',
+                    presentationAmount: itemToEdit.presentationAmount || ''
+                });
+            }
+            return prev.filter((_, i) => i !== idx);
         });
-        setStockItems(stockItems.filter((_, i) => i !== idx));
-    };
+    }, []);
 
-    const updateActiveStockItem = (field: string, value: string) => {
+    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
         setActiveStockItem(prev => {
             const newState = { ...prev, [field]: value };
 
@@ -1138,7 +1143,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             return newState;
         });
-    };
+    }, []);
+
 
     const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'GRAIN', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
 
@@ -1283,7 +1289,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                             'Ingreso registrado exitosamente'}
                             </p>
                             <p className="text-sm text-emerald-600">
-                                {lastMovement.productName} ({lastMovement.productBrand}) - {lastMovement.quantity} {lastMovement.unit}
+                                {lastMovement.productName} {lastMovement.productBrand ? `(${lastMovement.productBrand})` : ''} - {lastMovement.quantity} {lastMovement.unit}
                             </p>
                         </div>
                     </div>

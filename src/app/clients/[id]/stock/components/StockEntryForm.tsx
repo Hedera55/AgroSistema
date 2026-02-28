@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Warehouse, Product, Client, Campaign } from '@/types';
+import { Warehouse, Product, Client, Campaign, MovementItem } from '@/types';
+import { generateId } from '@/lib/uuid';
 
 interface SegmentedDateInputProps {
     label: string;
@@ -156,7 +157,7 @@ interface StockEntryFormProps {
     setSelectedCampaignId: (id: string) => void;
 }
 
-export function StockEntryForm({
+function StockEntryFormInternal({
     showStockForm,
     setShowStockForm,
     warehouses,
@@ -174,14 +175,6 @@ export function StockEntryForm({
     removeBatchItem,
     selectedSeller,
     setSelectedSeller,
-    setShowSellerInput,
-    setShowSellerDelete,
-    availableSellers,
-    showSellerInput,
-    showSellerDelete,
-    sellerInputValue,
-    setSellerInputValue,
-    handleAddSeller,
     setAvailableSellers,
     saveClientSellers,
     client,
@@ -203,16 +196,26 @@ export function StockEntryForm({
     setDueDate,
     campaigns,
     selectedCampaignId,
-    setSelectedCampaignId
+    setSelectedCampaignId,
+    showSellerInput,
+    setShowSellerInput,
+    showSellerDelete,
+    setShowSellerDelete,
+    sellerInputValue,
+    setSellerInputValue,
+    handleAddSeller,
+    availableSellers
 }: StockEntryFormProps) {
     if (!showStockForm) return null;
 
-    // Sort products alphabetically
-    const sortedProducts = [...availableProducts].sort((a, b) => {
-        const nameA = (a.activeIngredient || a.name).toLowerCase();
-        const nameB = (b.activeIngredient || b.name).toLowerCase();
-        return nameA.localeCompare(nameB);
-    });
+    // Sort and filter products: exclude "Propia" brand for purchases
+    const sortedProducts = availableProducts
+        .filter(p => !p.brandName || p.brandName.toLowerCase() !== 'propia')
+        .sort((a, b) => {
+            const nameA = (a.activeIngredient || a.name).toLowerCase();
+            const nameB = (b.activeIngredient || b.name).toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
 
     const activeProduct = availableProducts.find(p => p.id === activeStockItem.productId);
 
@@ -375,7 +378,9 @@ export function StockEntryForm({
                                     <div key={idx} className="flex items-center justify-between p-3 hover:bg-orange-100 bg-orange-50/50 transition-colors border-l-4 border-orange-400 mb-1 rounded-r-md">
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-slate-800 truncate">
-                                                {product?.commercialName || product?.name || 'Insumo desconocido'}
+                                                {product?.type === 'SEED'
+                                                    ? `${product.name} - ${product.commercialName || '-'}`
+                                                    : (product?.commercialName || product?.name || 'Insumo desconocido')}
                                             </div>
                                             <div className="text-[10px] items-center gap-2 font-bold mt-0.5 flex">
                                                 {item.presentationLabel && item.presentationContent ? (
@@ -395,7 +400,10 @@ export function StockEntryForm({
                                                 </span>
                                             </div>
                                             <div className="text-[9px] text-slate-400 uppercase font-black tracking-widest mt-0.5">
-                                                {product?.activeIngredient ? `${product.activeIngredient} - ` : ''}{item.tempBrand || product?.brandName || '-'} • USD {item.price || '0.00'}/{product?.unit || 'u.'}
+                                                {product?.type === 'SEED'
+                                                    ? `${item.tempBrand || product?.brandName || '-'} • USD ${item.price || '0.00'}/${product?.unit || 'u.'}`
+                                                    : `${product?.activeIngredient ? `${product.activeIngredient} - ` : ''}${item.tempBrand || product?.brandName || '-'} • USD ${item.price || '0.00'}/${product?.unit || 'u.'}`
+                                                }
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-1 ml-4">
@@ -450,7 +458,7 @@ export function StockEntryForm({
                                 <input
                                     type="text"
                                     className="flex-1 rounded border-slate-300 text-base focus:ring-emerald-500 focus:border-emerald-500"
-                                    placeholder="NUEVO VENDEDOR..."
+                                    placeholder="Nuevo vendedor..."
                                     value={sellerInputValue}
                                     onChange={e => setSellerInputValue(e.target.value)}
                                     onKeyDown={e => {
@@ -553,7 +561,7 @@ export function StockEntryForm({
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Total Compra</label>
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg h-11 px-4 flex items-center justify-end shadow-sm">
                             <span className="text-lg font-black text-emerald-700">
-                                USD {stockItems.reduce((acc, it) => acc + (parseFloat(it.quantity) * (parseFloat(it.price) || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                USD {stockItems.reduce((acc, it) => acc + (parseFloat(it.quantity.toString().replace(',', '.')) * (parseFloat(it.price.toString().replace(',', '.')) || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                         </div>
                     </div>
@@ -616,7 +624,7 @@ export function StockEntryForm({
                             onClick={() => setShowNote(!showNote)}
                             className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
                         >
-                            {showNote ? '× Quitar Nota' : (note ? 'Editar nota' : '+ Agregar nota')}
+                            {showNote ? '× Cancelar' : (note ? 'Editar nota' : '+ Agregar nota')}
                         </button>
 
                         <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
@@ -693,3 +701,5 @@ export function StockEntryForm({
         </div >
     );
 }
+
+export const StockEntryForm = memo(StockEntryFormInternal);

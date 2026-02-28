@@ -316,8 +316,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         try {
             if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
                 const isSale = editingMovement.type === 'SALE';
-                const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
-                const priceNum = parseFloat(salePrice.replace(',', '.'));
+                const qtyNum = parseFloat(saleQuantity.toString().replace(',', '.'));
+                const priceNum = parseFloat(salePrice.toString().replace(',', '.'));
 
                 // Revert old quantity
                 const oldSt = stock.find(s => s.productId === editingMovement.productId && s.warehouseId === editingMovement.warehouseId);
@@ -342,14 +342,14 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     destinationAddress: saleDestinationAddress || undefined,
                     transportCompany: saleTransportCompany || undefined,
                     dischargeNumber: saleDischargeNumber || undefined,
-                    humidity: saleHumidity ? parseFloat(saleHumidity.replace(',', '.')) : undefined,
-                    hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.replace(',', '.')) : undefined,
-                    grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.replace(',', '.')) : undefined,
-                    tareWeight: saleTareWeight ? parseFloat(saleTareWeight.replace(',', '.')) : undefined,
+                    humidity: saleHumidity ? parseFloat(saleHumidity.toString().replace(',', '.')) : undefined,
+                    hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.toString().replace(',', '.')) : undefined,
+                    grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.toString().replace(',', '.')) : undefined,
+                    tareWeight: saleTareWeight ? parseFloat(saleTareWeight.toString().replace(',', '.')) : undefined,
                     primarySaleCuit: salePrimarySaleCuit || undefined,
                     departureDateTime: saleDepartureDateTime || undefined,
-                    distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.replace(',', '.')) : undefined,
-                    freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.replace(',', '.')) : undefined,
+                    distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.toString().replace(',', '.')) : undefined,
+                    freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.toString().replace(',', '.')) : undefined,
                 } as any);
                 await loadData();
                 setShowEditForm(false);
@@ -375,11 +375,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             const movementItems: MovementItem[] = [];
             for (const item of validItems) {
                 const product = productsData[item.productId];
-                const qtyNum = parseFloat(item.quantity.replace(',', '.'));
-                const priceNum = item.price ? parseFloat(item.price.replace(',', '.')) : 0;
+                const qtyNum = parseFloat(item.quantity.toString().replace(',', '.'));
+                const priceNum = item.price ? parseFloat(item.price.toString().replace(',', '.')) : 0;
                 const pLabel = (item.presentationLabel || '').trim();
-                const pContent = item.presentationContent ? parseFloat(item.presentationContent.replace(',', '.')) : 0;
-                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.replace(',', '.')) : 0;
+                const pContent = item.presentationContent ? parseFloat(item.presentationContent.toString().replace(',', '.')) : 0;
+                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.toString().replace(',', '.')) : 0;
                 const existing = stock.find(s => s.productId === item.productId && s.warehouseId === selectedWarehouseId && (s.presentationLabel || '') === pLabel && (s.presentationContent || 0) === pContent);
                 const stockId = existing ? existing.id : generateId();
                 await updateStock({
@@ -484,8 +484,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         let showValue = (m.type === 'IN' && !m.isTransfer) || (m.type === 'SALE');
                                         let totalValue = 0, unitPrice = 0;
                                         if (showValue) {
-                                            if (isConsolidated) totalValue = m.items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * parseFloat(item.quantity)), 0);
-                                            else { unitPrice = (m.type === 'IN' ? m.purchasePrice : m.salePrice) || 0; totalValue = unitPrice * m.quantity; }
+                                            if (isConsolidated) {
+                                                totalValue = m.items.reduce((acc: number, item: any) => acc + (parseFloat(item.price?.toString().replace(',', '.') || '0') * parseFloat(item.quantity?.toString().replace(',', '.') || '0')), 0);
+                                                if (m.items.length === 1) unitPrice = parseFloat(m.items[0].price?.toString().replace(',', '.') || '0');
+                                            } else {
+                                                unitPrice = (m.type === 'IN' ? m.purchasePrice : m.salePrice) || 0;
+                                                totalValue = unitPrice * m.quantity;
+                                            }
                                         }
 
                                         const productObj = productsData[m.productId];

@@ -106,9 +106,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         const checkAndInitWarehouses = async () => {
             try {
-                // Get ALL warehouses for this client (including deleted ones)
-                const allWarehouses = await db.getAll('warehouses');
-                const hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
+                // Initial check
+                let allWarehouses = await db.getAll('warehouses');
+                let hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
+                if (hasAnyRecord) return;
+
+                // Robustness: Wait a bit to let any initial sync finish
+                await new Promise(resolve => setTimeout(resolve, 800));
+
+                // Final check before creation
+                allWarehouses = await db.getAll('warehouses');
+                hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
 
                 if (!hasAnyRecord && !isInitializing.current) {
                     isInitializing.current = true;
