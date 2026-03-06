@@ -95,7 +95,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [saleDistanceKm, setSaleDistanceKm] = useState('');
     const [saleFreightTariff, setSaleFreightTariff] = useState('');
 
-    async function loadData() {
+    const loadData = React.useCallback(async () => {
         const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
             db.getAll('movements'),
             db.getAll('products'),
@@ -108,6 +108,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
         const currentClient = allClients.find((c: Client) => c.id === clientId);
         setClient(currentClient || null);
+        if (currentClient?.enabledSellers) setAvailableSellers(currentClient.enabledSellers);
 
         const clientMovements = allMovements
             .filter((m: InventoryMovement) =>
@@ -143,9 +144,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         setWarehousesKey(wMap);
         setWarehousesFull(allWarehouses);
         setLoading(false);
-    }
+    }, [clientId]);
 
-    const handleDeleteMovement = async (id: string, partnerId?: string) => {
+    const handleDeleteMovement = React.useCallback(async (id: string, partnerId?: string) => {
         if (!confirm('¿Eliminar este movimiento? (No afectará al stock actual, solo al historial)')) return;
         try {
             await db.delete('movements', id);
@@ -155,13 +156,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             console.error('Error deleting movement:', error);
             alert('Error al eliminar');
         }
-    };
+    }, [loadData]);
 
     useEffect(() => {
         loadData();
     }, [clientId]);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, movementId: string) => {
+    const handleFileUpload = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>, movementId: string) => {
         if (!e.target.files || !e.target.files[0]) return;
         const file = e.target.files[0];
         setUploadingId(movementId);
@@ -184,7 +185,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             setUploadingId(null);
             e.target.value = '';
         }
-    };
+    }, [clientId, movements, loadData]);
 
     const formatDate = (dateStr: string, timeStr?: string) => {
         if (!dateStr) return { date: '-', time: '-' };
@@ -232,7 +233,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         return 'EGRESO';
     };
 
-    const handleEditMovement = (m: InventoryMovement) => {
+    const handleEditMovement = React.useCallback((m: InventoryMovement) => {
         const label = getMovementLabel(m);
         if (label === 'E-SIEMBRA' || label === 'E-APLICACIÓN') {
             if (m.referenceId) {
@@ -246,13 +247,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             return;
         }
 
+        setEditingMovement(m);
+        setSelectedWarehouseId(m.warehouseId || '');
+        setNote(m.notes || '');
+        setFacturaDate(m.facturaDate || '');
+        setDueDate(m.dueDate || '');
+        setSelectedSeller(m.sellerName || '');
+        setSelectedCampaignId(m.campaignId || '');
+        setSelectedInvestors(m.investors || []);
+
         if (m.type === 'SALE' || m.type === 'OUT') {
-            setEditingMovement(m);
-            setSelectedWarehouseId(m.warehouseId || '');
-            setNote(m.notes || '');
             setSaleQuantity(m.quantity.toString());
             setSalePrice(m.salePrice?.toString() || '');
-
             const logs = m as any;
             setSaleTruckDriver(logs.truckDriver || '');
             setSalePlateNumber(logs.plateNumber || '');
@@ -275,11 +281,6 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             return;
         }
 
-        setEditingMovement(m);
-        setSelectedWarehouseId(m.warehouseId || '');
-        setNote(m.notes || '');
-        setFacturaDate(m.facturaDate || '');
-        setDueDate(m.dueDate || '');
         if (m.items && m.items.length > 0) {
             setStockItems(m.items.map(it => ({
                 productId: it.productId,
@@ -303,9 +304,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         }
         setShowEditForm(true);
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    };
+    }, [clientId, router]);
 
-    const handleEditSave = async (e: React.FormEvent) => {
+    const handleEditSave = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingMovement) return;
         const allItemsToProcess = [...stockItems];
@@ -406,7 +407,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [
+        editingMovement, stockItems, activeStockItem, saleQuantity, salePrice, stock, selectedWarehouseId, note, saleTruckDriver,
+        salePlateNumber, saleTrailerPlate, saleDestinationCompany, saleDestinationAddress, saleTransportCompany, saleDischargeNumber,
+        saleHumidity, saleHectoliterWeight, saleGrossWeight, saleTareWeight, salePrimarySaleCuit, saleDepartureDateTime, saleDistanceKm,
+        saleFreightTariff, loadData, updateStock, productsData, clientId, selectedSeller, facturaDate, dueDate, selectedInvestors
+    ]);
 
     return (
         <div className="space-y-6">
@@ -730,7 +736,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             </div>
                         </form>
                     ) : (
-                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData)} activeStockItem={activeStockItem as any} updateActiveStockItem={(f, v) => { setActiveStockItem(prev => ({ ...prev, [f]: v })); }} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} />
+                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData)} activeStockItem={activeStockItem as any} updateActiveStockItem={(f, v) => { setActiveStockItem(prev => ({ ...prev, [f]: v })); }} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
                     )}
                 </div>
             )}

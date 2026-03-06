@@ -543,10 +543,10 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             {/* Status Change Date Modal */}
             {statusPopupOrder && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fadeIn">
-                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border border-slate-100 flex flex-col gap-6">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Confirmar Aplicación</h3>
-                            <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                    <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-sm w-full border border-slate-100 flex flex-col gap-4">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-black text-slate-800 tracking-tight">Confirmar Aplicación</h3>
+                            <p className="text-xs text-slate-500 font-medium leading-relaxed">
                                 Seleccione la fecha real en la que se realizó la labor para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
                             </p>
                         </div>
@@ -554,14 +554,14 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de Aplicación</label>
                             <input
                                 type="date"
-                                className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm shadow-sm"
+                                className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-3 text-sm shadow-sm"
                                 value={statusPopupDate}
                                 onChange={e => setStatusPopupDate(e.target.value)}
                             />
                         </div>
-                        <div className="flex gap-3 pt-2">
-                            <Button variant="outline" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>
-                            <Button onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar Aplicación</Button>
+                        <div className="flex gap-2 pt-1">
+                            <Button variant="outline" size="sm" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>
+                            <Button size="sm" onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar</Button>
                         </div>
                     </div>
                 </div>

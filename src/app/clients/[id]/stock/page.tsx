@@ -1,6 +1,6 @@
 'use client';
 
-import React, { use, useState, useMemo, useEffect, useRef } from 'react';
+import React, { use, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useClientStock, useInventory, useClientMovements } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -33,6 +33,19 @@ interface EnrichedStockItem extends ClientStock {
     campaignId?: string;
     breakdown?: ClientStock[];
 }
+
+const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'GRAIN', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
+
+const typeLabels: Record<string, string> = {
+    HERBICIDE: 'Herbicida',
+    FERTILIZER: 'Fertilizante',
+    SEED: 'Semilla',
+    FUNGICIDE: 'Fungicida',
+    INSECTICIDE: 'Insecticida',
+    INOCULANTE: 'Inoculante',
+    GRAIN: 'Grano',
+    OTHER: 'Otro'
+};
 
 export default function ClientStockPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -101,6 +114,28 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         presentationAmount: ''
     });
 
+    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
+        setActiveStockItem(prev => {
+            const newState = { ...prev, [field]: value };
+
+            // Auto-calculate quantity if presentation content or amount changes
+            if (field === 'presentationContent' || field === 'presentationAmount') {
+                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
+                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
+
+                const content = parseFloat(contentVal.toString().replace(',', '.'));
+                const amount = parseFloat(amountVal.toString().replace(',', '.'));
+
+                if (!isNaN(content) && !isNaN(amount)) {
+                    newState.quantity = (content * amount).toString();
+                }
+            }
+
+            return newState;
+        });
+    }, []);
+
+
     const [stockItems, setStockItems] = useState<{
         productId: string;
         quantity: string;
@@ -154,15 +189,52 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const unitInputRef = useRef<HTMLDivElement>(null);
     const warehouseContainerRef = useRef<HTMLDivElement>(null);
 
-    // Handle file selection
-    const handleFacturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleClearSelection = React.useCallback(() => {
+        setSelectedStockIds([]);
+        setShowMovePanel(false);
+    }, []);
+
+    const deductStockQuantity = React.useCallback(async (productId: string, brand: string, qtyToDeduct: number, warehouseId?: string) => {
+        // Find all stock items for this product/brand in the specific warehouse(s)
+        const candidates = stock.filter(s =>
+            s.productId === productId &&
+            (s.productBrand || '').toLowerCase().trim() === (brand || '').toLowerCase().trim() &&
+            (warehouseId ? s.warehouseId === warehouseId : true)
+        ).sort((a, b) => {
+            // Priority: items with no presentation details first (cleanup generic stock), then smallest quantities
+            const aHasPresentation = !!(a.presentationLabel || a.presentationContent);
+            const bHasPresentation = !!(b.presentationLabel || b.presentationContent);
+            if (aHasPresentation !== bHasPresentation) return aHasPresentation ? 1 : -1;
+            return a.quantity - b.quantity;
+        });
+
+        let remaining = qtyToDeduct;
+        for (const item of candidates) {
+            if (remaining <= 0) break;
+
+            if (item.quantity <= remaining + 0.0001) { // Add small epsilon for floating point
+                remaining -= item.quantity;
+                await deleteStock(item.id);
+            } else {
+                await updateStock({
+                    ...item,
+                    quantity: item.quantity - remaining,
+                    lastUpdated: new Date().toISOString()
+                });
+                remaining = 0;
+            }
+        }
+        return remaining <= 0.0001;
+    }, [stock, deleteStock, updateStock]);
+
+    const handleFacturaChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setFacturaFile(e.target.files[0]);
         }
-    };
+    }, []);
 
     // Upload factura to Supabase Storage and return public URL
-    const uploadFactura = async (movementId: string) => {
+    const uploadFactura = useCallback(async (movementId: string) => {
         if (!facturaFile) return '';
         const fileExt = facturaFile.name.split('.').pop();
         const filePath = `${id}/facturas/${movementId}.${fileExt}`;
@@ -175,20 +247,33 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
         const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
         return publicUrlData.publicUrl;
-    };
+    }, [id, facturaFile]);
 
     const [client, setClient] = useState<any>(null);
     useEffect(() => {
         db.get('clients', id).then(setClient);
     }, [id]);
 
-    const handleSetDefaultWarehouse = async (warehouseId: string) => {
+    const handleSetDefaultWarehouse = React.useCallback(async (warehouseId: string) => {
         if (!client) return;
         const updatedClient = { ...client, defaultHarvestWarehouseId: warehouseId, updatedAt: new Date().toISOString(), synced: false };
         await db.put('clients', updatedClient);
         setClient(updatedClient);
         syncService.pushChanges();
-    };
+    }, [client]);
+
+    const handleAddWarehouse = React.useCallback(async (name: string) => {
+        await addWarehouse(name);
+    }, [addWarehouse]);
+
+    const handleCancelMove = React.useCallback(() => setShowMovePanel(false), []);
+    const handleCloseSale = React.useCallback(() => setSellingStockId(null), []);
+    const handleToggleWarehouses = React.useCallback(() => setShowWarehouses(prev => !prev), []);
+    const handleToggleCatalog = React.useCallback(() => setShowCatalog(prev => !prev), []);
+
+    const clientInvestors = useMemo(() =>
+        client?.investors || client?.partners || []
+        , [client?.investors, client?.partners]);
 
     // Persistence for form state
     useEffect(() => {
@@ -211,17 +296,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         if (savedActiveW) setActiveWarehouseIds(JSON.parse(savedActiveW));
     }, [id]);
 
-    const toggleWarehouseSelection = (warehouseId: string) => {
+    const toggleWarehouseSelection = React.useCallback((warehouseId: string) => {
         setActiveWarehouseIds(prev =>
             prev.includes(warehouseId)
                 ? prev.filter(id => id !== warehouseId)
                 : [...prev, warehouseId]
         );
-    };
+    }, []);
 
-    const setAllWarehouses = (ids: string[]) => {
+    const setAllWarehouses = React.useCallback((ids: string[]) => {
         setActiveWarehouseIds(ids);
-    };
+    }, []);
 
     useEffect(() => {
         sessionStorage.setItem(`stock_showStockForm_${id}`, showStockForm.toString());
@@ -582,7 +667,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     }, [newProductName, newProductBrand, newProductCommercialName, newProductPA, editingProductId, newProductType, newProductUnit, id, updateProduct, addProduct]);
 
-    const handleStockSubmit = async (e: React.FormEvent) => {
+    const handleStockSubmit = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
 
         // Include active items if present
@@ -737,9 +822,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [id, stockItems, activeStockItem, facturaFile, uploadFactura, stock, availableProducts, selectedWarehouseId, selectedCampaignId, updateStock, selectedSeller, note, displayName, selectedInvestors, facturaDate, dueDate, movementsRefresh, setShowStockForm]);
 
-    const handleSaleSubmit = async (e: React.FormEvent) => {
+    const handleSaleSubmit = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!sellingStockId || !saleQuantity || !salePrice) return;
 
@@ -848,9 +933,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [id, sellingStockId, saleQuantity, salePrice, enrichedStock, saleFacturaFile, deductStockQuantity, saleNote, displayName, saleTruckDriver, salePlateNumber, saleTrailerPlate, saleDestinationCompany, saleDestinationAddress, saleTransportCompany, saleDischargeNumber, saleHumidity, saleHectoliterWeight, saleGrossWeight, saleTareWeight, salePrimarySaleCuit, saleDepartureDateTime, saleDistanceKm, saleFreightTariff, movementsRefresh]);
 
-    const handleConfirmMove = async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => {
+    const handleConfirmMove = React.useCallback(async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => {
         // quantities here is a map of specific stock IDs to their selected quantities
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
@@ -979,9 +1064,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 if (warehouse) setLastTransferOrigin(warehouse.name);
             }
         }
-    };
+    }, [id, stock, products, warehouses, displayName, updateStock, movementsRefresh, handleClearSelection]);
 
-    const toggleStockSelection = (id: string, e: React.MouseEvent) => {
+    const toggleStockSelection = React.useCallback((id: string, e: React.MouseEvent) => {
         // Prevent if clicking on actions or links
         if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('a')) return;
 
@@ -990,47 +1075,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 ? prev.filter(i => i !== id)
                 : [...prev, id]
         );
-    };
+    }, []);
 
-    const handleClearSelection = () => {
-        setSelectedStockIds([]);
-        setShowMovePanel(false);
-    };
 
-    const deductStockQuantity = async (productId: string, brand: string, qtyToDeduct: number, warehouseId?: string) => {
-        // Find all stock items for this product/brand in the specific warehouse(s)
-        const candidates = stock.filter(s =>
-            s.productId === productId &&
-            (s.productBrand || '').toLowerCase().trim() === (brand || '').toLowerCase().trim() &&
-            (warehouseId ? s.warehouseId === warehouseId : true)
-        ).sort((a, b) => {
-            // Priority: items with no presentation details first (cleanup generic stock), then smallest quantities
-            const aHasPresentation = !!(a.presentationLabel || a.presentationContent);
-            const bHasPresentation = !!(b.presentationLabel || b.presentationContent);
-            if (aHasPresentation !== bHasPresentation) return aHasPresentation ? 1 : -1;
-            return a.quantity - b.quantity;
-        });
 
-        let remaining = qtyToDeduct;
-        for (const item of candidates) {
-            if (remaining <= 0) break;
-
-            if (item.quantity <= remaining + 0.0001) { // Add small epsilon for floating point
-                remaining -= item.quantity;
-                await deleteStock(item.id);
-            } else {
-                await updateStock({
-                    ...item,
-                    quantity: item.quantity - remaining,
-                    lastUpdated: new Date().toISOString()
-                });
-                remaining = 0;
-            }
-        }
-        return remaining <= 0.0001;
-    };
-
-    const handleDeleteProduct = async (productId: string) => {
+    const handleDeleteProduct = React.useCallback(async (productId: string) => {
         if (!confirm('¿Está seguro que desea eliminar este producto del catálogo? Esto no eliminará el historial pero podría afectar la visualización de stock actual.')) return;
         try {
             await deleteProduct(productId);
@@ -1038,9 +1087,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             console.error(e);
             alert('Error al eliminar producto');
         }
-    };
+    }, [deleteProduct]);
 
-    const handleEditBrand = async (stockId: string, currentBrand: string) => {
+    const handleEditBrand = React.useCallback(async (stockId: string, currentBrand: string) => {
         const newBrand = prompt('Editar Marca:', currentBrand);
         if (newBrand === null || newBrand === currentBrand) return;
 
@@ -1079,7 +1128,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 productBrand: newBrand
             });
         }
-    };
+    }, [stock, updateStock, deleteStock]);
 
     const addStockToBatch = React.useCallback(() => {
         if (!activeStockItem.productId || !activeStockItem.quantity) return;
@@ -1124,42 +1173,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         });
     }, []);
 
-    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
-        setActiveStockItem(prev => {
-            const newState = { ...prev, [field]: value };
-
-            // Auto-calculate quantity if presentation content or amount changes
-            if (field === 'presentationContent' || field === 'presentationAmount') {
-                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
-                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
-
-                const content = parseFloat(contentVal.toString().replace(',', '.'));
-                const amount = parseFloat(amountVal.toString().replace(',', '.'));
-
-                if (!isNaN(content) && !isNaN(amount)) {
-                    newState.quantity = (content * amount).toString();
-                }
-            }
-
-            return newState;
-        });
-    }, []);
 
 
-    const productTypes: ProductType[] = ['HERBICIDE', 'FERTILIZER', 'SEED', 'GRAIN', 'FUNGICIDE', 'INSECTICIDE', 'COADYUVANTE', 'INOCULANTE', 'OTHER'];
 
-    const typeLabels: Record<string, string> = {
-        HERBICIDE: 'Herbicida',
-        FERTILIZER: 'Fertilizante',
-        SEED: 'Semilla',
-        FUNGICIDE: 'Fungicida',
-        INSECTICIDE: 'Insecticida',
-        INOCULANTE: 'Inoculante',
-        GRAIN: 'Grano',
-        OTHER: 'Otro'
-    };
 
-    const handleImportProducts = async (importedProducts: any[]) => {
+
+    const handleImportProducts = React.useCallback(async (importedProducts: any[]) => {
         setIsSubmitting(true);
         try {
             let importedCount = 0;
@@ -1193,7 +1212,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [availableProducts, addProduct, id]);
 
     if (role === 'CONTRATISTA') {
         return (
@@ -1342,7 +1361,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             {sellingStockId && (
                 <StockSalePanel
                     stockItem={enrichedStock.find(s => s.id === sellingStockId)}
-                    onClose={() => setSellingStockId(null)}
+                    onClose={handleCloseSale}
                     onSubmit={handleSaleSubmit}
                     saleQuantity={saleQuantity}
                     setSaleQuantity={setSaleQuantity}
@@ -1398,8 +1417,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     warehouses={warehouses}
                     activeWarehouseIds={activeWarehouseIds}
                     onConfirm={handleConfirmMove}
-                    onCancel={() => setShowMovePanel(false)}
-                    investors={client?.investors || client?.partners || []}
+                    onCancel={handleCancelMove}
+                    investors={clientInvestors}
                     campaigns={campaigns}
                     movements={movements}
                     isSaleActive={!!sellingStockId}
@@ -1409,7 +1428,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             <div className="flex justify-end pr-2 pb-4 gap-2 flex-wrap">
                 {!isReadOnly && (
                     <button
-                        onClick={() => setShowWarehouses(!showWarehouses)}
+                        onClick={handleToggleWarehouses}
                         className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showWarehouses ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                     >
                         {showWarehouses ? 'Cerrar gestión de galpón' : 'Gestionar Galpones'}
@@ -1417,7 +1436,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 )}
                 {!isReadOnly && (
                     <button
-                        onClick={() => setShowCatalog(!showCatalog)}
+                        onClick={handleToggleCatalog}
                         className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showCatalog ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                     >
                         {showCatalog ? 'Cerrar catálogo' : 'Catálogo de productos'}
@@ -1437,7 +1456,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 showWarehouseForm={showWarehouseForm}
                 setShowWarehouseForm={setShowWarehouseForm}
                 warehouses={warehouses}
-                addWarehouse={async (name) => { await addWarehouse(name); }}
+                addWarehouse={handleAddWarehouse}
                 updateWarehouse={updateWarehouse}
                 deleteWarehouse={deleteWarehouse}
                 activeWarehouseIds={activeWarehouseIds}
@@ -1550,6 +1569,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 selectedCampaignId={selectedCampaignId}
                 setSelectedCampaignId={setSelectedCampaignId}
             />
-        </div >
+        </div>
     );
 }

@@ -102,13 +102,13 @@ export function OrderLocationStep({
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fecha de emisión</label>
                 <input
                     type="date"
-                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-white"
                     value={date}
                     onChange={e => setDate(e.target.value)}
                 />
             </div>
 
-            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-4">
+            <div className="bg-white p-4 rounded-xl border border-emerald-100 space-y-4">
                 <div className="flex gap-6 items-center">
                     <button
                         type="button"
@@ -139,7 +139,7 @@ export function OrderLocationStep({
                             <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider mb-1">Inicio de ventana de aplicación</label>
                             <input
                                 type="date"
-                                className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
+                                className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm bg-white"
                                 value={appStart}
                                 onChange={e => setAppStart(e.target.value)}
                             />
@@ -148,7 +148,7 @@ export function OrderLocationStep({
                             <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider mb-1">Fin de ventana de aplicación</label>
                             <input
                                 type="date"
-                                className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
+                                className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm bg-white"
                                 value={appEnd}
                                 onChange={e => setAppEnd(e.target.value)}
                             />
@@ -159,7 +159,7 @@ export function OrderLocationStep({
                         <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider mb-1 text-left">Día de aplicación</label>
                         <input
                             type="date"
-                            className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
+                            className="block w-full rounded-lg border-emerald-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm bg-white"
                             value={applicationDate}
                             onChange={e => setApplicationDate(e.target.value)}
                         />
@@ -170,7 +170,7 @@ export function OrderLocationStep({
             <div className="w-full">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Campo</label>
                 <select
-                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 bg-white"
                     value={selectedFarmId}
                     onChange={e => {
                         setSelectedFarmId(e.target.value);
@@ -187,7 +187,7 @@ export function OrderLocationStep({
                 <div className="w-full">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seleccionar Lotes</label>
                     <select
-                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4"
+                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 bg-white"
                         value=""
                         onChange={e => {
                             if (e.target.value) handleLotClick(e.target.value);
@@ -209,15 +209,15 @@ export function OrderLocationStep({
                             const lot = lots.find(l => l.id === id);
                             if (!lot) return null;
                             return (
-                                <div key={id} className="flex flex-row items-center gap-4 animate-fadeIn border-b border-slate-100 pb-3">
+                                <div key={id} className="flex flex-row items-center gap-4 animate-fadeIn bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-3">
                                     <div className="flex-none min-w-[120px]">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-slate-700 block">{lot.name}</span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
-                                                {lotHectares[id] !== undefined ? `${lotHectares[id]} ha` : `${lot.hectares} ha`}
-                                            </span>
+                                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                                            {lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares
+                                                ? `${lotHectares[id]} / ${lot.hectares} ha`
+                                                : `${lot.hectares} ha`}
                                         </div>
                                     </div>
                                     <div className="flex-1">
@@ -253,10 +253,11 @@ export function OrderLocationStep({
                                                     setEditingHectaresId(id);
                                                     setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : '');
                                                 }}
-                                                className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
-                                                title="Editar hectáreas"
+                                                className="px-2 py-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1"
+                                                title="recortar ha"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <span className="text-[10px] uppercase font-bold tracking-wider">recortar ha</span>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>
                                             </button>

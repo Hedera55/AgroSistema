@@ -67,6 +67,7 @@ export type LotStatus = 'EMPTY' | 'NOT_SOWED' | 'SOWED' | 'HARVESTED';
 
 export interface Lot { // Lote
     id: string;
+    clientId?: string; // Appended for global sync requirements
     farmId: string;
     farmName?: string; // Optional: field to store the resolved farm name for reports/PDFs
     name: string;

@@ -238,6 +238,7 @@ export function useOrders(clientId: string) {
                     const sowedCrop = seedItem?.productName || order.items?.[0]?.productName || 'Desconocido';
                     await db.put('lots', {
                         ...lot,
+                        clientId: lot.clientId || clientId,
                         cropSpecies: sowedCrop,
                         status: 'SOWED',
                         updatedAt: new Date().toISOString(),

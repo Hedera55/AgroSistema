@@ -366,9 +366,9 @@ export function StockMovementPanel({
                         value={destinationId}
                         onChange={e => setDestinationId(e.target.value)}
                     >
-                        <option value="">Seleccione galpón de destino...</option>
+                        <option key="default-destination" value="">Seleccione galpón de destino...</option>
                         {validWarehouses.map(w => (
-                            <option key={w.id} value={w.id}>{w.name}</option>
+                            <option key={`destination-${w.id}`} value={w.id}>{w.name}</option>
                         ))}
                     </select>
                 </div>
@@ -382,9 +382,9 @@ export function StockMovementPanel({
                         value={receiverName}
                         onChange={e => setReceiverName(e.target.value)}
                     >
-                        <option value="">Seleccione...</option>
+                        <option key="default-receiver" value="">Seleccione...</option>
                         {investors.map((inv) => (
-                            <option key={inv.name} value={inv.name}>{inv.name}</option>
+                            <option key={`receiver-${inv.name}`} value={inv.name}>{inv.name}</option>
                         ))}
                     </select>
 

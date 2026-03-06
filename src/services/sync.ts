@@ -71,6 +71,7 @@ const mappers = {
         product_id: s.productId,
         product_brand: s.productBrand || null,
         quantity: s.quantity,
+        campaign_id: s.campaignId || null,
         updated_at: s.updatedAt || s.lastUpdated || new Date().toISOString()
     }),
     order: (o: Order) => ({
@@ -103,7 +104,8 @@ const mappers = {
         deleted_at: o.deletedAt || null,
         deleted_by: o.deletedBy || null,
         sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null,
-        investor_name: o.investorName || null
+        investor_name: o.investorName || null,
+        campaign_id: o.campaignId || null
     }),
     movement: (m: InventoryMovement) => {
         let mappedType = m.type;
@@ -129,6 +131,7 @@ const mappers = {
             factura_image_url: m.facturaImageUrl,
             investor_name: m.investorName || null,
             created_by: m.createdBy,
+            campaign_id: m.campaignId || null,
             created_at: m.createdAt || new Date(m.date).toISOString(),
             deleted: m.deleted || false,
             deleted_at: m.deletedAt || null,
@@ -243,6 +246,7 @@ const reverseMappers = {
         quantity: s.quantity,
         updatedAt: s.updated_at,
         lastUpdated: s.updated_at,
+        campaignId: s.campaign_id,
         synced: true
     }),
     order: (o: any): Order => ({
@@ -275,7 +279,8 @@ const reverseMappers = {
         deletedAt: o.deleted_at,
         deletedBy: o.deleted_by,
         sowingOrderId: o.sowing_order_id,
-        investorName: o.investor_name
+        investorName: o.investor_name,
+        campaignId: o.campaign_id
     }),
     movement: (m: any): InventoryMovement => ({
         id: m.id,
@@ -300,7 +305,8 @@ const reverseMappers = {
         synced: true,
         deleted: m.deleted,
         deletedAt: m.deleted_at,
-        deletedBy: m.deleted_by
+        deletedBy: m.deleted_by,
+        campaignId: m.campaign_id
     }),
     activity: (a: any): OrderActivity => ({
         id: a.id,
@@ -533,76 +539,86 @@ export class SyncService {
                 const { error } = await query;
 
                 if (error) {
+                    // 1. Schema Mismatch / Missing Columns
                     if (error.message.includes("schema cache") || error.message.includes("column")) {
-                        console.error(`⚠️ Schema mismatch on ${tableName}: ${error.message}. Please ensure migrations are run.`);
-                    } else if (tableName === 'stock' && (error.message.includes('stock_pkey') || error.message.includes('duplicate key'))) {
-                        // Specific fix for Stock PKEY / Unique constraint mixup
-                        console.warn(`🔄 Natural key conflict on Stock for ${item.id}. Reconciling with remote...`);
+                        console.error(`⚠️ Schema mismatch on ${tableName}: ${error.message}. Please check migrations.`);
+                        continue; // Skip this item, keep it unsynced
+                    }
+
+                    // 2. Natural Key Conflict (Stock specific)
+                    if (tableName === 'stock' && (error.message.includes('stock_pkey') || error.message.includes('duplicate key'))) {
+                        console.warn(`🔄 Reconciling Stock natural key conflict for ${item.id}...`);
                         const { id: _, ...payloadWithoutId } = payload;
                         const { data: retryData, error: retryError } = await supabase
                             .from(tableName)
-                            .upsert(payloadWithoutId, {
-                                onConflict: 'client_id,product_id,warehouse_id',
-                                ignoreDuplicates: false
-                            })
+                            .upsert(payloadWithoutId, { onConflict: 'client_id,product_id,warehouse_id', ignoreDuplicates: false })
                             .select('id')
                             .single();
 
-                        if (retryError) {
-                            console.error(`❌ Reconciliation failed for ${item.id}:`, retryError.message);
-                        } else if (retryData) {
-                            console.log(`✅ Stock reconciled. Remote ID: ${retryData.id}`);
-                            // IMPORTANT: Update local ID to match remote ID to avoid future conflicts
+                        if (!retryError && retryData) {
                             if (retryData.id !== item.id) {
                                 await db.delete(localStoreName, item.id);
                                 await db.put(localStoreName, { ...item, id: retryData.id, synced: true });
                             } else {
                                 await db.markSynced(localStoreName, item.id);
                             }
-                            continue; // Use continue instead of return to process other items!
+                        } else {
+                            console.error(`❌ Stock reconciliation failed for ${item.id}:`, retryError?.message);
                         }
-                    } else {
-                        console.error(`Failed to push ${localStoreName}/${item.id}:`, error.message);
-
-                        // Auto-fix for legacy/invalid IDs or UUID syntax errors
-                        const isInvalidUuid = error.message.includes('invalid input syntax for type uuid');
-                        const isDuplicateKey = error.message.includes('duplicate key value violates unique constraint');
-                        const isFkViolation = (error as any).code === '23503' || error.message.includes('violates foreign key constraint');
-
-                        if (isFkViolation && tableName === 'orders' && error.message.includes('orders_lot_id_fkey')) {
-                            console.warn(`⚠️ Orphaned lot_id in order ${item.id}. Nullifying lot_id to unblock sync.`);
-                            const newPayload = { ...payload, lot_id: null };
-                            const { error: retryError } = await supabase.from(tableName).upsert(newPayload);
-                            if (!retryError) {
-                                console.log(`✅ Order ${item.id} synced with null lot_id.`);
-                                await db.markSynced(localStoreName, item.id);
-                                continue;
-                            } else {
-                                console.error(`❌ Retry failed for order ${item.id}:`, retryError.message);
-                            }
-                        }
-
-                        if (isInvalidUuid ||
-                            (isDuplicateKey && tableName !== 'stock') // If duplicate key on non-stock, might be bad ID
-                        ) {
-                            // Check for known bad patterns or just brute force clean up blocking items
-                            const id = item.id as string;
-                            if (
-                                id.startsWith('grain-') ||
-                                id.includes('CONSOLIDATED') ||
-                                error.message.includes('CONSOLIDATED') ||
-                                isInvalidUuid // Aggressive cleanup for any UUID syntax error to unblock sync
-                            ) {
-                                console.warn(`🗑️ Auto-deleting item with invalid UUID/Data: ${item.id}`);
-                                try {
-                                    await db.delete(localStoreName, item.id);
-                                    console.log(`✅ Deleted invalid item ${item.id}.`);
-                                } catch (delError) {
-                                    console.error(`Failed to auto-delete invalid item ${item.id}`, delError);
-                                }
-                            }
-                        }
+                        continue;
                     }
+
+                    // 3. Foreign Key Violations (e.g. missing Lot or Warehouse on server)
+                    if ((error as any).code === '23503' || error.message.includes('violates foreign key constraint')) {
+                        const fkDetails = (error as any).detail || '';
+                        let referencedId = '';
+                        const match = fkDetails.match(/\((.*?)\)=\((.*?)\)/);
+                        if (match && match[2]) referencedId = match[2];
+
+                        // Fallback: guess referenced ID from the item keys based on constraint name
+                        let parentStore = '';
+                        if (error.message.includes('orders_lot_id_fkey')) {
+                            parentStore = 'lots';
+                            referencedId = referencedId || item.lot_id || item.lotId;
+                        } else if (error.message.includes('orders_warehouse_id_fkey')) {
+                            parentStore = 'warehouses';
+                            referencedId = referencedId || item.warehouse_id || item.warehouseId;
+                        } else if (error.message.includes('order_activities_order_id_fkey')) {
+                            parentStore = 'orders';
+                            referencedId = referencedId || item.order_id || item.orderId;
+                        }
+
+                        console.warn(`🚫 ${tableName} ${item.id} skipped: Missing remote dependency (FK). ${error.message}${referencedId ? ` (Referenced ID seems to be: ${referencedId})` : ''}`);
+
+                        // Check if the referenced ID exists locally
+                        if (referencedId && parentStore) {
+                            const existsLocally = await db.get(parentStore as any, referencedId);
+                            if (!existsLocally) {
+                                console.warn(`⚠️ The referenced ID ${referencedId} in ${parentStore} does NOT exist locally either. This is an orphaned record. (Item: ${JSON.stringify(item)})`);
+                                console.log(`🗑️ Soft-deleting orphaned ${tableName} ${item.id} to unblock sync queue.`);
+                                // Soft delete instead of hard delete so UI drops it.
+                                await db.put(localStoreName, { ...item, deleted: true, synced: true });
+
+                                // Cascade to activities if this is an order
+                                if (tableName === 'orders') {
+                                    const allActivities = await db.getAll('order_activities');
+                                    for (const act of allActivities) {
+                                        if (act.orderId === item.id || act.order_id === item.id) {
+                                            console.log(`Cascade soft-deleting orphaned activity ${act.id}`);
+                                            await db.put('order_activities', { ...act, deleted: true, synced: true });
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.info(`ℹ️ The referenced ID ${referencedId} exists locally in ${parentStore} but not on the server. It might be waiting to sync.`);
+                            }
+                        }
+
+                        continue; // Do NOT nullify, just wait for the dependency to sync or be fixed
+                    }
+
+                    // 4. Other Errors (ID syntax, unique constraints, etc.)
+                    console.error(`❌ Failed to push ${tableName}/${item.id}:`, error.message);
                 } else {
                     await db.markSynced(localStoreName, item.id);
                 }

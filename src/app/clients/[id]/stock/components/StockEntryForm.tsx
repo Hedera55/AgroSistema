@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Warehouse, Product, Client, Campaign, MovementItem } from '@/types';
@@ -152,9 +152,10 @@ interface StockEntryFormProps {
     handleFacturaChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isSubmitting: boolean;
     facturaUploading: boolean;
-    campaigns: Campaign[];
-    selectedCampaignId: string;
-    setSelectedCampaignId: (id: string) => void;
+    campaigns?: Campaign[];
+    selectedCampaignId?: string;
+    setSelectedCampaignId?: (id: string) => void;
+    isEditing?: boolean;
 }
 
 function StockEntryFormInternal({
@@ -197,6 +198,7 @@ function StockEntryFormInternal({
     campaigns,
     selectedCampaignId,
     setSelectedCampaignId,
+    isEditing,
     showSellerInput,
     setShowSellerInput,
     showSellerDelete,
@@ -208,24 +210,53 @@ function StockEntryFormInternal({
 }: StockEntryFormProps) {
     if (!showStockForm) return null;
 
-    // Sort and filter products: exclude "Propia" brand for purchases
-    const sortedProducts = availableProducts
-        .filter(p => !p.brandName || p.brandName.toLowerCase() !== 'propia')
-        .sort((a, b) => {
-            const nameA = (a.activeIngredient || a.name).toLowerCase();
-            const nameB = (b.activeIngredient || b.name).toLowerCase();
-            return nameA.localeCompare(nameB);
-        });
+    const filteredProducts = useMemo(() => {
+        const sorted = availableProducts
+            .filter((p: Product) => !p.brandName || p.brandName.toLowerCase() !== 'propia')
+            .sort((a, b) => {
+                const nameA = (a.activeIngredient || a.name).toLowerCase();
+                const nameB = (b.activeIngredient || b.name).toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
 
-    const activeProduct = availableProducts.find(p => p.id === activeStockItem.productId);
+        const targetWId = selectedWarehouseId || activeWarehouseIds[0];
+        const targetW = warehouses.find(w => w.id === targetWId);
+
+        return sorted.filter((p: Product) => {
+            if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
+            return true;
+        });
+    }, [availableProducts, selectedWarehouseId, activeWarehouseIds, warehouses]);
+
+    const activeProduct = useMemo(() =>
+        availableProducts.find(p => p.id === activeStockItem.productId)
+        , [availableProducts, activeStockItem.productId]);
+
+    const investorOptions = useMemo(() => {
+        const source = client?.partners || client?.investors || [];
+        return source.map((p: any) => {
+            let name = '';
+            if (typeof p === 'string') {
+                if (p.trim().startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(p);
+                        name = parsed.name || p;
+                    } catch (e) {
+                        name = p;
+                    }
+                } else {
+                    name = p;
+                }
+            } else {
+                name = p?.name || '';
+            }
+            return name;
+        }).filter(Boolean);
+    }, [client?.partners, client?.investors]);
 
     const handleAddInvestor = (name: string) => {
         if (!name) return;
         if (selectedInvestors.find(i => i.name === name)) return;
-
-        // precise logic: if first one, 100%. If adding second, maybe split? 
-        // User didn't specify auto-split logic, just "box appears with percentage box".
-        // Default to 0 or 100? Let's default to 0 and let user fill, or 100 if it's the first.
         const newInv = { name, percentage: selectedInvestors.length === 0 ? 100 : 0 };
         setSelectedInvestors([...selectedInvestors, newInv]);
     };
@@ -276,18 +307,12 @@ function StockEntryFormInternal({
                             onChange={e => updateActiveStockItem('productId', e.target.value)}
                             required={stockItems.length === 0}
                         >
-                            <option value="">Seleccione...</option>
-                            {sortedProducts
-                                .filter(p => {
-                                    const targetW = warehouses.find(w => w.id === (selectedWarehouseId || activeWarehouseIds[0]));
-                                    if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
-                                    return true;
-                                })
-                                .map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.commercialName || '-'} ({p.activeIngredient || p.name}) ({p.brandName || '-'})
-                                    </option>
-                                ))}
+                            <option key="default" value="">Seleccione...</option>
+                            {filteredProducts.map(p => (
+                                <option key={`prod-${p.id}`} value={p.id}>
+                                    {p.commercialName || '-'} ({p.activeIngredient || p.name}) ({p.brandName || '-'})
+                                </option>
+                            ))}
                         </select>
                     </div>
 
@@ -447,10 +472,13 @@ function StockEntryFormInternal({
                                 }
                             }}
                         >
-                            <option value="">Seleccione...</option>
-                            {availableSellers.map(s => <option key={s} value={s}>{s}</option>)}
-                            <option value="ADD_NEW">+ vendedor</option>
-                            {availableSellers.length > 0 && <option value="DELETE">- vendedor</option>}
+                            <option key="default" value="">Seleccione...</option>
+                            {availableSellers.map(s => <option key={`opt-sel-${s}`} value={s}>{s}</option>)}
+                            {selectedSeller && !availableSellers.includes(selectedSeller) && (
+                                <option key="fallback" value={selectedSeller}>{selectedSeller}</option>
+                            )}
+                            <option key="add" value="ADD_NEW">+ vendedor</option>
+                            {availableSellers.length > 0 && <option key="del" value="DELETE">- vendedor</option>}
                         </select>
 
                         {showSellerInput && (
@@ -521,12 +549,15 @@ function StockEntryFormInternal({
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={selectedCampaignId}
-                            onChange={e => setSelectedCampaignId(e.target.value)}
+                            onChange={e => setSelectedCampaignId?.(e.target.value)}
                         >
-                            <option value="" className="text-slate-400">Seleccione Campaña...</option>
-                            {campaigns.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key="opt-camp-default" value="" className="text-slate-400">Seleccione Campaña...</option>
+                            {campaigns?.map(c => (
+                                <option key={`opt-camp-${c.id}`} value={c.id}>{c.name}</option>
                             ))}
+                            {selectedCampaignId && !campaigns?.some(c => c.id === selectedCampaignId) && (
+                                <option key="opt-camp-fallback" value={selectedCampaignId}>Campaña anterior</option>
+                            )}
                         </select>
                     </div>
 
@@ -538,9 +569,9 @@ function StockEntryFormInternal({
                             onChange={e => setSelectedWarehouseId(e.target.value)}
                             required
                         >
-                            <option value="">Seleccione...</option>
+                            <option key="opt-ware-default" value="">Seleccione...</option>
                             {warehouses.map(w => (
-                                <option key={w.id} value={w.id}>{w.name}</option>
+                                <option key={`opt-ware-${w.id}`} value={w.id}>{w.name}</option>
                             ))}
                         </select>
                     </div>
@@ -579,9 +610,11 @@ function StockEntryFormInternal({
                                     e.target.value = "";
                                 }}
                             >
-                                <option value="">...</option>
-                                {client?.partners?.map((p: any) => (
-                                    <option key={p.name} value={p.name}>{p.name}</option>
+                                <option key="default" value="">...</option>
+                                {investorOptions.map((name, idx) => (
+                                    <option key={`opt-inv-${name}-${idx}`} value={name}>
+                                        {name}
+                                    </option>
                                 ))}
                             </select>
                         </div>
@@ -665,7 +698,7 @@ function StockEntryFormInternal({
                         isLoading={isSubmitting || facturaUploading}
                         className="px-8 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto"
                     >
-                        Confirmar Compra
+                        {isEditing ? 'Confirmar cambios' : 'Confirmar Compra'}
                     </Button>
                 </div>
 
@@ -697,8 +730,8 @@ function StockEntryFormInternal({
                         </div>
                     )
                 }
-            </form >
-        </div >
+            </form>
+        </div>
     );
 }
 

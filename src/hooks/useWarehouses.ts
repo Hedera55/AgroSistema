@@ -26,7 +26,7 @@ export function useWarehouses(clientId: string) {
         refresh();
     }, [refresh]);
 
-    const addWarehouse = async (name: string) => {
+    const addWarehouse = useCallback(async (name: string) => {
         // Check for duplicates
         if (warehouses.some(w => w.name.toLowerCase() === name.toLowerCase())) {
             alert(`Ya existe un galpón con el nombre "${name}". Por favor usa un nombre diferente.`);
@@ -46,9 +46,9 @@ export function useWarehouses(clientId: string) {
         await syncService.pushChanges();
         await refresh();
         return item;
-    };
+    }, [clientId, warehouses, refresh]);
 
-    const updateWarehouse = async (warehouse: Warehouse) => {
+    const updateWarehouse = useCallback(async (warehouse: Warehouse) => {
         // Check for duplicates (excluding itself)
         if (warehouses.some(w => w.id !== warehouse.id && w.name.toLowerCase() === warehouse.name.toLowerCase())) {
             alert(`Ya existe otro galpón llamado "${warehouse.name}".`);
@@ -59,9 +59,9 @@ export function useWarehouses(clientId: string) {
         await db.put('warehouses', item);
         await syncService.pushChanges();
         await refresh();
-    };
+    }, [warehouses, refresh]);
 
-    const deleteWarehouse = async (id: string) => {
+    const deleteWarehouse = useCallback(async (id: string) => {
         const item = warehouses.find(w => w.id === id);
         if (!item) return;
 
@@ -76,7 +76,7 @@ export function useWarehouses(clientId: string) {
         await db.put('warehouses', deletedItem);
         await syncService.pushChanges();
         await refresh();
-    };
+    }, [warehouses, refresh]);
 
     return { warehouses, loading, addWarehouse, updateWarehouse, deleteWarehouse, refresh };
 }

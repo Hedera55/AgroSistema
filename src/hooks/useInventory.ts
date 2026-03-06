@@ -29,7 +29,7 @@ export function useInventory() {
         refresh();
     }, [refresh]);
 
-    const addProduct = async (product: Omit<Product, 'id'> & { id?: string }) => {
+    const addProduct = useCallback(async (product: Omit<Product, 'id'> & { id?: string }) => {
         // 1. Check if a product with same name AND brand already exists for this client
         const allProducts = await db.getAll('products');
         const existing = allProducts.find((p: Product) =>
@@ -54,9 +54,9 @@ export function useInventory() {
         await refresh();
         syncService.pushChanges();
         return finalProduct;
-    };
+    }, [refresh]);
 
-    const addClient = async (client: Omit<Client, 'id'> & { id?: string }) => {
+    const addClient = useCallback(async (client: Omit<Client, 'id'> & { id?: string }) => {
         const finalClient = {
             ...client,
             id: client.id || generateId(),
@@ -67,9 +67,9 @@ export function useInventory() {
         await refresh();
         syncService.pushChanges();
         return finalClient;
-    };
+    }, [refresh]);
 
-    const deleteClient = async (clientId: string) => {
+    const deleteClient = useCallback(async (clientId: string) => {
         const client = await db.get('clients', clientId);
         if (client) {
             await db.put('clients', {
@@ -81,9 +81,9 @@ export function useInventory() {
             await refresh();
             syncService.pushChanges();
         }
-    };
+    }, [refresh]);
 
-    const deleteProduct = async (productId: string) => {
+    const deleteProduct = useCallback(async (productId: string) => {
         const product = await db.get('products', productId);
         if (product) {
             await db.put('products', {
@@ -95,21 +95,21 @@ export function useInventory() {
             await refresh();
             syncService.pushChanges();
         }
-    };
+    }, [refresh]);
 
-    const updateProduct = async (product: Product) => {
+    const updateProduct = useCallback(async (product: Product) => {
         const updated = { ...product, synced: false, updatedAt: new Date().toISOString() };
         await db.put('products', updated);
         await refresh();
         syncService.pushChanges();
-    };
+    }, [refresh]);
 
-    const updateClient = async (client: Client) => {
+    const updateClient = useCallback(async (client: Client) => {
         const updated = { ...client, synced: false, updatedAt: new Date().toISOString() };
         await db.put('clients', updated);
         await refresh();
         syncService.pushChanges();
-    };
+    }, [refresh]);
 
     return { products, clients, loading, addProduct, updateProduct, deleteProduct, addClient, deleteClient, updateClient, refresh };
 }
@@ -139,7 +139,7 @@ export function useClientStock(clientId: string) {
         refresh();
     }, [refresh]);
 
-    const updateStock = async (item: Omit<ClientStock, 'id'> & { id?: string }) => {
+    const updateStock = useCallback(async (item: Omit<ClientStock, 'id'> & { id?: string }) => {
         const finalItem = {
             ...item,
             id: item.id || generateId(),
@@ -150,13 +150,13 @@ export function useClientStock(clientId: string) {
         await refresh();
         syncService.pushChanges();
         return finalItem;
-    };
+    }, [refresh]);
 
-    const deleteStock = async (id: string) => {
+    const deleteStock = useCallback(async (id: string) => {
         await db.delete('stock', id);
         await refresh();
         syncService.pushChanges();
-    };
+    }, [refresh]);
 
     return { stock, loading, updateStock, deleteStock, refresh };
 }

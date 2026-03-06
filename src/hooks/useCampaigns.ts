@@ -31,7 +31,7 @@ export function useCampaigns(clientId: string) {
         refresh();
     }, [refresh]);
 
-    const addCampaign = async (campaign: Omit<Campaign, 'id' | 'clientId'>) => {
+    const addCampaign = useCallback(async (campaign: Omit<Campaign, 'id' | 'clientId'>) => {
         const newCampaign: Campaign = {
             ...campaign,
             id: generateId(),
@@ -44,9 +44,9 @@ export function useCampaigns(clientId: string) {
         await refresh();
         syncService.pushChanges();
         return newCampaign;
-    };
+    }, [clientId, refresh]);
 
-    const updateCampaign = async (campaign: Campaign) => {
+    const updateCampaign = useCallback(async (campaign: Campaign) => {
         const updated: Campaign = {
             ...campaign,
             synced: false,
@@ -56,9 +56,9 @@ export function useCampaigns(clientId: string) {
         await refresh();
         syncService.pushChanges();
         return updated;
-    };
+    }, [refresh]);
 
-    const deleteCampaign = async (id: string) => {
+    const deleteCampaign = useCallback(async (id: string) => {
         const campaign = await db.get('campaigns', id);
         if (campaign) {
             await db.put('campaigns', {
@@ -70,7 +70,7 @@ export function useCampaigns(clientId: string) {
             await refresh();
             syncService.pushChanges();
         }
-    };
+    }, [refresh]);
 
     return { campaigns, loading, addCampaign, updateCampaign, deleteCampaign, refresh };
 }
