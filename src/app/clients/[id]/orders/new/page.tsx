@@ -524,7 +524,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     handleCancelEdit={handleCancelEdit}
                     onBack={() => setStep(1)}
                     onNext={() => setStep(3)}
-                    clientPartners={client?.partners}
+                    clientPartners={[...(client?.partners || []), ...(client?.investors || [])]}
                 />
             )}
 

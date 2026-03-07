@@ -2,7 +2,7 @@
 
 import { use, useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useFarms, useLots } from '@/hooks/useLocations';
+import { useFarms, useLots, useAllLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { useInventory, useClientStock } from '@/hooks/useInventory';
@@ -55,6 +55,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     // Hoisted Lots State
     const { lots, addLot, updateLot, deleteLot, loading: lotsLoading } = useLots(selectedFarmId || '');
+    const { lots: allClientLots } = useAllLots(id);
     const [editingLotId, setEditingLotId] = useState<string | null>(null);
     const [lotName, setLotName] = useState('');
     const [lotHectares, setLotHectares] = useState('');
@@ -119,9 +120,16 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         const fetchExtras = async () => {
             const { data: contractorsData } = await supabase
                 .from('profiles')
-                .select('id, username')
+                .select('id, username, assigned_clients')
                 .eq('role', 'CONTRATISTA');
-            if (contractorsData) setContractors(contractorsData);
+
+            if (contractorsData) {
+                // Filter contractors assigned to this specific client
+                const filtered = contractorsData.filter(c =>
+                    c.assigned_clients && c.assigned_clients.includes(id)
+                );
+                setContractors(filtered);
+            }
 
             const clientData = await db.get('clients', id);
             setClient(clientData);
@@ -1537,6 +1545,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         }}
                                         onEditEvent={handleEditHarvest}
                                     />
+
                                 </div>
                             )}
                             {activePanel.type === 'sowing_details' && (
@@ -1633,7 +1642,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 client={profile as any}
                                                 warehouses={warehouses}
                                                 farms={farms}
-                                                lots={lots}
+                                                lots={allClientLots}
                                                 campaigns={campaigns}
                                                 onClose={() => setActivePanel(null)}
                                                 onEdit={() => setIsEditingHarvestPanel(true)}
@@ -1713,83 +1722,81 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             )}
                         </div>
                     </div>
-                </div>
-            )}
 
-            {/* LEVEL 3: DETALLES DE ORDEN / COSECHA */}
-            {selectedEvent && (
-                <div ref={detailSectionRef} className="container mx-auto max-w-7xl px-4 lg:px-8 mt-8 pb-10 scroll-mt-6">
-                    {selectedEvent.type === 'HARVEST' ? (
-                        <HarvestDetailsView
-                            harvestMovement={selectedEvent.movements[0]}
-                            harvestMovements={selectedEvent.movements}
-                            client={profile as any}
-                            warehouses={warehouses}
-                            farms={farms}
-                            lots={lots}
-                            campaigns={campaigns}
-                            onClose={() => setSelectedEvent(null)}
-                            onEdit={() => {
-                                // Correct way to trigger edit in fields/page.tsx
-                                const m = selectedEvent.movements[0];
-                                setHarvestDate(m.date);
-                                setHarvestContractor(m.contractorName || '');
-                                setHarvestLaborPrice(m.harvestLaborPricePerHa?.toString() || '');
-                                setObservedYield(m.quantity);
-                                setSelectedLotId(activePanel?.id || '');
-
-                                // Set distributions for the wizard
-                                setHarvestPlanOrder({
-                                    ...m,
-                                    movements: selectedEvent.movements
-                                } as any);
-
-                                setIsEditingHarvestPanel(true);
-                                setIsHarvesting(true);
-                                setSelectedEvent(null);
-                            }}
-                            onSelectMovement={(m) => {
-                                setSelectedMovement({
-                                    m,
-                                    destName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'
-                                });
-                                setTimeout(() => {
-                                    logisticsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
-                            }}
-                            isReadOnly={isReadOnly}
-                        />
-                    ) : (
-                        selectedEvent.rawOrder && (
-                            <OrderDetailView
-                                order={selectedEvent.rawOrder}
-                                client={client!}
-                                warehouses={warehouses}
-                                lots={lots}
-                                campaigns={campaigns}
-                                onClose={() => setSelectedEvent(null)}
-                            />
-                        )
+                    {/* SEPARATE FLOATING BOX FOR DETAILS (Level 3) */}
+                    {selectedEvent && (
+                        <div
+                            ref={detailSectionRef}
+                            className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-24"
+                        >
+                            <div className="px-0 pb-0">
+                                {selectedEvent.type === 'HARVEST' ? (
+                                    <HarvestDetailsView
+                                        harvestMovement={selectedEvent.movements[0]}
+                                        harvestMovements={selectedEvent.movements}
+                                        client={client as any}
+                                        warehouses={warehouses}
+                                        farms={farms}
+                                        lots={allClientLots}
+                                        campaigns={campaigns}
+                                        onClose={() => setSelectedEvent(null)}
+                                        onEdit={() => {
+                                            const m = selectedEvent.movements[0];
+                                            setHarvestDate(m.date);
+                                            setHarvestContractor(m.contractorName || '');
+                                            setHarvestLaborPrice(m.harvestLaborPricePerHa?.toString() || '');
+                                            setObservedYield(m.quantity);
+                                            setSelectedLotId(activePanel?.id || '');
+                                            setHarvestPlanOrder({
+                                                ...m,
+                                                movements: selectedEvent.movements
+                                            } as any);
+                                            setIsEditingHarvestPanel(true);
+                                            setIsHarvesting(true);
+                                            setSelectedEvent(null);
+                                        }}
+                                        onSelectMovement={(m) => {
+                                            setSelectedMovement({
+                                                m,
+                                                destName: m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'
+                                            });
+                                            setTimeout(() => {
+                                                logisticsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            }, 100);
+                                        }}
+                                        isReadOnly={isReadOnly}
+                                    />
+                                ) : (
+                                    selectedEvent.rawOrder && (
+                                        <OrderDetailView
+                                            order={selectedEvent.rawOrder}
+                                            client={client!}
+                                            warehouses={warehouses}
+                                            lots={allClientLots}
+                                            campaigns={campaigns}
+                                            onClose={() => setSelectedEvent(null)}
+                                        />
+                                    )
+                                )}
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
 
-            {/* LEVEL 4: DETALLES DEL MOVIMIENTO (LOGISTICA) */}
-            {selectedMovement && client && (
-                <div ref={logisticsSectionRef} className="container mx-auto max-w-7xl px-4 lg:px-8 mt-4 pb-32 animate-slideUp scroll-mt-6">
-                    <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden border-t-4 border-t-amber-500">
-                        <div className="bg-slate-50 px-8 py-3 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Detalles del Movimiento</h3>
-                            <button onClick={() => setSelectedMovement(null)} className="text-slate-400 hover:text-slate-600">✕</button>
-                        </div>
-                        <MovementDetailsView
-                            movement={selectedMovement.m}
-                            client={client}
-                            destName={selectedMovement.destName}
-                            typeLabel="Distribución de Cosecha"
-                            onClose={() => setSelectedMovement(null)}
-                        />
-                    </div>
+            {/* SEPARATE FLOATING BOX FOR MOVEMENTS (Level 4) */}
+            {selectedMovement && (
+                <div
+                    ref={logisticsSectionRef}
+                    className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-24 border-t-4 border-t-amber-500"
+                >
+                    <MovementDetailsView
+                        movement={selectedMovement.m}
+                        client={client!}
+                        destName={selectedMovement.destName}
+                        typeLabel="Distribución de Cosecha"
+                        onClose={() => setSelectedMovement(null)}
+                    />
                 </div>
             )}
 

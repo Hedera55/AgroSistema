@@ -241,7 +241,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                         {farmGroups[fName].map((lot: any) => (
                                             <div key={lot.id} className="flex flex-col">
                                                 <span className="text-sm font-bold text-slate-700">
-                                                    {lot.id} - {lot.name} <span className="text-slate-400 font-medium ml-1">({lot.hectares || 0} ha)</span>
+                                                    {lot.name || 'Lote sin nombre'} <span className="text-slate-400 font-medium ml-1">({lot.hectares || 0} ha)</span>
                                                 </span>
                                                 {order.lotObservations?.[lot.id] && (
                                                     <span className="text-[10px] text-slate-400 italic leading-tight">{order.lotObservations[lot.id]}</span>

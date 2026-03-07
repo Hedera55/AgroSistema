@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Warehouse } from '@/types';
@@ -33,7 +33,7 @@ interface WarehouseManagerProps {
     onSetDefaultWarehouse?: (id: string) => void;
 }
 
-export function WarehouseManager({
+function WarehouseManagerInternal({
     showWarehouses,
     setShowWarehouses,
     showWarehouseForm,
@@ -61,6 +61,13 @@ export function WarehouseManager({
     onSetDefaultWarehouse
 }: WarehouseManagerProps) {
     const [showDefaultSelector, setShowDefaultSelector] = useState(false);
+    const warehouseSelectOptions = useMemo(() => [
+        <option key="ware-default" value="">Seleccionar un galpón...</option>,
+        ...warehouses.map(w => (
+            <option key={w.id} value={w.id}>{w.name}</option>
+        ))
+    ], [warehouses]);
+
     if (!showWarehouses || isReadOnly) return null;
 
     return (
@@ -120,10 +127,7 @@ export function WarehouseManager({
                             }
                         }}
                     >
-                        <option value="">Seleccionar un galpón...</option>
-                        {warehouses.map(w => (
-                            <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
+                        {warehouseSelectOptions}
                     </select>
                     <p className="mt-2 text-[10px] text-slate-400 italic">
                         Los remanentes de cosecha sin asignar se enviarán automáticamente a este galpón.
@@ -277,3 +281,4 @@ export function WarehouseManager({
         </div>
     );
 }
+export const WarehouseManager = memo(WarehouseManagerInternal);

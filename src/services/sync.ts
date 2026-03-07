@@ -31,6 +31,7 @@ const mappers = {
     }),
     lot: (l: Lot) => ({
         id: l.id,
+        client_id: l.clientId,
         farm_id: l.farmId,
         name: l.name,
         hectares: l.hectares,
@@ -204,6 +205,7 @@ const reverseMappers = {
     }),
     lot: (l: any): Lot => ({
         id: l.id,
+        clientId: l.client_id,
         farmId: l.farm_id,
         name: l.name,
         hectares: l.hectares,
@@ -617,7 +619,17 @@ export class SyncService {
                         continue; // Do NOT nullify, just wait for the dependency to sync or be fixed
                     }
 
-                    // 4. Other Errors (ID syntax, unique constraints, etc.)
+                    // 4. RLS / Permission Errors
+                    // If we get an RLS violation, it means the current user is NOT allowed to push this record.
+                    // This often happens if there are "stale" records from a previous session or another user in IndexedDB.
+                    // We mark them as synced locally to stop them from blocking the queue.
+                    if (error.message.includes('row-level security policy') || error.code === '42501') {
+                        console.warn(`🔒 RLS Violation pushing ${tableName}/${item.id}: Permission Denied. Marking as synced locally to unblock queue.`);
+                        await db.markSynced(localStoreName, item.id);
+                        continue;
+                    }
+
+                    // 5. Other Errors (ID syntax, unique constraints, etc.)
                     console.error(`❌ Failed to push ${tableName}/${item.id}:`, error.message);
                 } else {
                     await db.markSynced(localStoreName, item.id);

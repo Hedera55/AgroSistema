@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Product, ProductType, Unit } from '@/types';
@@ -45,7 +45,7 @@ interface ProductCatalogProps {
     importProducts: (products: any[]) => Promise<void>;
 }
 
-export function ProductCatalog({
+function ProductCatalogInternal({
     showCatalog,
     setShowCatalog,
     isReadOnly,
@@ -104,6 +104,21 @@ export function ProductCatalog({
             }
         }
     }, [showProductForm, productsLoading]);
+
+    const productTypeOptions = useMemo(() =>
+        productTypes.map(t => <option key={`type-${t}`} value={t}>{typeLabels[t]}</option>)
+        , [productTypes, typeLabels]);
+
+    const unitOptions = useMemo(() => [
+        ...((!newProductUnit || !availableUnits.includes(newProductUnit)) ? [
+            <option key="unit-default" value="">Seleccionar...</option>
+        ] : []),
+        ...availableUnits.map(u => <option key={`unit-${u}`} value={u}>{u}</option>),
+        <option key="unit-add" value="ADD_NEW">+ unidad</option>,
+        ...(availableUnits.length > 0 ? [
+            <option key="unit-del" value="DELETE_UNIT">- unidad</option>
+        ] : [])
+    ], [availableUnits, newProductUnit]);
 
     if (!showCatalog) return null;
 
@@ -311,7 +326,7 @@ export function ProductCatalog({
                                         }
                                     }}
                                 >
-                                    {productTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+                                    {productTypeOptions}
                                 </select>
                             </div>
                             <Input
@@ -372,14 +387,7 @@ export function ProductCatalog({
                                         }
                                     }}
                                 >
-                                    {(!newProductUnit || !availableUnits.includes(newProductUnit)) && (
-                                        <option value="">Seleccionar...</option>
-                                    )}
-                                    {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                    <option value="ADD_NEW">+ unidad</option>
-                                    {availableUnits.length > 0 && (
-                                        <option value="DELETE_UNIT">- unidad</option>
-                                    )}
+                                    {unitOptions}
                                 </select>
 
                                 {showUnitInput && (
@@ -474,3 +482,4 @@ export function ProductCatalog({
         </>
     );
 }
+export const ProductCatalog = memo(ProductCatalogInternal);

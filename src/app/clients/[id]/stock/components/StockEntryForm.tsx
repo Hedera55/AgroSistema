@@ -158,7 +158,7 @@ interface StockEntryFormProps {
     isEditing?: boolean;
 }
 
-function StockEntryFormInternal({
+const StockEntryFormInternal = memo(({
     showStockForm,
     setShowStockForm,
     warehouses,
@@ -207,8 +207,8 @@ function StockEntryFormInternal({
     setSellerInputValue,
     handleAddSeller,
     availableSellers
-}: StockEntryFormProps) {
-    if (!showStockForm) return null;
+}: StockEntryFormProps) => {
+    // Visibility is now controlled by the parent conditional
 
     const filteredProducts = useMemo(() => {
         const sorted = availableProducts
@@ -254,6 +254,53 @@ function StockEntryFormInternal({
         }).filter(Boolean);
     }, [client?.partners, client?.investors]);
 
+    const productOptions = useMemo(() => [
+        <option key="prod-default" value="">Seleccione...</option>,
+        ...filteredProducts.map(p => (
+            <option key={`prod-${p.id}`} value={p.id}>
+                {p.commercialName || '-'} ({p.activeIngredient || p.name}) ({p.brandName || '-'})
+            </option>
+        ))
+    ], [filteredProducts]);
+
+    const sellerOptions = useMemo(() => [
+        <option key="sell-default" value="">Seleccione...</option>,
+        ...availableSellers.map(s => <option key={`opt-sel-${s}`} value={s}>{s}</option>),
+        ...(selectedSeller && !availableSellers.includes(selectedSeller) ? [
+            <option key="sell-fallback" value={selectedSeller}>{selectedSeller}</option>
+        ] : []),
+        <option key="sell-add" value="ADD_NEW">+ vendedor</option>,
+        ...(availableSellers.length > 0 ? [
+            <option key="sell-del" value="DELETE">- vendedor</option>
+        ] : [])
+    ], [availableSellers, selectedSeller]);
+
+    const campaignOptions = useMemo(() => [
+        <option key="camp-default" value="" className="text-slate-400">Seleccione Campaña...</option>,
+        ...(campaigns?.map(c => (
+            <option key={`opt-camp-${c.id}`} value={c.id}>{c.name}</option>
+        )) || []),
+        ...(selectedCampaignId && !campaigns?.some(c => c.id === selectedCampaignId) ? [
+            <option key="camp-fallback" value={selectedCampaignId}>Campaña anterior</option>
+        ] : [])
+    ], [campaigns, selectedCampaignId]);
+
+    const warehouseOptions = useMemo(() => [
+        <option key="ware-default" value="">Seleccione...</option>,
+        ...warehouses.map(w => (
+            <option key={`opt-ware-${w.id}`} value={w.id}>{w.name}</option>
+        ))
+    ], [warehouses]);
+
+    const investorSelectOptions = useMemo(() => [
+        <option key="inv-default" value="">...</option>,
+        ...investorOptions.map((name, idx) => (
+            <option key={`opt-inv-${name}-${idx}`} value={name}>
+                {name}
+            </option>
+        ))
+    ], [investorOptions]);
+
     const handleAddInvestor = (name: string) => {
         if (!name) return;
         if (selectedInvestors.find(i => i.name === name)) return;
@@ -281,7 +328,11 @@ function StockEntryFormInternal({
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-semibold text-slate-900">
-                    {activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos' ? 'Gestión de Galpón (Granos)' : 'Cargar Compra de Insumo'}
+                    <span>
+                        {activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos'
+                            ? 'Gestión de Galpón (Granos)'
+                            : 'Cargar Compra de Insumo'}
+                    </span>
                 </h2>
                 <button
                     onClick={() => {
@@ -307,18 +358,14 @@ function StockEntryFormInternal({
                             onChange={e => updateActiveStockItem('productId', e.target.value)}
                             required={stockItems.length === 0}
                         >
-                            <option key="default" value="">Seleccione...</option>
-                            {filteredProducts.map(p => (
-                                <option key={`prod-${p.id}`} value={p.id}>
-                                    {p.commercialName || '-'} ({p.activeIngredient || p.name}) ({p.brandName || '-'})
-                                </option>
-                            ))}
+                            {productOptions}
                         </select>
                     </div>
 
                     <div className="md:col-span-12 lg:col-span-4">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                            Precio USD/{activeProduct?.unit || 'u.'}
+                            <span>Precio USD/</span>
+                            <span>{activeProduct?.unit || 'u.'}</span>
                         </label>
                         <input
                             type="text"
@@ -343,7 +390,11 @@ function StockEntryFormInternal({
                     </div>
 
                     <div className="md:col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Contenido ({activeProduct?.unit || 'L/kg'})</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                            <span>Contenido (</span>
+                            <span>{activeProduct?.unit || 'L/kg'}</span>
+                            <span>)</span>
+                        </label>
                         <input
                             type="text"
                             inputMode="decimal"
@@ -371,9 +422,13 @@ function StockEntryFormInternal({
                     </div>
 
                     <div className="md:col-span-3">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Total {activeProduct ? `(${activeProduct.unit})` : ''}</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                            <span>Total </span>
+                            {activeProduct && <span>({activeProduct.unit})</span>}
+                        </label>
                         <div className="flex items-center justify-between h-11 px-4 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 font-black text-sm">
-                            {activeStockItem.quantity || '0'} {activeProduct?.unit || ''}
+                            <span>{activeStockItem.quantity || '0'} </span>
+                            <span>{activeProduct?.unit || ''}</span>
                         </div>
                     </div>
 
@@ -472,13 +527,7 @@ function StockEntryFormInternal({
                                 }
                             }}
                         >
-                            <option key="default" value="">Seleccione...</option>
-                            {availableSellers.map(s => <option key={`opt-sel-${s}`} value={s}>{s}</option>)}
-                            {selectedSeller && !availableSellers.includes(selectedSeller) && (
-                                <option key="fallback" value={selectedSeller}>{selectedSeller}</option>
-                            )}
-                            <option key="add" value="ADD_NEW">+ vendedor</option>
-                            {availableSellers.length > 0 && <option key="del" value="DELETE">- vendedor</option>}
+                            {sellerOptions}
                         </select>
 
                         {showSellerInput && (
@@ -551,13 +600,7 @@ function StockEntryFormInternal({
                             value={selectedCampaignId}
                             onChange={e => setSelectedCampaignId?.(e.target.value)}
                         >
-                            <option key="opt-camp-default" value="" className="text-slate-400">Seleccione Campaña...</option>
-                            {campaigns?.map(c => (
-                                <option key={`opt-camp-${c.id}`} value={c.id}>{c.name}</option>
-                            ))}
-                            {selectedCampaignId && !campaigns?.some(c => c.id === selectedCampaignId) && (
-                                <option key="opt-camp-fallback" value={selectedCampaignId}>Campaña anterior</option>
-                            )}
+                            {campaignOptions}
                         </select>
                     </div>
 
@@ -569,10 +612,7 @@ function StockEntryFormInternal({
                             onChange={e => setSelectedWarehouseId(e.target.value)}
                             required
                         >
-                            <option key="opt-ware-default" value="">Seleccione...</option>
-                            {warehouses.map(w => (
-                                <option key={`opt-ware-${w.id}`} value={w.id}>{w.name}</option>
-                            ))}
+                            {warehouseOptions}
                         </select>
                     </div>
 
@@ -610,12 +650,7 @@ function StockEntryFormInternal({
                                     e.target.value = "";
                                 }}
                             >
-                                <option key="default" value="">...</option>
-                                {investorOptions.map((name, idx) => (
-                                    <option key={`opt-inv-${name}-${idx}`} value={name}>
-                                        {name}
-                                    </option>
-                                ))}
+                                {investorSelectOptions}
                             </select>
                         </div>
 
@@ -733,6 +768,6 @@ function StockEntryFormInternal({
             </form>
         </div>
     );
-}
+});
 
-export const StockEntryForm = memo(StockEntryFormInternal);
+export const StockEntryForm = StockEntryFormInternal;

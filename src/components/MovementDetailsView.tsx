@@ -33,24 +33,11 @@ export function MovementDetailsView({ movement, client, order, originName, destN
 
     return (
         <div className="bg-white p-6 relative">
-            <div className="mb-6 flex items-center justify-between border-b border-slate-100 pb-4">
-                <h3 className="font-bold text-slate-800 text-lg">
-                    {movement.type === 'SALE' ? 'Detalles del transporte' :
-                        movement.type === 'IN' ? 'Detalles de la compra' : 'Detalles del movimiento'}
-                </h3>
-                <button
-                    onClick={onClose}
-                    className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
-                >
-                    ✕
-                </button>
-            </div>
-
-            <div className="space-y-5">
+            <div className="space-y-8">
                 {/* Section 1: General Info */}
                 <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Información General</h3>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8 px-2 py-4">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Información General</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8">
                         <div>
                             <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Fecha / Hora</span>
                             <span className="text-sm font-bold text-slate-700">{movement.createdAt ? new Date(movement.createdAt).toLocaleString() : (movement.date || '-')}</span>
@@ -105,39 +92,35 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                 {/* Section 2: Logistics Info */}
                 {movement.type !== 'IN' && (
                     <div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Datos Logísticos</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Datos Logísticos</h3>
                         {hasLogistics ? (
-                            <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                                <table className="w-full text-sm">
-                                    <tbody className="divide-y divide-slate-50">
-                                        {[
-                                            { label: 'Chofer', value: logistics.truckDriver },
-                                            { label: 'Patente Camión', value: logistics.plateNumber },
-                                            { label: 'Patente Acoplado', value: logistics.trailerPlate },
-                                            { label: 'Empresa Transp.', value: logistics.transportCompany },
-                                            { label: 'Empresa Destino', value: logistics.destinationCompany || logistics.deliveryLocation },
-                                            { label: 'Dirección Destino', value: logistics.destinationAddress },
-                                            { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
-                                            { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
-                                            { label: 'Distancia (Km)', value: logistics.distanceKm !== undefined ? `${logistics.distanceKm} Km` : null },
-                                            { label: 'Tarifa Flete', value: logistics.freightTariff !== undefined ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
-                                            { label: 'Nº Descarga', value: logistics.dischargeNumber },
-                                            { label: 'Humedad', value: logistics.humidity !== undefined ? `${logistics.humidity} %` : null },
-                                            { label: 'P. Hectolítrico', value: logistics.hectoliterWeight !== undefined ? logistics.hectoliterWeight : null },
-                                            { label: 'Peso Bruto', value: logistics.grossWeight !== undefined ? `${logistics.grossWeight.toLocaleString()} Kg` : null },
-                                            { label: 'Peso Tara', value: logistics.tareWeight !== undefined ? `${logistics.tareWeight.toLocaleString()} Kg` : null },
-                                        ].filter(row => row.value).map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="py-3 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">{row.label}</td>
-                                                <td className="py-3 px-6 text-slate-800 font-bold">{row.value}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-8">
+                                {[
+                                    { label: 'Chofer', value: logistics.truckDriver },
+                                    { label: 'Patente Camión', value: logistics.plateNumber },
+                                    { label: 'Patente Acoplado', value: logistics.trailerPlate },
+                                    { label: 'Empresa Transp.', value: logistics.transportCompany },
+                                    { label: 'Empresa Destino', value: logistics.destinationCompany || logistics.deliveryLocation },
+                                    { label: 'Dirección Destino', value: logistics.destinationAddress },
+                                    { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
+                                    { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
+                                    { label: 'Distancia (Km)', value: logistics.distanceKm !== undefined ? `${logistics.distanceKm} Km` : null },
+                                    { label: 'Tarifa Flete', value: logistics.freightTariff !== undefined ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
+                                    { label: 'Nº Descarga', value: logistics.dischargeNumber },
+                                    { label: 'Humedad', value: logistics.humidity !== undefined ? `${logistics.humidity} %` : null },
+                                    { label: 'P. Hectolítrico', value: logistics.hectoliterWeight !== undefined ? logistics.hectoliterWeight : null },
+                                    { label: 'Peso Bruto', value: logistics.grossWeight !== undefined ? `${logistics.grossWeight.toLocaleString()} Kg` : null },
+                                    { label: 'Peso Tara', value: logistics.tareWeight !== undefined ? `${logistics.tareWeight.toLocaleString()} Kg` : null },
+                                ].filter(row => row.value).map((row, idx) => (
+                                    <div key={idx}>
+                                        <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{row.label}</span>
+                                        <span className="text-sm font-bold text-slate-700">{row.value}</span>
+                                    </div>
+                                ))}
                             </div>
                         ) : (
-                            <div className="bg-slate-50 border border-slate-100 border-dashed rounded-2xl p-8 flex items-center justify-center text-center">
-                                <span className="text-slate-400 text-sm font-bold">No se registraron datos logísticos para este movimiento.</span>
+                            <div className="text-slate-400 text-sm font-bold italic py-2">
+                                No se registraron datos logísticos para este movimiento.
                             </div>
                         )}
                     </div>

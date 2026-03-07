@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { ClientStock, Warehouse } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -16,7 +16,7 @@ interface StockMovementPanelProps {
     isSaleActive?: boolean;
 }
 
-export function StockMovementPanel({
+function StockMovementPanelInternal({
     selectedIds,
     stockItems,
     warehouses,
@@ -58,6 +58,20 @@ export function StockMovementPanel({
     // Track quantities for specific stock IDs within each presentation
     // Key: Specific Stock ID (from item.breakdown), Value: Selected units (multiplier) or absolute quantity
     const [subQuantities, setSubQuantities] = useState<Record<string, number>>({});
+
+    const destinationOptions = useMemo(() => [
+        <option key="default-destination" value="">Seleccione galpón de destino...</option>,
+        ...warehouses.filter((w: Warehouse) => !activeWarehouseIds.includes(w.id)).map(w => (
+            <option key={`destination-${w.id}`} value={w.id}>{w.name}</option>
+        ))
+    ], [warehouses, activeWarehouseIds]);
+
+    const receiverOptions = useMemo(() => [
+        <option key="default-receiver" value="">Seleccione...</option>,
+        ...investors.map((inv) => (
+            <option key={`receiver-${inv.name}`} value={inv.name}>{inv.name}</option>
+        ))
+    ], [investors]);
 
     // Filter active items from grouped stock
     const selectedItems = useMemo(() => {
@@ -233,7 +247,6 @@ export function StockMovementPanel({
         }
     };
 
-    const validWarehouses = warehouses.filter((w: Warehouse) => !activeWarehouseIds.includes(w.id));
 
     return (
         <div className="bg-white border-indigo-100 shadow-lg p-4 rounded-xl animate-fadeIn mb-4 relative transition-all floating-panel">
@@ -366,10 +379,7 @@ export function StockMovementPanel({
                         value={destinationId}
                         onChange={e => setDestinationId(e.target.value)}
                     >
-                        <option key="default-destination" value="">Seleccione galpón de destino...</option>
-                        {validWarehouses.map(w => (
-                            <option key={`destination-${w.id}`} value={w.id}>{w.name}</option>
-                        ))}
+                        {destinationOptions}
                     </select>
                 </div>
             )}
@@ -382,10 +392,7 @@ export function StockMovementPanel({
                         value={receiverName}
                         onChange={e => setReceiverName(e.target.value)}
                     >
-                        <option key="default-receiver" value="">Seleccione...</option>
-                        {investors.map((inv) => (
-                            <option key={`receiver-${inv.name}`} value={inv.name}>{inv.name}</option>
-                        ))}
+                        {receiverOptions}
                     </select>
 
                     {receiverName && selectedItems.some(item => {
@@ -578,3 +585,4 @@ export function StockMovementPanel({
         </div>
     );
 }
+export const StockMovementPanel = memo(StockMovementPanelInternal);

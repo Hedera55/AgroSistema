@@ -471,9 +471,25 @@ export function OrderRecipeStep({
                             onChange={e => setSelectedPartnerName(e.target.value)}
                         >
                             <option value="">Seleccione Socio...</option>
-                            {clientPartners?.map((p: any) => (
-                                <option key={p.name} value={p.name}>{p.name}</option>
-                            ))}
+                            {clientPartners?.map((p: any, idx: number) => {
+                                let name = '';
+                                if (typeof p === 'string') {
+                                    if (p.trim().startsWith('{')) {
+                                        try {
+                                            const parsed = JSON.parse(p);
+                                            name = parsed.name || p;
+                                        } catch (e) {
+                                            name = p;
+                                        }
+                                    } else {
+                                        name = p;
+                                    }
+                                } else {
+                                    name = p?.name || '';
+                                }
+                                if (!name) return null;
+                                return <option key={`${name}-${idx}`} value={name}>{name}</option>;
+                            })}
                         </select>
                     </div>
 

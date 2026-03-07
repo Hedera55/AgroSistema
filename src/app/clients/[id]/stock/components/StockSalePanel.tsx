@@ -292,7 +292,7 @@ export function StockSalePanel({
                             className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
                         >
                             <span className="text-base leading-none">+</span>
-                            {saleNote ? 'Editar Nota' : 'Agregar Nota'}
+                            {showSaleNote ? 'Cancelar' : (saleNote ? 'Editar Nota' : 'Agregar Nota')}
                         </button>
 
                         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
@@ -327,41 +327,43 @@ export function StockSalePanel({
                         </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-3 w-full sm:w-auto">
-                        {showSaleNote && (
-                            <div className="animate-fadeIn w-full sm:w-[350px] flex gap-2">
-                                <div className="flex-1">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Nota de Venta</label>
-                                    <textarea
-                                        className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3 focus:outline-none"
-                                        rows={2}
-                                        placeholder="Nota..."
-                                        value={saleNote}
-                                        onChange={(e) => setSaleNote(e.target.value)}
-                                        autoFocus
-                                    />
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSaleNote(false)}
-                                    className="h-9 mt-5 w-9 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                            </div>
-                        )}
+                    <div className="flex justify-end">
                         <Button
                             type="submit"
                             size="sm"
                             disabled={isSubmitting || facturaUploading}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm h-9"
                         >
                             {isSubmitting ? 'Procesando...' : 'Confirmar Venta'}
                         </Button>
                     </div>
                 </div>
+
+                {showSaleNote && (
+                    <div className="animate-fadeIn w-full flex gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Nota de Venta</label>
+                            <textarea
+                                className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2 px-3 focus:outline-none min-h-[60px]"
+                                rows={2}
+                                placeholder="Escribe una nota..."
+                                value={saleNote}
+                                onChange={(e) => setSaleNote(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowSaleNote(false)}
+                            className="h-10 mt-5 w-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm shrink-0"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                )}
             </form>
         </div>
     );

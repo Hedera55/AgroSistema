@@ -152,3 +152,31 @@ export function useLots(farmId: string) {
 
     return { lots, loading, addLot, updateLot, deleteLot, refresh };
 }
+
+export function useAllLots(clientId: string) {
+    const [lots, setLots] = useState<Lot[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const refresh = useCallback(async () => {
+        if (!clientId) {
+            setLots([]);
+            return;
+        }
+        setLoading(true);
+        try {
+            const allLots = await db.getAll('lots');
+            const clientLots = allLots.filter((l: Lot) => l.clientId === clientId && !l.deleted);
+            setLots(clientLots);
+        } catch (error) {
+            console.error('Error fetching all client lots:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [clientId]);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    return { lots, loading, refresh };
+}

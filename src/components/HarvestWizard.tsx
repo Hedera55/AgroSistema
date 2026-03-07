@@ -91,7 +91,25 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         warehouses.forEach(w => options.push({ label: w.name, value: `W_${w.id}`, type: 'WAREHOUSE' as const, name: w.name }));
         options.push({ label: '--- Socios ---', disabled: true, value: 'socio_header' });
         const allPartners = [...(partners || []), ...(investors || [])];
-        allPartners.forEach(p => options.push({ label: p.name, value: `P_${p.name}`, type: 'PARTNER' as const, name: p.name }));
+        allPartners.forEach((p: any) => {
+            let name = '';
+            if (typeof p === 'string') {
+                if (p.trim().startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(p);
+                        name = parsed.name || p;
+                    } catch (e) {
+                        name = p;
+                    }
+                } else {
+                    name = p;
+                }
+            } else {
+                name = p?.name || '';
+            }
+            if (!name) return;
+            options.push({ label: name, value: `P_${name}`, type: 'PARTNER' as const, name: name });
+        });
         return options;
     }, [warehouses, partners, investors]);
 
@@ -307,8 +325,28 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 onChange={e => setSelectedHarvestInvestor(e.target.value)}
                             >
                                 <option value="">Seleccionar...</option>
-                                {partners?.map((p: any) => <option key={p.name} value={p.name}>{p.name}</option>)}
-                                {(!partners || partners.length === 0) && investors?.map((inv: any) => <option key={inv.name} value={inv.name}>{inv.name}</option>)}
+                                {(() => {
+                                    const source = [...(partners || []), ...(investors || [])];
+                                    return source.map((p: any, idx) => {
+                                        let name = '';
+                                        if (typeof p === 'string') {
+                                            if (p.trim().startsWith('{')) {
+                                                try {
+                                                    const parsed = JSON.parse(p);
+                                                    name = parsed.name || p;
+                                                } catch (e) {
+                                                    name = p;
+                                                }
+                                            } else {
+                                                name = p;
+                                            }
+                                        } else {
+                                            name = p?.name || '';
+                                        }
+                                        if (!name) return null;
+                                        return <option key={`${name}-${idx}`} value={name}>{name}</option>;
+                                    });
+                                })()}
                             </select>
                         </div>
                     </div>
@@ -346,7 +384,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     <option value="">Seleccionar destino...</option>
                                     {allDestinations.map((opt, i) => (
                                         <option key={i} value={opt.value} disabled={opt.disabled} className={opt.disabled ? 'font-bold bg-slate-50' : ''}>
-                                            {opt.label.replace(/🌍 |🏢 |👤 /g, '')}
+                                            {opt.label?.replace(/🌍 |🏢 |👤 /g, '') || 'Sin nombre'}
                                         </option>
                                     ))}
                                 </select>
