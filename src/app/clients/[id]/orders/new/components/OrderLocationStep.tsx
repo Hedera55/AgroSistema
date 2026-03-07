@@ -75,21 +75,23 @@ export function OrderLocationStep({
         setLotObservations({ ...lotObservations, [lotId]: value });
     };
 
-    const handleHectaresChange = (lotId: string, value: string) => {
+    const handleHectaresConfirm = (lotId: string) => {
         const lot = lots.find(l => l.id === lotId);
         if (!lot) return;
 
-        if (value === '') {
-            setLotHectares({ ...lotHectares, [lotId]: 0 });
+        if (tempHectares === '') {
+            setLotHectares({ ...lotHectares, [lotId]: lot.hectares });
+            setEditingHectaresId(null);
             return;
         }
 
-        let val = parseFloat(value);
-        if (isNaN(val)) val = 0;
+        let val = parseFloat(tempHectares.replace(',', '.'));
+        if (isNaN(val)) val = lot.hectares;
         if (val > lot.hectares) val = lot.hectares;
         if (val < 0) val = 0;
 
         setLotHectares({ ...lotHectares, [lotId]: val });
+        setEditingHectaresId(null);
     };
 
     const totalHectares = lots
@@ -229,29 +231,49 @@ export function OrderLocationStep({
                                             onChange={e => handleObsChange(id, e.target.value)}
                                         />
                                     </div>
-                                    <div className="flex items-center gap-1 min-w-[140px] justify-end">
+                                    <div className="flex items-center gap-1 min-w-[160px] justify-end">
                                         {editingHectaresId === id ? (
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                min="0"
-                                                max={lot.hectares}
-                                                className="w-32 h-8 text-xs px-2 border-slate-200 rounded-lg focus:border-emerald-500 focus:ring-emerald-500 bg-white"
-                                                placeholder="recortar hectáreas"
-                                                value={tempHectares}
-                                                onChange={e => {
-                                                    setTempHectares(e.target.value);
-                                                    handleHectaresChange(id, e.target.value);
-                                                }}
-                                                onBlur={() => setEditingHectaresId(null)}
-                                                autoFocus
-                                            />
+                                            <div className="flex items-center gap-1 animate-fadeIn">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="w-20 h-8 text-xs px-2 border-slate-200 rounded-lg focus:border-emerald-500 focus:ring-emerald-500 bg-white font-bold text-emerald-600"
+                                                    placeholder="ha..."
+                                                    value={tempHectares}
+                                                    onChange={e => setTempHectares(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleHectaresConfirm(id);
+                                                        } else if (e.key === 'Escape') {
+                                                            setEditingHectaresId(null);
+                                                        }
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleHectaresConfirm(id)}
+                                                    className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shadow-sm"
+                                                    title="Confirmar"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingHectaresId(null)}
+                                                    className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-slate-200 transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                </button>
+                                            </div>
                                         ) : (
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     setEditingHectaresId(id);
-                                                    setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : '');
+                                                    setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : lot.hectares.toString());
                                                 }}
                                                 className="px-2 py-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1"
                                                 title="recortar ha"

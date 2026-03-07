@@ -429,7 +429,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                         N
                                                     </button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Insumos
+                                                        Necesidad de Insumos
                                                     </div>
                                                 </div>
 
@@ -452,8 +452,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                     >
                                                         O
                                                     </button>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Carga
+                                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        Orden de Carga
                                                     </div>
                                                 </div>
 
@@ -482,7 +482,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                                     ✎
                                                                 </button>
                                                             </Link>
-                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
                                                                 Editar
                                                             </div>
                                                         </div>
@@ -493,7 +493,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                             >
                                                                 ✕
                                                             </button>
-                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
                                                                 Eliminar
                                                             </div>
                                                         </div>

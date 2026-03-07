@@ -256,11 +256,17 @@ const StockEntryFormInternal = memo(({
 
     const productOptions = useMemo(() => [
         <option key="prod-default" value="">Seleccione...</option>,
-        ...filteredProducts.map(p => (
-            <option key={`prod-${p.id}`} value={p.id}>
-                {p.commercialName || '-'} ({p.activeIngredient || p.name}) ({p.brandName || '-'})
-            </option>
-        ))
+        ...filteredProducts.map(p => {
+            const isSeedOrGrain = p.type === 'SEED' || p.type === 'GRAIN';
+            return (
+                <option key={`prod-${p.id}`} value={p.id}>
+                    {isSeedOrGrain
+                        ? `${p.activeIngredient || p.name} (${p.commercialName || '-'}) (${p.brandName || '-'})`
+                        : `${p.commercialName || '-'} (${p.activeIngredient || p.name}) (${p.brandName || '-'})`
+                    }
+                </option>
+            );
+        })
     ], [filteredProducts]);
 
     const sellerOptions = useMemo(() => [
@@ -486,7 +492,12 @@ const StockEntryFormInternal = memo(({
                                                 }
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1 ml-4">
+                                        <div className="flex flex-col items-end justify-center mr-4 shrink-0">
+                                            <div className="text-sm font-black text-emerald-700">
+                                                USD {(parseFloat(item.quantity.toString().replace(',', '.')) * (parseFloat(item.price.toString().replace(',', '.')) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 ml-0">
                                             <button
                                                 type="button"
                                                 onClick={() => editBatchItem(idx)}

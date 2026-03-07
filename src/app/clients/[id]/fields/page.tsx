@@ -972,7 +972,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                    <h2 className="text-xl font-bold text-slate-800">Campos</h2>
+                    <div className="flex justify-between items-center min-h-[36px]">
+                        <h2 className="text-xl font-bold text-slate-800">Campos</h2>
+                    </div>
                     {farmsLoading ? (
                         <div>Cargando campos...</div>
                     ) : farms.length === 0 ? (
@@ -1045,7 +1047,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
 
                 <div className="space-y-4">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center min-h-[36px]">
                         <h2 className="text-xl font-bold text-slate-800">Lotes</h2>
                         {!isReadOnly && selectedFarmId && (
                             <Button size="sm" variant="secondary" onClick={() => {
@@ -1210,13 +1212,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             e.preventDefault();
                                                                                             if (lot.status === 'SOWED') {
                                                                                                 await fetchSowingDetails(lot.id);
-                                                                                                openPanel('sowing_details', lot.id, selectedFarmId!, lot.id, lot.name, `Datos de Siembra - ${lot.name}`);
+                                                                                                openPanel('sowing_details', lot.id, selectedFarmId!, lot.id, lot.name, `${farms.find(f => f.id === selectedFarmId)?.name}`);
                                                                                             } else if (lot.status === 'HARVESTED') {
                                                                                                 await fetchHarvestDetails(lot.id);
                                                                                                 openPanel('harvest_details', lot.id, selectedFarmId!, lot.id, lot.name);
                                                                                             }
                                                                                         }}
-                                                                                        className={`text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg border shadow-sm transition-all relative z-10 ${lot.status === 'SOWED'
+                                                                                        className={`text-[10px] font-black px-2 py-0.5 flex items-center justify-center rounded border transition-all relative z-10 ${lot.status === 'SOWED'
                                                                                             ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
                                                                                             : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-pointer hover:bg-blue-200 hover:scale-110' :
                                                                                                 lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
@@ -1265,7 +1267,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                     }}
                                                                                     className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all uppercase tracking-tight ${activePanel?.type === 'observations' && activePanel?.id === lot.id
                                                                                         ? 'bg-emerald-600 text-white border-emerald-600'
-                                                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 shadow-sm'
+                                                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
                                                                                         }`}
                                                                                 >
                                                                                     Observaciones
@@ -1558,8 +1560,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                     <div className="font-mono text-slate-800">{new Date(sowingOrder.date).toLocaleDateString()}</div>
                                                 </div>
                                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                    <div className="font-bold text-slate-800 text-xs uppercase tracking-widest pl-2 border-l-4 border-emerald-500">
-                                                        RINDE TOTAL (kg)
+                                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Rinde Esperado (kg/ha)</div>
+                                                    <div className="font-mono text-slate-800">
+                                                        {(() => {
+                                                            const lot = lots.find(l => l.id === activePanel?.id);
+                                                            const yieldVal = lot?.yield || sowingOrder.expectedYield;
+                                                            return yieldVal ? `${yieldVal.toLocaleString()} kg/ha` : '-';
+                                                        })()}
                                                     </div>
                                                 </div>
                                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

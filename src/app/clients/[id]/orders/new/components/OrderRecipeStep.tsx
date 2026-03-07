@@ -440,8 +440,8 @@ export function OrderRecipeStep({
                     </div>
                 )}
 
-                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
+                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+                    <div className="lg:col-span-3">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -452,7 +452,7 @@ export function OrderRecipeStep({
                             {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
                         </select>
                     </div>
-                    <div>
+                    <div className="lg:col-span-4">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
                         <Input
                             type="number"
@@ -463,7 +463,7 @@ export function OrderRecipeStep({
                             className="h-[46px]"
                         />
                     </div>
-                    <div>
+                    <div className="lg:col-span-3">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pagado por</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -493,7 +493,7 @@ export function OrderRecipeStep({
                         </select>
                     </div>
 
-                    <div>
+                    <div className="lg:col-span-2">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -511,10 +511,10 @@ export function OrderRecipeStep({
                 <div className="flex items-center gap-6 pt-2 h-5">
                     <button
                         type="button"
-                        onClick={() => setShowNotes(true)}
+                        onClick={() => setShowNotes(!showNotes)}
                         className="inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all min-w-[120px] text-emerald-600 hover:text-emerald-700"
                     >
-                        {notes && !showNotes ? 'Editar Nota' : '+ Agregar Nota'}
+                        {showNotes ? '✕ Cancelar' : (notes ? 'Editar Nota' : '+ Agregar Nota')}
                     </button>
                     <div className="flex items-center">
                         <button
@@ -544,9 +544,9 @@ export function OrderRecipeStep({
                 {showNotes && (
                     <div className="animate-fadeIn flex gap-2 items-start">
                         <textarea
-                            className="flex-1 rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-4"
+                            className="flex-1 rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2.5 px-4 h-10 resize-none"
                             placeholder="Escriba aquí cualquier observación o detalle adicional..."
-                            rows={3}
+                            rows={1}
                             value={notes}
                             onChange={e => setNotes(e.target.value)}
                             autoFocus
@@ -554,7 +554,7 @@ export function OrderRecipeStep({
                         <button
                             type="button"
                             onClick={() => setShowNotes(false)}
-                            className="h-10 w-10 flex-shrink-0 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-sm mt-1"
+                            className="h-10 w-10 flex-shrink-0 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-sm"
                             title="Confirmar nota"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

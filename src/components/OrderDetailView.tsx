@@ -64,35 +64,53 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
 
                 <div className="flex items-start gap-4">
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => generateInsumosPDF(order, client)}
-                            className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
-                            title="Necesidad de Insumos"
-                        >
-                            N
-                        </button>
-                        <button
-                            onClick={() => generateRemitoPDF(order, client)}
-                            className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
-                            title="Remito"
-                        >
-                            R
-                        </button>
-                        <button
-                            onClick={() => generateOrderPDF(order, client, lots)}
-                            className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
-                            title="Orden de Carga"
-                        >
-                            O
-                        </button>
-                        {order.facturaImageUrl && (
+                        <div className="relative group/tooltip">
                             <button
-                                onClick={() => window.open(order.facturaImageUrl, '_blank')}
-                                className="w-7 h-7 bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
-                                title="Ver Factura"
+                                onClick={() => generateInsumosPDF(order, client)}
+                                className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
                             >
-                                F
+                                N
                             </button>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                Necesidad de Insumos
+                            </div>
+                        </div>
+
+                        <div className="relative group/tooltip">
+                            <button
+                                onClick={() => generateRemitoPDF(order, client)}
+                                className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
+                            >
+                                R
+                            </button>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                Remito
+                            </div>
+                        </div>
+
+                        <div className="relative group/tooltip">
+                            <button
+                                onClick={() => generateOrderPDF(order, client, lots)}
+                                className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
+                            >
+                                O
+                            </button>
+                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                Orden de Carga
+                            </div>
+                        </div>
+                        {order.facturaImageUrl && (
+                            <div className="relative group/tooltip">
+                                <button
+                                    onClick={() => window.open(order.facturaImageUrl, '_blank')}
+                                    className="w-7 h-7 bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
+                                >
+                                    F
+                                </button>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                    Ver Factura
+                                </div>
+                            </div>
                         )}
                     </div>
                     <div className="flex gap-2">
@@ -105,57 +123,59 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                         </button>
                         <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors" title="Cerrar detalles">✕</button>
                     </div>
-                </div>
-            </div>
+                </div >
+            </div >
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-12">
+            < div className="flex-1 overflow-y-auto p-8 space-y-12" >
                 {/* 1. Insumos (Top) */}
-                {order.items && order.items.length > 0 && (
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-1">Resumen de Insumos</h4>
-                        <div className="space-y-3">
-                            {Array.from(new Set(order.items.map(i => i.groupId || i.id))).map(groupId => {
-                                const groupItems = order.items.filter(i => (i.groupId || i.id) === groupId);
-                                const first = groupItems[0];
-                                const isLabor = first.productId === 'LABOREO_MECANICO';
-                                const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
+                {
+                    order.items && order.items.length > 0 && (
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-1">Resumen de Insumos</h4>
+                            <div className="space-y-3">
+                                {Array.from(new Set(order.items.map(i => i.groupId || i.id))).map(groupId => {
+                                    const groupItems = order.items.filter(i => (i.groupId || i.id) === groupId);
+                                    const first = groupItems[0];
+                                    const isLabor = first.productId === 'LABOREO_MECANICO';
+                                    const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
 
-                                return (
-                                    <div key={groupId} className="px-4 py-2 space-y-2 border-l-2 border-slate-100 ml-1">
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                {first.loadingOrder && <span className="text-emerald-600 font-black text-xs">#{first.loadingOrder}</span>}
-                                                <span className="font-medium text-slate-800 text-xs uppercase tracking-tight">
-                                                    {first.productType === 'SEED'
-                                                        ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
-                                                        : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
-                                                </span>
-                                                {!isLabor && <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{totalInGroup.toLocaleString()} {first.unit} TOTAL</span>}
+                                    return (
+                                        <div key={groupId} className="px-4 py-2 space-y-2 border-l-2 border-slate-100 ml-1">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    {first.loadingOrder && <span className="text-emerald-600 font-black text-xs">#{first.loadingOrder}</span>}
+                                                    <span className="font-medium text-slate-800 text-xs uppercase tracking-tight">
+                                                        {first.productType === 'SEED'
+                                                            ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                            : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
+                                                    </span>
+                                                    {!isLabor && <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{totalInGroup.toLocaleString()} {first.unit} TOTAL</span>}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2 pl-2">
+                                                {groupItems.map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-[11px]">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-slate-600">
+                                                                {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                                {item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`)}
+                                                                {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                                {item.warehouseId && <span className="text-slate-400 font-medium ml-2">— {warehouses.find(w => w.id === item.warehouseId)?.name || '---'}</span>}
+                                                            </span>
+                                                            {item.plantingDensity && <span className="text-blue-500 font-bold uppercase text-[9px]">Densidad: {item.plantingDensity} {item.plantingDensityUnit === 'KG_HA' ? 'kg/ha' : 'pl/ha'}</span>}
+                                                        </div>
+                                                        <span className="font-mono text-emerald-600 font-black">{item.totalQuantity.toLocaleString()} {item.unit}</span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div className="space-y-2 pl-2">
-                                            {groupItems.map((item, idx) => (
-                                                <div key={idx} className="flex justify-between items-center text-[11px]">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-slate-600">
-                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                            {item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`)}
-                                                            {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                            {item.warehouseId && <span className="text-slate-400 font-medium ml-2">— {warehouses.find(w => w.id === item.warehouseId)?.name || '---'}</span>}
-                                                        </span>
-                                                        {item.plantingDensity && <span className="text-blue-500 font-bold uppercase text-[9px]">Densidad: {item.plantingDensity} {item.plantingDensityUnit === 'KG_HA' ? 'kg/ha' : 'pl/ha'}</span>}
-                                                    </div>
-                                                    <span className="font-mono text-emerald-600 font-black">{item.totalQuantity.toLocaleString()} {item.unit}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* 2. Specs (Middle) */}
                 <div className="space-y-4">
@@ -264,24 +284,26 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                 </div>
 
                 {/* Notes Toggle */}
-                {order.notes && (
-                    <div className="pt-4">
-                        <button
-                            onClick={() => setShowFullNote(!showFullNote)}
-                            className="text-emerald-600 text-[10px] font-black uppercase tracking-widest hover:text-emerald-700 transition-colors flex items-center gap-1.5"
-                        >
-                            {showFullNote ? 'Ocultar Nota' : 'Ver Nota'}
-                            <svg className={`w-3 h-3 transition-transform ${showFullNote ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-                        {showFullNote && (
-                            <div className="mt-2 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 text-sm text-slate-700 animate-fadeIn leading-relaxed">
-                                {order.notes}
-                            </div>
-                        )}
-                    </div>
-                )}
+                {
+                    order.notes && (
+                        <div className="pt-4">
+                            <button
+                                onClick={() => setShowFullNote(!showFullNote)}
+                                className="text-emerald-600 text-[10px] font-black uppercase tracking-widest hover:text-emerald-700 transition-colors flex items-center gap-1.5"
+                            >
+                                {showFullNote ? 'Ocultar Nota' : 'Ver Nota'}
+                                <svg className={`w-3 h-3 transition-transform ${showFullNote ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {showFullNote && (
+                                <div className="mt-2 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 text-sm text-slate-700 animate-fadeIn leading-relaxed">
+                                    {order.notes}
+                                </div>
+                            )}
+                        </div>
+                    )
+                }
 
                 {/* Financial/Footer */}
                 <div className="pt-6 border-t border-slate-100 flex justify-between items-start gap-4">
@@ -299,10 +321,10 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                         </div>
                     )}
                 </div>
-            </div>
+            </div >
 
             {/* Status Footer */}
-            <div className="bg-slate-50 px-8 py-4 border-t border-slate-200 flex justify-between items-center">
+            < div className="bg-slate-50 px-8 py-4 border-t border-slate-200 flex justify-between items-center" >
                 <div className="flex items-center gap-2">
                     <div className={`h-2 w-2 rounded-full ${order.status === 'DONE' ? 'bg-emerald-500' : 'bg-yellow-500'}`}></div>
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
@@ -312,7 +334,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                 <div className="text-[10px] text-slate-400 font-medium tracking-tight">
                     Cargado por <span className="font-bold text-slate-500">{createdBy || order.createdBy || 'Sistema'}</span>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
