@@ -87,9 +87,9 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 > Since you've already synced and refreshed, it's very strange that the numbers didn't move at all. Is it possible for you to check if that USD 264.00 value appears as a specific Sale or Service in the "Historial" table at the bottom? That would confirm exactly where it's leaking from.
 
 > Let me know what you think before I apply any further changes.
-
+-
 > (screenshots attached) Look where it comes from. A buy of a product, that isn't even unassigned, it IS assigned, but divided between two partners. Is this where the problem lies, the division between partners?
-
+-
 
 > That is exactly it. You've hit the nail on the head.
 
