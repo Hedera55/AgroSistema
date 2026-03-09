@@ -6,3 +6,4 @@
 - Las etiquetas doradas quieren decir, que "esta rama antes era esta otra rama"
 - Las etiquetas azules son el nombre de la rama corriente
 - Las etiquetas naranjas son el nombre de la rama remota, osea la online
+- Muchos puntos violetas y dsp algunos azules, significa que los cambios hasta la parte violeta están en el repositorio remoto, y hasta la parte azul no, sólo en el local.

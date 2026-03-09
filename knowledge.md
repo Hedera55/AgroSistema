@@ -77,23 +77,23 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - *Asking me to investigate is a good tool*: Sometimes, I can see things clearer than you, at least because I'm interacting with the live app, while you're trying to deduce things from the raw code. Check this interaction:
 
-> I've thoroughly audited the code, and mathematically, the new logic should be excluding sales from the partner totals and > hiding incomes when you select a specific partner in the detailed view.
+  > I've thoroughly audited the code, and mathematically, the new logic should be excluding sales from the partner totals and > hiding incomes when you select a specific partner in the detailed view.
 
-> If you are still seeing the exact same numbers (especially that USD 264.00 which I suspect matches a specific sale), here > are a few things to check:
+  > If you are still seeing the exact same numbers (especially that USD 264.00 which I suspect matches a specific sale), here > are a few things to check:
 
-> Profit Share Column: On the main page, the last column ("Participación saldo de la empresa") for "Sin Asignar" is currently calculating a "share of the profit" (Sales minus Expenses). Since it's not a real partner, this column will show "income  money" derived from sales. Does that column match the income you're seeing?
-> Legacy "In" Movements: I noticed some movements might still be of type IN. If these are internal stock entries but have a price assigned in the database, the code will still count them as direct expenses. If you find one of these in the detailed view, could you check if its type in the system is just "Stock Input" vs "Purchase"?
-> Variable Sync: I found a potential variable mismatch in the detailed ledger filtering that I've now verified.
-> Since you've already synced and refreshed, it's very strange that the numbers didn't move at all. Is it possible for you to check if that USD 264.00 value appears as a specific Sale or Service in the "Historial" table at the bottom? That would confirm exactly where it's leaking from.
+  > Profit Share Column: On the main page, the last column ("Participación saldo de la empresa") for "Sin Asignar" is currently calculating a "share of the profit" (Sales minus Expenses). Since it's not a real partner, this column will show "income  money" derived from sales. Does that column match the income you're seeing?
+  > Legacy "In" Movements: I noticed some movements might still be of type IN. If these are internal stock entries but have a price assigned in the database, the code will still count them as direct expenses. If you find one of these in the detailed view, could you check if its type in the system is just "Stock Input" vs "Purchase"?
+  > Variable Sync: I found a potential variable mismatch in the detailed ledger filtering that I've now verified.
+  > Since you've already synced and refreshed, it's very strange that the numbers didn't move at all. Is it possible for you to check if that USD 264.00 value appears as a specific Sale or Service in the "Historial" table at the bottom? That would confirm exactly where it's leaking from.
 
-> Let me know what you think before I apply any further changes.
--
-> (screenshots attached) Look where it comes from. A buy of a product, that isn't even unassigned, it IS assigned, but divided between two partners. Is this where the problem lies, the division between partners?
--
+  > Let me know what you think before I apply any further changes.
+  -
+  > (screenshots attached) Look where it comes from. A buy of a product, that isn't even unassigned, it IS assigned, but divided between two partners. Is this where the problem lies, the division between partners?
+  -
 
-> That is exactly it. You've hit the nail on the head.
+  > That is exactly it. You've hit the nail on the head.
 
-> The problem is that the summary logic on the main page was ignoring the "splits" array and only looking at the single "Socio" name field. Since the system often leaves that main field empty when a split exists, the code was defaulting the entire amount to "Sin Asignar".
+  > The problem is that the summary logic on the main page was ignoring the "splits" array and only looking at the single "Socio" name field. Since the system often leaves that main field empty when a split exists, the code was defaulting the entire amount to "Sin Asignar".
 
 
 
