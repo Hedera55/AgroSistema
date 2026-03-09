@@ -145,14 +145,22 @@ function StockMovementPanelInternal({
         const partner = investors.find(i => i.name === partnerName);
         const percentage = partner?.percentage || 0;
 
-        // Total Harvested (Movements type IN for this product/campaign)
+        // Total Harvested (Movements type HARVEST for this specific product/campaign)
         const totalHarvested = movements
-            .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'IN')
+            .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'HARVEST')
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
-        // Already Withdrawn by this partner
+        // Already Withdrawn/Taken by this partner
+        // Includes:
+        // - Direct harvests to partner (type HARVEST, receiverName)
+        // - Withdrawals from warehouse (type OUT, receiverName)
         const alreadyWithdrawn = movements
-            .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'WITHDRAW' && m.receiverName === partnerName)
+            .filter(m =>
+                m.productId === productId &&
+                m.campaignId === campaignId &&
+                (m.type === 'OUT' || m.type === 'HARVEST') &&
+                m.receiverName === partnerName
+            )
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
         const quota = totalHarvested * (percentage / 100);

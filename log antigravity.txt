@@ -1,0 +1,8 @@
+> To pull a branch into main,
+- You have to checkout main (esto es, pasarte a main como la versión activa),
+- And click merge x branch. That prioritizes branch versions over main versions.
+
+> En el git manager:
+- Las etiquetas doradas quieren decir, que "esta rama antes era esta otra rama"
+- Las etiquetas azules son el nombre de la rama corriente
+- Las etiquetas naranjas son el nombre de la rama remota, osea la online

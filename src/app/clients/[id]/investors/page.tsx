@@ -12,6 +12,7 @@ import { useCampaigns } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { generateId } from '@/lib/uuid';
+import { syncService } from '@/services/sync';
 
 export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -22,6 +23,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const { products, loading: productsLoading } = useInventory();
     const { orders, loading: ordersLoading } = useOrders(id);
     const scrollRef = useHorizontalScroll();
+    const partnersScrollRef = useHorizontalScroll();
     const [loading, setLoading] = useState(true);
 
     const [showEditInvestors, setShowEditInvestors] = useState(false);
@@ -67,6 +69,11 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             }
             setLoading(false);
         });
+
+        return () => {
+            // Trigger sync when leaving Contaduría to ensure configuration changes are pushed/pulled
+            syncService.sync().catch(err => console.error('Auto-sync on leave failed:', err));
+        };
     }, [id]);
 
     const handleSaveInvestors = async () => {
@@ -132,57 +139,70 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         let sold = 0;
         const perPartner: Record<string, number> = {};
 
-        // Pre-calculate Weighted Average Purchase Price (WAP) for all products
-        const productWAPs = new Map<string, { totalVal: number, totalQty: number }>();
-        movements.forEach(m => {
-            if (m.type === 'IN' && !m.notes?.toLowerCase().includes('transferencia')) {
-                const entry = productWAPs.get(m.productId) || { totalVal: 0, totalQty: 0 };
-                if (m.productId === 'CONSOLIDATED' && m.items) {
-                    m.items.forEach((it: any) => {
-                        entry.totalVal += (it.quantity * (it.price || 0));
-                        entry.totalQty += it.quantity;
-                    });
-                } else {
-                    const price = m.purchasePrice ?? 0;
-                    entry.totalVal += (m.quantity * price);
-                    entry.totalQty += m.quantity;
-                }
-                productWAPs.set(m.productId, entry);
-            }
-        });
-
         movements.forEach((m: InventoryMovement) => {
             // Filter by campaign if selected
             if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
 
-            const product = products.find(p => p.id === m.productId);
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+            if (isTransfer) return;
 
-            if (m.type === 'IN' && !isTransfer) {
-                let amount = 0;
-                if (m.productId === 'CONSOLIDATED' && m.items) {
-                    amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
-                } else {
-                    let purchasePrice = m.purchasePrice;
-                    if (purchasePrice === undefined || purchasePrice === null) {
-                        const wap = productWAPs.get(m.productId);
-                        purchasePrice = (wap && wap.totalQty > 0) ? (wap.totalVal / wap.totalQty) : 0;
-                    }
-                    amount = m.quantity * purchasePrice;
-                }
-                investedMovements += amount;
-
-                let pName = m.investorName || 'Sin Asignar';
+            // Normalize Name Helper
+            const getPartnerName = (name?: string) => {
+                if (!name) return 'Sin Asignar';
+                let pName = name;
                 if (pName.startsWith('{')) {
                     try {
                         const parsed = JSON.parse(pName);
                         if (parsed && parsed.name) pName = parsed.name;
                     } catch (e) { }
                 }
+                // Consolidate "Sin asignar" naming
+                if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') return 'Sin Asignar';
+                return pName;
+            };
 
-                perPartner[pName] = (perPartner[pName] || 0) + amount;
+            // Support both legacy (IN) and new types (PURCHASE/SALE/SERVICE)
+            if (m.type === 'IN' || m.type === 'PURCHASE') {
+                let amount = 0;
+                if (m.productId === 'CONSOLIDATED' && m.items) {
+                    amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                } else {
+                    amount = m.quantity * (m.purchasePrice || 0);
+                }
+
+                if (amount > 0) {
+                    investedMovements += amount;
+                    // Handle Splits
+                    if (m.investors && m.investors.length > 0) {
+                        m.investors.forEach((inv: { name: string; percentage: number }) => {
+                            const pName = getPartnerName(inv.name);
+                            const pAmount = amount * (inv.percentage / 100);
+                            perPartner[pName] = (perPartner[pName] || 0) + pAmount;
+                        });
+                    } else {
+                        const pName = getPartnerName(m.investorName);
+                        perPartner[pName] = (perPartner[pName] || 0) + amount;
+                    }
+                }
             } else if (m.type === 'SALE') {
                 sold += (m.quantity * (m.salePrice || 0));
+            } else if (m.type === 'SERVICE') {
+                // Ad-hoc service payments (monetary)
+                const amount = m.amount || (m.quantity * (m.purchasePrice || 0));
+                if (amount > 0) {
+                    investedMovements += amount;
+                    // Handle Splits
+                    if (m.investors && m.investors.length > 0) {
+                        m.investors.forEach((inv: { name: string; percentage: number }) => {
+                            const pName = getPartnerName(inv.name);
+                            const pAmount = amount * (inv.percentage / 100);
+                            perPartner[pName] = (perPartner[pName] || 0) + pAmount;
+                        });
+                    } else {
+                        const pName = getPartnerName(m.investorName);
+                        perPartner[pName] = (perPartner[pName] || 0) + amount;
+                    }
+                }
             }
         });
 
@@ -190,19 +210,38 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             // Filter by campaign if selected
             if (viewCampaignId !== 'all' && o.campaignId !== viewCampaignId) return;
 
-            if (o.servicePrice) {
+            if (o.servicePrice && o.servicePrice > 0) {
                 const amount = (o.servicePrice * o.treatedArea);
                 serviceCosts += amount;
 
-                let pName = o.investorName || 'Sin Asignar';
-                if (pName.startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(pName);
-                        if (parsed && parsed.name) pName = parsed.name;
-                    } catch (e) { }
-                }
+                // Handle Splits
+                if (o.investors && o.investors.length > 0) {
+                    o.investors.forEach((inv: { name: string; percentage: number }) => {
+                        let pName = inv.name || 'Sin Asignar';
+                        if (pName.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(pName);
+                                if (parsed && parsed.name) pName = parsed.name;
+                            } catch (e) { }
+                        }
+                        if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') pName = 'Sin Asignar';
 
-                perPartner[pName] = (perPartner[pName] || 0) + amount;
+                        const pAmount = amount * (inv.percentage / 100);
+                        perPartner[pName] = (perPartner[pName] || 0) + pAmount;
+                    });
+                } else {
+                    // Legacy single name field
+                    let pName = o.investorName || 'Sin Asignar';
+                    if (pName.startsWith('{')) {
+                        try {
+                            const parsed = JSON.parse(pName);
+                            if (parsed && parsed.name) pName = parsed.name;
+                        } catch (e) { }
+                    }
+                    if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') pName = 'Sin Asignar';
+
+                    perPartner[pName] = (perPartner[pName] || 0) + amount;
+                }
             }
         });
 
@@ -217,16 +256,15 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             movements.forEach(m => {
                 if (m.campaignId !== c.id) return;
                 const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
-                if (m.type === 'IN' && !isTransfer) {
-                    if (m.productId === 'CONSOLIDATED' && m.items) {
+                if (isTransfer) return;
+
+                if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
+                    if (m.type === 'SERVICE') {
+                        cInvested += m.amount || (m.quantity * (m.purchasePrice || 0));
+                    } else if (m.productId === 'CONSOLIDATED' && m.items) {
                         cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                     } else {
-                        let purchasePrice = m.purchasePrice;
-                        if (purchasePrice === undefined || purchasePrice === null) {
-                            const wap = productWAPs.get(m.productId);
-                            purchasePrice = (wap && wap.totalQty > 0) ? (wap.totalVal / wap.totalQty) : 0;
-                        }
-                        cInvested += m.quantity * purchasePrice;
+                        cInvested += m.quantity * (m.purchasePrice || 0);
                     }
                 } else if (m.type === 'SALE') {
                     cSold += (m.quantity * (m.salePrice || 0));
@@ -235,7 +273,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
             orders.forEach(o => {
                 if (o.campaignId !== c.id) return;
-                if (o.servicePrice) {
+                if (o.servicePrice && o.servicePrice > 0) {
                     cInvested += (o.servicePrice * o.treatedArea);
                 }
             });
@@ -369,7 +407,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
             const { normalizedDate, normalizedTime } = normalizeDateTime(m.date, m.time);
 
-            if (m.type === 'IN') {
+            if (m.type === 'IN' || m.type === 'PURCHASE') {
                 if (m.items && m.items.length > 0) {
                     const totalAmount = m.items.reduce((sum: number, item: any) => sum + (item.quantity * (item.price || 0)), 0);
                     const desc = m.items.length > 1 ? 'Varios' : m.items[0].productName;
@@ -406,6 +444,17 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     description: `Venta: ${product?.name || 'Insumo'}`,
                     amount: m.quantity * salePrice,
                     detail: `${product?.name || 'Insumo'}: ${m.quantity} ${product?.unit || 'u.'} x USD ${salePrice.toLocaleString()}`
+                });
+            } else if (m.type === 'SERVICE') {
+                const amount = m.amount || (m.quantity * (m.purchasePrice || 0));
+                history.push({
+                    id: m.id,
+                    date: normalizedDate,
+                    time: normalizedTime,
+                    type: 'SERVICE',
+                    description: `Servicio: ${m.notes || 'Sin descripción'}`,
+                    amount: amount,
+                    detail: m.notes || 'Pago de servicio ad-hoc'
                 });
             }
         });
@@ -460,7 +509,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             breakdown.push({
                 name: 'Sin Asignar',
                 percentage,
-                shareValue: totalInvested > 0 ? (stats.total * percentage) / 100 : 0,
+                // Sin asignar doesn't participate in profit, only bears its specific expenses
+                shareValue: -amount,
                 shareInvestment: amount
             });
         }
@@ -586,7 +636,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                 {item.description}
                                                 {item.type === 'PURCHASE' && (
                                                     <span className="ml-2 text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">
-                                                        {expandedHistoryId === item.id ? '↑ Contraer' : '↓'}
+                                                        {expandedHistoryId === item.id ? '↑' : '↓'}
                                                     </span>
                                                 )}
                                             </td>
@@ -898,7 +948,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" ref={partnersScrollRef}>
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>

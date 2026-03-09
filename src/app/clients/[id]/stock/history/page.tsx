@@ -483,8 +483,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
                                         let labelClass = 'bg-orange-100 text-orange-800';
                                         if (label === 'TRANSFERENCIA') labelClass = 'bg-indigo-100 text-indigo-800';
-                                        else if (label === 'I-COSECHA') labelClass = 'bg-lime-100 text-lime-800';
-                                        else if (label === 'E-VENTA' || label === 'E-RETIRO') labelClass = 'bg-blue-100 text-blue-800';
+                                        else if (label === 'I-COSECHA') labelClass = 'bg-blue-100 text-blue-800';
+                                        else if (label === 'E-VENTA' || label === 'E-RETIRO') labelClass = 'bg-lime-100 text-lime-800';
                                         else if (label === 'E-SIEMBRA') labelClass = 'bg-emerald-100 text-emerald-800';
 
                                         let showValue = (m.type === 'IN' && !m.isTransfer) || (m.type === 'SALE');
@@ -610,30 +610,26 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             }}
                         />
                     ) : (
-                        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 border-t-blue-500">
-                            <MovementDetailsView
-                                movement={selectedMovement.movement}
-                                client={client}
-                                order={selectedMovement.order}
-                                typeLabel={selectedMovement.typeLabel}
-                                onClose={() => setSelectedMovement(null)}
-                            />
-                        </div>
+                        <MovementDetailsView
+                            movement={selectedMovement.movement}
+                            client={client}
+                            order={selectedMovement.order}
+                            typeLabel={selectedMovement.typeLabel}
+                            onClose={() => setSelectedMovement(null)}
+                        />
                     )}
                 </div>
             )}
 
             {selectedSubMovement && client && (
                 <div className="mt-4 animate-slideUp">
-                    <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 border-t-blue-500">
-                        <MovementDetailsView
-                            movement={selectedSubMovement.movement}
-                            client={client}
-                            order={selectedSubMovement.order}
-                            typeLabel={selectedSubMovement.typeLabel}
-                            onClose={() => setSelectedSubMovement(null)}
-                        />
-                    </div>
+                    <MovementDetailsView
+                        movement={selectedSubMovement.movement}
+                        client={client}
+                        order={selectedSubMovement.order}
+                        typeLabel={selectedSubMovement.typeLabel}
+                        onClose={() => setSelectedSubMovement(null)}
+                    />
                 </div>
             )}
 
@@ -653,6 +649,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     warehouses={warehousesFull} // Fixes "warehouses is undefined" crash
                     partners={client?.partners || []}
                     investors={client?.investors || []}
+                    movements={movements}
                     onCancel={() => { setShowHarvestWizard(false); setEditingMovement(null); }}
                     onComplete={() => { setShowHarvestWizard(false); setEditingMovement(null); loadData(); }}
                     initialDate={editingMovement.date}

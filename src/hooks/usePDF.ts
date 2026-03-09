@@ -327,12 +327,12 @@ export function usePDF() {
         doc.setFont("helvetica", "bold"); // Ensure bold for title
         doc.setTextColor(...darkEmerald);
         doc.setFontSize(22);
-        doc.text("NECESIDAD DE INSUMOS", pageWidth * 0.35, 18, { align: 'left' });
+        doc.text("NECESIDAD DE INSUMOS", 61, 22, { align: 'left' });
 
         // Row 2: Antigravity text, Contact Info & Metadata
         doc.setFont("helvetica", "normal");
         doc.setTextColor(...emeraldGreen);
-        doc.setFontSize(28);
+        doc.setFontSize(22);
         doc.text("Antigravity", 14, 34);
 
         doc.setFont("helvetica", "bold");
@@ -350,8 +350,8 @@ export function usePDF() {
                 [`ORDEN REF NRO:`, `${order.orderNumber || '-'}`],
                 [`CLIENTE:`, `${client.name}`]
             ],
-            startY: 38,
-            margin: { left: pageWidth * 0.35 },
+            startY: 32,
+            margin: { left: 61 },
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 0.8, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
             columnStyles: {
@@ -360,8 +360,8 @@ export function usePDF() {
             }
         });
 
-        let lastY = (doc as any).lastAutoTable.finalY + 15;
-        if (lastY < 48) lastY = 48; // ensure clearance
+        let lastY = (doc as any).lastAutoTable.finalY + 10;
+        if (lastY < 68) lastY = 68; // ensure clearance
 
         // --- Table ---
         const tableColumn = ["GALPÓN", "PRODUCTO", "PRESENTACIÓN", "CANTIDAD REQUERIDA"];
@@ -415,12 +415,12 @@ export function usePDF() {
         doc.setFont("helvetica", "bold");
         doc.setTextColor(...darkEmerald);
         doc.setFontSize(22);
-        doc.text("REMITO", pageWidth * 0.35, 18, { align: 'left' });
+        doc.text("REMITO", 61, 22, { align: 'left' });
 
         // Row 2: Antigravity text, Contact Info & Metadata
         doc.setFont("helvetica", "normal");
         doc.setTextColor(...emeraldGreen);
-        doc.setFontSize(28);
+        doc.setFontSize(22);
         doc.text("Antigravity", 14, 34);
 
         doc.setFont("helvetica", "bold");
@@ -441,8 +441,8 @@ export function usePDF() {
                 [`CLIENTE:`, `${client.name}`],
                 [`GALPÓN / ORIGEN:`, `${warehouseName || 'S/D'}`]
             ],
-            startY: 38,
-            margin: { left: pageWidth * 0.35 },
+            startY: 32,
+            margin: { left: 61 },
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 0.8, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
             columnStyles: {
@@ -451,8 +451,8 @@ export function usePDF() {
             }
         });
 
-        let lastY = (doc as any).lastAutoTable.finalY + 15;
-        if (lastY < 48) lastY = 48;
+        let lastY = (doc as any).lastAutoTable.finalY + 10;
+        if (lastY < 68) lastY = 68;
 
         // --- Table ---
         const tableColumn = ["PRODUCTO", "PRESENTACIÓN", "CANTIDAD"];

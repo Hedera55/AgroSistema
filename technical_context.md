@@ -1,0 +1,105 @@
+## 🏗️ Modularization Strategy (Route Splitting)
+To maintain fast compilation (HMR) and readable code, large pages are split "surgically":
+- **Pattern**: `src/app/clients/[id]/[page]/components/` contains local modules.
+- **Goal**: Keep `page.tsx` under 800-1000 lines as an "orchestrator" of state and handlers.
+- **Shared Components**: Move to `src/components/` only when used by 2+ distinct routes.
+
+## 🎨 Global UI Standard
+- **Typography**: Headers must use `slate-900` (Black) and `font-semibold`. Avoid `slate-800` for titles to maintain consistency.
+- **Aesthetic Constraints**: **STRICTLY NO RANDOM SHADOWS**. Use `shadow-lg` or `shadow-xl` only on main containers/cards as defined. Headers and inline elements should remain "clean" and text-only.
+- **Report Mode Buttons**: Deselected buttons should have a "carved-in" (inset) relief effect using `shadow-inner` and `bg-slate-100` to distinguish them from the active states.
+- **Table Footer Patterns**: Pagination controls (e.g., "Cargar 10 más") must be full-width clickable bars (`flex-1`) with a solid `bg-slate-50`. Horizontal scrollbars must appear **above** these footer controls to keep the buttons accessible and fixed.
+- **Inline Details**: When clicking a table row for an item linked to an Order, the `OrderDetailView` should render inline **below** the relevant section (e.g., below the table) rather than in a modal, providing a smoother experience.
+- **Segmented Date Inputs**: For high-speed data entry, use a custom joined-box component for dates (DD-MM-YY). 
+    - **Logic**: Each segment is physically limited to 2 digits. Typing the 2nd digit triggers an automatic focus jump to the next segment.
+    - **Visuals**: Dashes should be used as separators. The container must look like a single standard cohesive input.
+- **Campaign UI (Floating Text)**: Campaign rows in lists/management should not use cards. 
+    - **Aesthetics**: Clean "floating text" with `border-slate-200` dividers that extend **edge-to-edge**.
+    - **Content**: Campaign name (Left) and "Repartición de..." (Right). All text color should be `slate-900` (Black) and font weight `font-medium`.
+    - **Interactivity**: Icons (Pencil/X) should only appear in "Gestionar campañas" mode.
+- **Border/Shadow**: Prohibited (border-0, shadow-none).
+- **Selector Styling Standard**: All `<select>` elements must follow the "Flat/Thin" layout.
+    - **Classes**: `w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none`.
+    - **Prohibited**: **STRICTLY NO SHADOWS** or `py-1.5` padding. The height must remain thin (`py-0.5`). No emojis in options. Aria-labels or bold font on selectors should be avoided unless necessary for accessibility.
+    - **Label Formatting**: 
+        - **Seeds/Grains**: `Active Ingredient (Commercial Name) (Brand)`.
+        - **Others**: `Commercial Name (Active Ingredient) (Brand)`.
+    - **Form Element Fonts**: Prevent default browser fonts (like Times New Roman) from overriding form elements by enforcing `font-family: inherit !important;` in `globals.css` and setting the CSS variable `--font-sans` in `layout.tsx`.
+
+- **Action Buttons (Movement/Sale)**: All primary floating panel confirmation buttons (e.g., "Confirmar Venta", "Confirmar Retiro") must use `size="sm"` for a compact, professional look. 
+    - **Vender**: Emerald theme (`bg-emerald-600`).
+    - **Mover**: Orange theme (`bg-orange-600`).
+
+### Harvest Details UI (`HarvestDetailsView.tsx`)
+- **Grid Layout**: Uses a 3-row grid for better data hierarchy:
+  - Row 1: `Fecha de cosecha` | `Campaña` (New)
+  - Row 2: `Cultivo - Nombre Comercial` | `Rinde total`
+  - Row 3: `Contratista` | `Costo Labor Total` | `Pagado por`
+- **Component Props**: Added `campaigns?: any[]` to resolve campaign names from IDs.
+- **Section Titles**: Added "Distribución de Cosecha" section header with `text-[10px] uppercase tracking-[0.2em]`.
+
+### Movement Details UI (`MovementDetailsView.tsx`)
+- **"Free" Styling**: Removed the gray `bg-slate-50` background from the general information section to align with the Harvest details look.
+- **Label Colors**: Labels use `text-slate-400` while values use `text-slate-700` and `font-bold` for high contrast.
+
+### Stock Vender Box (`StockTable.tsx` / `StockSalePanel.tsx`)
+- **Square Buttons**: Fixed action buttons to `h-10 w-10` square format.
+- **Note Input Flow**: The note `textarea` is now rendered *after* the action row in the JSX to ensure it appears below the "Agregar Nota" button.
+- **Input Height Standard**: Note input boxes (e.g., in `StockSalePanel.tsx`) should be compact to save vertical space.
+    - **Standard**: `rows={2}` and `min-h-[60px]` (or `h-12` for single-line expandable inputs).
+
+## Navigation & Order Logic
+
+### Stock History Navigation
+- **Direct Jump**: Clicking on **E-SIEMBRA** or **E-APLICACIÓN** rows MUST directly open the `OrderDetailView`.
+- **Movement Hierarchy**: `MovementDetailsView` is reserved for transfers, withdrawals, or sub-movements that do not constitute a primary work event.
+- **Redundancy**: The "Ver Orden Vinculada" button is prohibited in `MovementDetailsView` to ensure a direct, single-modal interaction flow.
+
+## 📊 Financial Reporting & Accounting Rules
+
+### Direct Monetary Expenses (Empresa)
+- **Definition**: The "Empresa" (Company) level accounting strictly reflects **external monetary transactions**. 
+- **Inclusions**: Direct Purchases (`PURCHASE`) and Hired Services (`SERVICE`) where cash or debt is exchanged with a third party.
+- **Exclusions**: Internal Stock Consumption (Cost) used in `Orders` is **EXCLUDED** from the main accounting summary to avoid inflating total expenditure with internal movements.
+- **Valuation (Stock/Harvests)**: Uses **Weighted Average Sale Price (WASP)** of the *Product* (Active Ingredient) across all brands.
+- **Consumption (Internal Orders)**: Uses **Weighted Average Purchase Price (PPP)** of the *Product* across all brands.
+
+### Investor Split Handling (Splits)
+- **Core Requirement**: All financial summaries must process the `investors` array within movements and orders to distribute amounts proportionally.
+- **Logic**: If an item has multiple investors (e.g., 95% Pichetto / 5% Tornado), the total amount must be multiplied by each percentage before being attributed to the partner's balance.
+- **Fallback**: If the `investors` array is missing or empty, the system must fallback to the legacy single `investorName` field (Defaulting to 100% share).
+
+### "Sin Asignar" (Unassigned) Logic
+- **Expenditure Only**: The "Sin Asignar" category is restricted to only bearing direct expenses. 
+- **Profit Exclusion**: It is explicitly forbidden from participating in "Participación saldo de la empresa" (Sale profit distribution). Sales revenue is only distributed among defined partners.
+- **Normalization**: Partner names must be normalized via helper functions to handle JSON-encoded names and consolidate case-insensitive "Sin Asignar" or "Sin_Asignar" strings.
+
+### Filtering Consistency
+- **Detailed Ledger Summary**: When filtering the detailed ledger by a specific partner, the summary boxes at the top (Expenditure/Income) MUST calculate based on that partner's **proportional stake** of the filtered rows, not the full row totals.
+
+### Pricing Logic & Fallbacks
+- **Actual Transactions**: Sales and Purchases use their specific confirmed invoice prices.
+- **Robust Fallbacks (Propia)**: To handle items with unique IDs but no history (e.g. "Soja Propia"), the system aggregates pricing by **Product Name / Crop** as well.
+    - *Priority*: Specific ID Price -> Generic Name Price -> Manual Reference.
+- **Obsolescence**: "Catalog Price" (`product.price`) is deprecated and removed.
+
+## 🛠️ Infrastructure & Sync
+- **Invalid UUIDs**: The sync service (`sync.ts`) automatically cleans up legacy local IDs (e.g., "grain-soja") to prevent Supabase type errors.
+- **Registration Schema Integrity**: The database schema MUST align with the fields used in registration triggers and frontend forms.
+- **Timestamp Normalization & Sorting**: 
+    - **Standard**: All dates must be normalized to `YYYY-MM-DD` and all times to `24h` format (`HH:mm`) before sorting. This ensures robust string comparison (`date + 'T' + time`).
+
+## 📦 Stock & Inventory System
+- **ID-Based Deduction**: Movements now target specific stock records (presentations) instead of using a generic product-level FIFO.
+- **Unit Multipliers**: Input fields in the movement panel act as multipliers for presentation contents (e.g., 2 units of a 100L tank = 200L).
+- **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
+- **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
+
+## 👥 User Roles & Permissions
+- **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.
+- **CLIENT**: Read-only access to most management features. Supplements: suppresses all CREATE/UPDATE/DELETE.
+- **MASTER_ADMIN**: Full access to all clients and settings.
+
+## 📖 Documentation
+- **Technical Context**: Located in `.gemini/antigravity/brain/` (this file).
+- **Knowledge Base**: `knowledge.md` is located in the **apps main folder**.

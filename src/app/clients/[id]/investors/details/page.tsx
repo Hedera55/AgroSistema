@@ -1,10 +1,11 @@
 'use client';
 
-import { use, useEffect, useState, useMemo } from 'react';
+import React, { use, useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { Client, InventoryMovement, Order, Product, Lot } from '@/types';
 import { useInventory, useClientMovements } from '@/hooks/useInventory';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { useOrders } from '@/hooks/useOrders';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,11 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
     const [filterCrop, setFilterCrop] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterSeller, setFilterSeller] = useState('');
+    const [filterPartner, setFilterPartner] = useState('');
     const [reportType, setReportType] = useState<'LOTS' | 'COMPANY'>('LOTS');
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const scrollRef = useHorizontalScroll();
+
 
     // User-provided reference prices for crops with no sales
     const [referencePrices, setReferencePrices] = useState<Record<string, number>>({});
@@ -168,16 +173,32 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
         }
     };
 
+    const parseInvestors = (investors: any[], name?: string) => {
+        if (investors && investors.length > 0) return investors;
+        if (!name) return [];
+
+        let pName = name;
+        if (pName.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(pName);
+                if (parsed && parsed.name) pName = parsed.name;
+            } catch (e) { }
+        }
+        return [{ name: pName, percentage: 100 }];
+    };
+
     const ledgerData = useMemo(() => {
         const data: any[] = [];
 
         if (reportType === 'COMPANY') {
-            // Purchases (Direct Cash Out)
+            // Movements (Cash Flow)
             movements.forEach(m => {
                 const product = products.find(p => p.id === m.productId);
                 const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+                if (isTransfer) return;
 
-                if (m.type === 'IN' && !isTransfer) {
+                // Support both legacy (IN/OUT) and new types (PURCHASE/SALE/SERVICE)
+                if (m.type === 'IN' || m.type === 'PURCHASE') {
                     let amount = 0;
                     let concept = '';
                     let detail = '';
@@ -193,33 +214,59 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         detail = `Inversión: ${m.quantity} ${product?.unit || 'u.'} @ USD ${price.toLocaleString()}`;
                     }
 
-                    data.push({
-                        id: m.id,
-                        rawDate: m.date,
-                        date: formatLedgerDate(m.date, m.time),
-                        concept,
-                        category: product?.type || 'OTROS',
-                        lote: '-',
-                        crop: '-',
-                        seller: m.sellerName || 'Directo',
-                        amount,
-                        detail
-                    });
+                    if (amount > 0) {
+                        data.push({
+                            id: m.id,
+                            rawDate: m.date,
+                            date: formatLedgerDate(m.date, m.time),
+                            concept,
+                            category: product?.type || 'OTROS',
+                            lote: '-',
+                            crop: '-',
+                            seller: m.sellerName || 'Directo',
+                            amount,
+                            detail,
+                            investors: parseInvestors(m.investors || [], m.investorName),
+                            items: m.items || []
+                        });
+                    }
+                } else if (m.type === 'SERVICE') {
+                    const amount = m.amount || (m.quantity * (m.purchasePrice || 0));
+                    if (amount > 0) {
+                        data.push({
+                            id: m.id,
+                            rawDate: m.date,
+                            date: formatLedgerDate(m.date, m.time),
+                            concept: 'Pago de Servicio',
+                            category: 'SERVICIOS',
+                            lote: '-',
+                            crop: '-',
+                            seller: m.sellerName || m.contractorName || '-',
+                            amount,
+                            detail: m.notes || 'Pago de servicio ad-hoc',
+                            investors: parseInvestors(m.investors || [], m.investorName),
+                            items: m.items || []
+                        });
+                    }
                 } else if (m.type === 'SALE') {
-                    const product = products.find(p => p.id === m.productId);
-                    const lot = lots.find(l => l.id === m.lotId);
-                    data.push({
-                        id: m.id,
-                        rawDate: m.date,
-                        date: formatLedgerDate(m.date, m.time),
-                        concept: `Venta: ${product?.name || 'Grano'}`,
-                        category: 'INGRESO',
-                        lote: lot?.name || '-',
-                        crop: m.crop || '-',
-                        seller: m.sellerName || '-',
-                        amount: -(m.quantity * (m.salePrice || 0)),
-                        detail: `Ingreso por venta: ${m.quantity} ${product?.unit || 'u.'} @ USD ${(m.salePrice || 0).toLocaleString()}`
-                    });
+                    const amount = m.quantity * (m.salePrice || 0);
+                    if (amount > 0) {
+                        const lot = lots.find(l => l.id === m.lotId);
+                        data.push({
+                            id: m.id,
+                            rawDate: m.date,
+                            date: formatLedgerDate(m.date, m.time),
+                            concept: `Venta: ${product?.name || 'Grano'}`,
+                            category: 'INGRESO',
+                            lote: lot?.name || '-',
+                            crop: m.crop || '-',
+                            seller: m.sellerName || '-',
+                            amount: -amount, // Income is negative in an expense-oriented view (reduces net cost)
+                            detail: `Ingreso por venta: ${m.quantity} ${product?.unit || 'u.'} @ USD ${(m.salePrice || 0).toLocaleString()}`,
+                            investors: parseInvestors(m.investors || [], m.investorName),
+                            items: m.items || []
+                        });
+                    }
                 }
             });
 
@@ -249,7 +296,9 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         crop: cropDisplay,
                         seller: o.applicatorName || '-',
                         amount: o.servicePrice * o.treatedArea,
-                        detail: `Orden #${o.orderNumber}. ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`
+                        detail: `Orden #${o.orderNumber}. ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`,
+                        investors: parseInvestors([], o.investorName),
+                        items: []
                     });
                 }
             });
@@ -272,7 +321,9 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         crop: lot?.cropSpecies || '-',
                         seller: o.applicatorName || '-',
                         amount: o.servicePrice * o.treatedArea,
-                        detail: `Orden #${o.orderNumber} - ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`
+                        detail: `Orden #${o.orderNumber} - ${o.treatedArea} ha @ USD ${o.servicePrice.toLocaleString()}/ha`,
+                        investors: parseInvestors([], o.investorName),
+                        items: []
                     });
                 }
 
@@ -292,7 +343,9 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         crop: lot?.cropSpecies || '-',
                         seller: '-',
                         amount: item.totalQuantity * pppPrice,
-                        detail: `Orden #${o.orderNumber} - ${item.totalQuantity.toFixed(2)} ${item.unit} @ PPP USD ${pppPrice.toLocaleString()}`
+                        detail: `Orden #${o.orderNumber} - ${item.totalQuantity.toFixed(2)} ${item.unit} @ PPP USD ${pppPrice.toLocaleString()}`,
+                        investors: parseInvestors([], o.investorName),
+                        items: []
                     });
                 });
             });
@@ -335,7 +388,9 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         crop: displayCrop,
                         seller: '-',
                         amount: -(m.quantity * avgSalePrice),
-                        detail: `Valuación cosecha: ${m.quantity} ${product?.unit || 'u.'} @ USD ${avgSalePrice.toLocaleString()} (${avgSalePriceMap[productId] || avgSalePriceMap[cropName] ? 'Venta Promedio' : (pppPurchaseMap[productId] || pppPurchaseMap[productName] ? 'Compra Promedio' : 'Ref. Manual')})`
+                        detail: `Valuación cosecha: ${m.quantity} ${product?.unit || 'u.'} @ USD ${avgSalePrice.toLocaleString()} (${avgSalePriceMap[productId] || avgSalePriceMap[cropName] ? 'Venta Promedio' : (pppPurchaseMap[productId] || pppPurchaseMap[productName] ? 'Compra Promedio' : 'Ref. Manual')})`,
+                        investors: parseInvestors(m.investors || [], m.investorName),
+                        items: m.items || []
                     });
                 }
             });
@@ -350,49 +405,99 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
         const cropsSet = new Set<string>();
         const categoriesSet = new Set<string>();
         const sellersSet = new Set<string>();
+        const partnersSet = new Set<string>();
 
         ledgerData.forEach(item => {
             if (item.lote && item.lote !== '-') lotsSet.add(item.lote);
             if (item.crop && item.crop !== '-') cropsSet.add(item.crop);
             if (item.category && item.category !== '-') categoriesSet.add(item.category);
             if (item.seller && item.seller !== '-') sellersSet.add(item.seller);
+            if (item.investors && item.investors.length > 0) {
+                item.investors.forEach((inv: any) => {
+                    if (inv.name.toLowerCase() !== 'sin asignar') {
+                        partnersSet.add(inv.name);
+                    }
+                });
+            }
         });
 
         return {
             lots: Array.from(lotsSet).sort(),
             crops: Array.from(cropsSet).sort(),
             categories: Array.from(categoriesSet).sort(),
-            sellers: Array.from(sellersSet).sort()
+            sellers: Array.from(sellersSet).sort(),
+            partners: Array.from(partnersSet).sort()
         };
     }, [ledgerData]);
 
     const filteredLedger = useMemo(() => {
         return ledgerData.filter(item => {
+            // Common filters
+            const matchCategory = !filterCategory || item.category === filterCategory;
+
+            let matchPartner = true;
+            if (filterPartner === 'SIN_ASIGNAR') {
+                // Only show expenses for partner filters
+                if (item.amount <= 0) {
+                    matchPartner = false;
+                } else {
+                    const hasNoInvestors = !item.investors || item.investors.length === 0;
+                    const hasSinAsignarInvestor = item.investors?.some((inv: any) =>
+                        !inv.name || inv.name.toLowerCase() === 'sin asignar'
+                    );
+                    matchPartner = hasNoInvestors || hasSinAsignarInvestor;
+                }
+            } else if (filterPartner) {
+                // Only show expenses for partner filters
+                if (item.amount <= 0) {
+                    matchPartner = false;
+                } else {
+                    matchPartner = item.investors?.some((inv: any) => inv.name === filterPartner);
+                }
+            }
+
             if (reportType === 'COMPANY') {
-                // Company view only filters by Category and Seller/Buyer if needed
-                // But currently we don't have those filters visible for Company view in the UI header
-                // However, they might be useful. For now, we only apply what's in the LOTS view
-                // Actually, the user specifically said "We don't need a proveedor input in tabla de lotes"
-                return true;
+                return matchCategory && matchPartner;
             }
             // For LOTS view:
             const matchLote = !filterLote || item.lote === filterLote;
             const matchCrop = !filterCrop || item.crop === filterCrop;
-            const matchCategory = !filterCategory || item.category === filterCategory;
-            // No seller filter for LOTS view
-            return matchLote && matchCrop && matchCategory;
+            return matchLote && matchCrop && matchCategory && matchPartner;
         });
-    }, [ledgerData, filterLote, filterCrop, filterCategory, reportType]);
+    }, [ledgerData, filterLote, filterCrop, filterCategory, filterPartner, reportType]);
 
     const totals = useMemo(() => {
         let expenditure = 0;
         let income = 0;
+
         filteredLedger.forEach(item => {
-            if (item.amount > 0) expenditure += item.amount;
-            else income += Math.abs(item.amount);
+            let itemAmount = item.amount;
+
+            // If filtering by a specific partner, handle the split
+            if (filterPartner) {
+                const targetName = filterPartner === 'SIN_ASIGNAR' ? 'Sin Asignar' : filterPartner;
+                const inv = item.investors?.find((i: any) => {
+                    const iName = i.name || 'Sin Asignar';
+                    return iName === targetName || (targetName === 'Sin Asignar' && (iName.toLowerCase() === 'sin asignar' || iName.toLowerCase() === 'sin_asignar'));
+                });
+
+                if (inv) {
+                    itemAmount = item.amount * (inv.percentage / 100);
+                } else if (filterPartner === 'SIN_ASIGNAR' && (!item.investors || item.investors.length === 0)) {
+                    // It's fully unassigned
+                    itemAmount = item.amount;
+                } else {
+                    // Partner doesn't participate in this specific movement (shouldn't happen with filteredLedger but safety first)
+                    itemAmount = 0;
+                }
+            }
+
+            if (itemAmount > 0) expenditure += itemAmount;
+            else income += Math.abs(itemAmount);
         });
+
         return { expenditure, income, balance: income - expenditure };
-    }, [filteredLedger]);
+    }, [filteredLedger, filterPartner]);
 
     const exportToCSV = () => {
         const headers = reportType === 'COMPANY'
@@ -525,12 +630,60 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                             </select>
                         </div>
                     </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Socio</label>
+                        <select
+                            value={filterPartner}
+                            onChange={e => setFilterPartner(e.target.value)}
+                            className="w-full h-10 rounded-lg border-slate-300 text-sm focus:border-emerald-500 focus:ring-emerald-500 shadow-sm transition-all"
+                        >
+                            <option value="">Todos los socios</option>
+                            <option value="SIN_ASIGNAR">Sin asignar</option>
+                            {filterOptions.partners.map(p => (
+                                <option key={p} value={p}>{p}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            )}
+            {/* Filters Bar (Only for Company) */}
+            {reportType === 'COMPANY' && (
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm animate-fadeIn">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Categoría</label>
+                            <select
+                                value={filterCategory}
+                                onChange={e => setFilterCategory(e.target.value)}
+                                className="w-full h-10 rounded-lg border-slate-300 text-sm focus:border-emerald-500 focus:ring-emerald-500 shadow-sm transition-all"
+                            >
+                                <option value="">Todos los rubros</option>
+                                {filterOptions.categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Socio</label>
+                            <select
+                                value={filterPartner}
+                                onChange={e => setFilterPartner(e.target.value)}
+                                className="w-full h-10 rounded-lg border-slate-300 text-sm focus:border-emerald-500 focus:ring-emerald-500 shadow-sm transition-all"
+                            >
+                                <option value="">Todos los socios</option>
+                                <option value="SIN_ASIGNAR">Sin asignar</option>
+                                {filterOptions.partners.map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                 </div>
             )}
 
             {/* The Ledger Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-fadeIn">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" ref={scrollRef}>
                     <table className="min-w-full divide-y divide-slate-100">
                         <thead className="bg-slate-50/50">
                             <tr>
@@ -549,49 +702,139 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                         <tbody className="divide-y divide-slate-50">
                             {filteredLedger.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-20 text-center">
+                                    <td colSpan={reportType === 'LOTS' ? 6 : 5} className="px-6 py-20 text-center">
                                         <div className="text-slate-300 text-4xl mb-4">🔍</div>
                                         <p className="text-slate-400 italic">No se encontraron registros.</p>
                                     </td>
                                 </tr>
                             ) : (
-                                filteredLedger.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-50/80 transition-all border-l-4 border-transparent hover:border-emerald-400 group text-sm">
-                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-slate-400">
-                                            <div className="flex flex-col">
-                                                <span>{item.date.date}</span>
-                                                <span className="text-[10px] text-slate-300 font-normal uppercase tracking-tighter">
-                                                    {item.date.time}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-slate-900">{item.concept}</div>
-                                            <div className="mt-1">
-                                                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-black text-slate-500 uppercase tracking-tighter border border-slate-200">
-                                                    {item.category}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        {reportType === 'LOTS' && (
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="font-bold text-slate-700">{item.lote}</div>
-                                                <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">{item.crop}</div>
-                                            </td>
-                                        )}
-                                        {reportType === 'COMPANY' && (
-                                            <td className="px-6 py-4 text-slate-500 italic font-medium whitespace-nowrap">
-                                                {item.seller}
-                                            </td>
-                                        )}
-                                        <td className={`px-6 py-4 text-right whitespace-nowrap font-mono font-black ${item.amount > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                                            {item.amount > 0 ? '-' : '+'}USD {Math.abs(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="px-6 py-4 text-xs text-slate-400 italic font-medium max-w-xs truncate">
-                                            {item.detail}
-                                        </td>
-                                    </tr>
-                                ))
+                                filteredLedger.map((item) => {
+                                    const hasItems = item.items && item.items.length > 0;
+                                    const hasMultipleInvestors = item.investors && item.investors.length > 1;
+                                    const needsExpansion = hasItems || hasMultipleInvestors;
+
+                                    const isProductsExpanded = expandedRows.has(`${item.id}-products`);
+                                    const isInvestorsExpanded = expandedRows.has(`${item.id}-investors`);
+                                    const isAnyExpanded = isProductsExpanded || isInvestorsExpanded;
+
+                                    return (
+                                        <React.Fragment key={item.id}>
+                                            <tr
+                                                onClick={() => {
+                                                    if (!needsExpansion) return;
+                                                    const next = new Set(expandedRows);
+                                                    if (isAnyExpanded) {
+                                                        next.delete(`${item.id}-products`);
+                                                        next.delete(`${item.id}-investors`);
+                                                    } else {
+                                                        if (hasItems) next.add(`${item.id}-products`);
+                                                        if (hasMultipleInvestors) next.add(`${item.id}-investors`);
+                                                    }
+                                                    setExpandedRows(next);
+                                                }}
+                                                className={`hover:bg-slate-50/80 transition-all border-l-4 border-transparent hover:border-emerald-400 group text-sm ${needsExpansion ? 'cursor-pointer' : ''} ${isAnyExpanded ? 'bg-slate-50/50 border-emerald-400' : ''}`}
+                                            >
+                                                <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-slate-400">
+                                                    <div className="flex flex-col">
+                                                        <span>{item.date.date}</span>
+                                                        <span className="text-[10px] text-slate-300 font-normal uppercase tracking-tighter">
+                                                            {item.date.time}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="font-bold text-slate-900 flex items-center gap-2">
+                                                        {item.concept}
+                                                    </div>
+                                                    <div className="mt-1">
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-black text-slate-500 uppercase tracking-tighter border border-slate-200">
+                                                            {item.category}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                {reportType === 'LOTS' && (
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="font-bold text-slate-700">{item.lote}</div>
+                                                        <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">{item.crop}</div>
+                                                    </td>
+                                                )}
+                                                {reportType === 'COMPANY' && (
+                                                    <td className="px-6 py-4 text-slate-500 italic font-medium whitespace-nowrap">
+                                                        {item.seller}
+                                                    </td>
+                                                )}
+                                                <td className={`px-6 py-4 text-right whitespace-nowrap font-mono font-black ${item.amount > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                                    {item.amount > 0 ? '-' : '+'}USD {Math.abs(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="px-6 py-4 text-xs text-slate-400 italic font-medium max-w-xs truncate">
+                                                    {item.detail}
+                                                </td>
+                                            </tr>
+                                            {isAnyExpanded && (
+                                                <tr className="bg-slate-50/50 border-l-4 border-emerald-400 border-b border-slate-100">
+                                                    <td colSpan={reportType === 'LOTS' ? 6 : 5} className="px-6 py-3">
+                                                        <div className="flex flex-col gap-3 pl-4">
+                                                            {/* Products Section */}
+                                                            {isProductsExpanded && hasItems && (
+                                                                <div className="animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                                                                    <div className="flex justify-between items-center mb-1 bg-slate-100/50 px-2 py-0.5 rounded">
+                                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Desglose de Productos / Ítems</span>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); const n = new Set(expandedRows); n.delete(`${item.id}-products`); setExpandedRows(n); }}
+                                                                            className="text-slate-400 hover:text-red-500 transition-colors text-lg font-black leading-none pb-1"
+                                                                            title="Cerrar sección"
+                                                                        >
+                                                                            -
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="space-y-0.5">
+                                                                        {item.items.map((it: any, itIdx: number) => (
+                                                                            <div key={itIdx} className="flex justify-between text-[11px] py-0.5 border-b border-slate-100/50 last:border-0 pr-2">
+                                                                                <span className="font-bold text-slate-600">↳ {it.productName}</span>
+                                                                                <span className="font-mono text-slate-400">
+                                                                                    {it.quantity} {it.unit} @ USD {(it.price || 0).toLocaleString()}
+                                                                                </span>
+                                                                                <span className="font-mono font-bold text-slate-800">
+                                                                                    USD {(parseFloat(it.price || 0) * parseFloat(it.quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {/* Investors Section */}
+                                                            {isInvestorsExpanded && hasMultipleInvestors && (
+                                                                <div className="animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                                                                    <div className="flex justify-between items-center mb-1 bg-slate-100/50 px-2 py-0.5 rounded">
+                                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Participación de Socios</span>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); const n = new Set(expandedRows); n.delete(`${item.id}-investors`); setExpandedRows(n); }}
+                                                                            className="text-slate-400 hover:text-red-500 transition-colors text-lg font-black leading-none pb-1"
+                                                                            title="Cerrar sección"
+                                                                        >
+                                                                            -
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="space-y-0.5">
+                                                                        {item.investors.map((inv: any, invIdx: number) => (
+                                                                            <div key={invIdx} className="flex justify-between text-[11px] py-0.5 border-b border-slate-100/50 last:border-0 pr-2">
+                                                                                <span className="font-bold text-slate-600">↳ {inv.name}</span>
+                                                                                <span className="font-mono text-slate-400 bg-slate-100/50 px-1 rounded">{inv.percentage}%</span>
+                                                                                <span className={`font-mono font-bold ${item.amount > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                                                                    USD {(Math.abs(item.amount) * (inv.percentage / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
@@ -599,7 +842,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
             </div>
 
             {/* Footer Note */}
-            <p className="text-center text-[10px] text-slate-400 uppercase tracking-widest font-black max-w-2xl mx-auto leading-relaxed">
+            <p className="text-center text-[10px] text-slate-400 uppercase tracking-widest font-black max-w-2xl mx-auto leading-relaxed mt-6">
                 {reportType === 'LOTS' ?
                     'Tabla de Lotes: Valuación económica basada en PPP (Precio Promedio Ponderado de compras) y Cosecha valuada a precio de venta promedio del ejercicio.' :
                     'Tabla de Empresa: Balance financiero directo basado en flujos de caja reales (Compras, Ventas y Pagos de Servicios).'

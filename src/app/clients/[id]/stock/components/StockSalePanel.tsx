@@ -289,19 +289,17 @@ export function StockSalePanel({
                         <button
                             type="button"
                             onClick={() => setShowSaleNote(!showSaleNote)}
-                            className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
+                            className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
                         >
-                            <span className="text-base leading-none">+</span>
-                            {showSaleNote ? 'Cancelar' : (saleNote ? 'Editar Nota' : 'Agregar Nota')}
+                            {showSaleNote ? '× Cancelar' : (saleNote ? '✎ Editar Nota' : '+ Agregar Nota')}
                         </button>
 
                         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                            <label htmlFor={`factura-upload-sale-detached`} className="cursor-pointer text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors">
-                                <span>+</span>
+                            <label htmlFor={`factura-upload-sale-detached`} className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors">
                                 {saleFacturaFile ? (
-                                    <span className="text-emerald-700 truncate max-w-[150px] font-bold">{saleFacturaFile.name}</span>
+                                    <span className="text-emerald-700 underline underline-offset-4 truncate max-w-[150px] font-bold">{saleFacturaFile.name}</span>
                                 ) : (
-                                    "Adjuntar Factura"
+                                    "+ Adjuntar Factura"
                                 )}
                             </label>
                             <input

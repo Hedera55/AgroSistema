@@ -205,9 +205,10 @@ export interface InventoryMovement {
     productName: string;
     productBrand?: string;
     productCommercialName?: string;
-    type: 'IN' | 'OUT' | 'SALE' | 'HARVEST';
+    type: 'IN' | 'OUT' | 'SALE' | 'HARVEST' | 'PURCHASE' | 'SERVICE';
     quantity: number;
     unit: Unit;
+    amount?: number; // Total monetary amount
     date: string; // ISO date-time string
     time?: string;
     salePrice?: number; // Price at which it was sold (for SALE type)
@@ -313,6 +314,7 @@ export interface Order {
     deletedBy?: string;
     sowingOrderId?: string;
     investorName?: string; // Who is responsible for the service cost
+    investors?: { name: string; percentage: number }[]; // Multi-investor support
     campaignId?: string; // Link to Campaign
 }
 

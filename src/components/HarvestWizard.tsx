@@ -28,6 +28,7 @@ interface HarvestWizardProps {
     warehouses: Warehouse[];
     partners: { name: string, cuit?: string }[];
     investors: { name: string, percentage: number }[];
+    movements: InventoryMovement[];
     onCancel: () => void;
     onComplete: (data: HarvestData) => void;
     initialDate: string;
@@ -46,6 +47,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     warehouses,
     partners,
     investors,
+    movements,
     onCancel,
     onComplete,
     initialDate,
@@ -85,33 +87,81 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
     const availableYield = totalYieldNum - assignedYield;
 
+    // --- Helper for Quota Logic ---
+    const getPartnerQuotaInfo = (partnerName: string) => {
+        if (!selectedHarvestCampaignId) return null;
+
+        const investor = investors.find(i => i.name === partnerName);
+        if (!investor) return null;
+
+        // 1. Total Harvested in this campaign so far (excluding current yield being entered)
+        // Note: m.referenceId !== lot.id is used to exclude the current lot's PREVIOUS harvest (if editing)
+        // or we just look for all HARVEST movements in this campaign.
+        // Actually, let's keep it simple: Total Campaign Yield = previously recorded + current yield
+        const previousHarvested = movements
+            .filter(m => m.campaignId === selectedHarvestCampaignId && m.type === 'HARVEST' && m.referenceId !== lot.id)
+            .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+        const totalCampaignYield = previousHarvested + totalYieldNum;
+
+        // 2. Already Retired by this partner in this campaign
+        // We look for:
+        // - HARVEST movements directly to partner (receiverName)
+        // - OUT movements to partner (receiverName)
+        // We EXCLUDE movements linked to the current lot (m.referenceId !== lot.id) to calculate "previously taken"
+        const previousRetired = movements
+            .filter(m =>
+                m.campaignId === selectedHarvestCampaignId &&
+                m.receiverName === partnerName &&
+                (m.type === 'HARVEST' || m.type === 'OUT') &&
+                m.referenceId !== lot.id
+            )
+            .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+        const maxAllotment = totalCampaignYield * (investor.percentage / 100);
+        const remaining = maxAllotment - previousRetired;
+
+        return {
+            percentage: investor.percentage,
+            remaining: Math.max(0, remaining),
+            totalAllotment: maxAllotment,
+            previousRetired
+        };
+    };
+
+    const currentCampaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
+
     const allDestinations = useMemo(() => {
         const options: Array<{ label: string; value: string; disabled?: boolean; type?: 'WAREHOUSE' | 'PARTNER'; name?: string }> = [];
         options.push({ label: '--- Galpones ---', disabled: true, value: 'galpon_header' });
         warehouses.forEach(w => options.push({ label: w.name, value: `W_${w.id}`, type: 'WAREHOUSE' as const, name: w.name }));
-        options.push({ label: '--- Socios ---', disabled: true, value: 'socio_header' });
-        const allPartners = [...(partners || []), ...(investors || [])];
-        allPartners.forEach((p: any) => {
-            let name = '';
-            if (typeof p === 'string') {
-                if (p.trim().startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(p);
-                        name = parsed.name || p;
-                    } catch (e) {
+
+        // 🟢 RESTRICTION: Hide partners if campaign is MONEY mode
+        if (currentCampaign?.mode !== 'MONEY') {
+            options.push({ label: '--- Socios ---', disabled: true, value: 'socio_header' });
+            const allPartners = [...(partners || []), ...(investors || [])];
+            allPartners.forEach((p: any) => {
+                let name = '';
+                if (typeof p === 'string') {
+                    if (p.trim().startsWith('{')) {
+                        try {
+                            const parsed = JSON.parse(p);
+                            name = parsed.name || p;
+                        } catch (e) {
+                            name = p;
+                        }
+                    } else {
                         name = p;
                     }
                 } else {
-                    name = p;
+                    name = p?.name || '';
                 }
-            } else {
-                name = p?.name || '';
-            }
-            if (!name) return;
-            options.push({ label: name, value: `P_${name}`, type: 'PARTNER' as const, name: name });
-        });
+                if (!name) return;
+                options.push({ label: name, value: `P_${name}`, type: 'PARTNER' as const, name: name });
+            });
+        }
         return options;
-    }, [warehouses, partners, investors]);
+    }, [warehouses, partners, investors, currentCampaign]);
 
     const handleAddDistribution = () => {
         if (!selectedDistribOption) return;
@@ -125,18 +175,37 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
         const newId = `dist_${Date.now()}`;
         const type = option.type as 'WAREHOUSE' | 'PARTNER';
+
+        let amount = availableYield;
+        if (type === 'PARTNER') {
+            const info = getPartnerQuotaInfo(option.name as string);
+            if (info) {
+                amount = Math.min(availableYield, info.remaining);
+            }
+        }
+
         setDistributions(prev => [...prev, {
             id: newId,
             type: type,
             targetId: type === 'WAREHOUSE' ? (option.value as string).replace('W_', '') : (option.value as string).replace('P_', ''),
             targetName: option.name as string,
-            amount: availableYield, // default to remaining
+            amount: amount,
             logistics: {} // gets populated via general defaults on save or overrides
         }]);
         setSelectedDistribOption('');
     };
 
     const handleUpdateDistributionAmount = (id: string, newAmount: number) => {
+        const dist = distributions.find(d => d.id === id);
+        if (dist?.type === 'PARTNER') {
+            const info = getPartnerQuotaInfo(dist.targetName);
+            if (info && newAmount > info.remaining + 0.1) { // 0.1 margin for float
+                if (!confirm(`⚠️ El monto asignado (${newAmount.toLocaleString()} kg) supera el cupo restante del socio (${info.remaining.toLocaleString()} kg, Cuota: ${info.percentage}%).\n\n¿Desea forzar esta cantidad?`)) {
+                    return;
+                }
+            }
+        }
+
         setDistributions(prev => prev.map(d => {
             if (d.id === id) {
                 return { ...d, amount: newAmount };
@@ -408,6 +477,10 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                             <span className="text-xs font-bold text-slate-700">{dist.targetName}</span>
                                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                                                 {dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
+                                                {dist.type === 'PARTNER' && (() => {
+                                                    const info = getPartnerQuotaInfo(dist.targetName);
+                                                    return info ? ` • Cupo: ${Math.round(info.remaining).toLocaleString()} kg (${info.percentage}%)` : '';
+                                                })()}
                                             </span>
                                         </div>
                                         <div className="w-32">

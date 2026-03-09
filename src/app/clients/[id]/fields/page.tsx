@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useFarms, useLots, useAllLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useCampaigns } from '@/hooks/useCampaigns';
-import { useInventory, useClientStock } from '@/hooks/useInventory';
+import { useInventory, useClientStock, useClientMovements } from '@/hooks/useInventory';
 import { useOrders } from '@/hooks/useOrders';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -38,6 +38,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const { stock, updateStock } = useClientStock(id);
     const { orders, refreshOrders } = useOrders(id);
     const { campaigns, loading: campaignsLoading } = useCampaigns(id);
+    const { movements } = useClientMovements(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -1218,7 +1219,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                 openPanel('harvest_details', lot.id, selectedFarmId!, lot.id, lot.name);
                                                                                             }
                                                                                         }}
-                                                                                        className={`text-[10px] font-black px-2 py-0.5 flex items-center justify-center rounded border transition-all relative z-10 ${lot.status === 'SOWED'
+                                                                                        className={`text-[10px] font-bold px-2 py-0.5 flex items-center justify-center leading-none rounded border transition-all relative z-10 ${lot.status === 'SOWED'
                                                                                             ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
                                                                                             : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-pointer hover:bg-blue-200 hover:scale-110' :
                                                                                                 lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
@@ -1238,7 +1239,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                     handleCancelHarvest(lot);
                                                                                                 }}
                                                                                                 title="Cancelar Cosecha"
-                                                                                                className="text-[10px] font-bold text-orange-500 hover:text-orange-700 bg-white px-2 py-0.5 rounded border border-orange-200 hover:border-orange-300 transition-colors uppercase tracking-tight"
+                                                                                                className="text-[10px] font-bold text-orange-500 hover:text-orange-700 bg-white px-2 py-0.5 rounded border border-orange-200 hover:border-orange-300 transition-colors uppercase tracking-tight flex items-center justify-center leading-none"
                                                                                             >
                                                                                                 Cancelar
                                                                                             </button>
@@ -1248,7 +1249,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                     handleClearCrop(lot);
                                                                                                 }}
                                                                                                 title="Reiniciar Lote"
-                                                                                                className="text-[10px] font-bold text-red-500 hover:text-red-700 bg-white px-2 py-0.5 rounded border border-red-200 hover:border-red-300 transition-colors uppercase tracking-tight"
+                                                                                                className="text-[10px] font-bold text-red-500 hover:text-red-700 bg-white px-2 py-0.5 rounded border border-red-200 hover:border-red-300 transition-colors uppercase tracking-tight flex items-center justify-center leading-none"
                                                                                             >
                                                                                                 Reiniciar
                                                                                             </button>
@@ -1819,6 +1820,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             warehouses={warehouses}
                             partners={client?.partners || []}
                             investors={client?.investors || []}
+                            movements={movements}
                             onCancel={() => {
                                 setIsHarvesting(false);
                                 setConfirmStep(false);
