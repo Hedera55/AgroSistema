@@ -166,7 +166,7 @@ export function OrderRecipeStep({
                             </div>
                         )}
 
-                        <div className={showLoadingOrder ? "md:col-span-7" : "md:col-span-8"}>
+                        <div className={showLoadingOrder ? "md:col-span-8" : "md:col-span-9"}>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Producto / Labor</label>
                             <select
                                 className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
@@ -250,19 +250,9 @@ export function OrderRecipeStep({
                             </div>
                         )}
 
-                        <div className="md:col-span-1">
-                            <button
-                                onClick={handleAddItem}
-                                disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
-                                title={editingItemId ? 'Actualizar' : 'Agregar'}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 h-[46px] rounded-lg shadow-sm flex items-center justify-center text-white disabled:opacity-50 transition-colors"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
-                            </button>
-                        </div>
                     </div>
 
-                    {/* Stock Source Selection (Presentations) */}
+
                     {!isMechanicalLabor && currProdId && (
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 animate-fadeIn space-y-4">
                             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
@@ -286,7 +276,7 @@ export function OrderRecipeStep({
                                                     <div key={s.id} className="flex items-center justify-between py-2.5 px-1 hover:bg-slate-100/50 transition-colors rounded-md">
                                                         <div className="flex flex-col">
                                                             <span className="text-xs font-bold text-slate-700">
-                                                                {s.presentationLabel || 'A granel'} {s.presentationContent ? `${s.presentationContent}${selectedProduct?.unit || ''}` : ''}
+                                                                {s.presentationLabel || `A granel (${selectedProduct?.unit || ''})`} {s.presentationContent ? `${s.presentationContent}${selectedProduct?.unit || ''}` : ''}
                                                             </span>
                                                             <span className="text-[10px] text-slate-400 font-medium tracking-tight">Disponible: {s.quantity} {selectedProduct?.unit}</span>
                                                         </div>
@@ -345,21 +335,20 @@ export function OrderRecipeStep({
                         </div>
                     )}
 
-
-                    {editingItemId && (
-                        <div className="flex justify-end pt-0 gap-4">
-                            <button
-                                onClick={handleAddItem}
-                                className="text-xs font-bold text-slate-400 hover:text-emerald-500 uppercase tracking-wider flex items-center gap-1"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-                                <span>editar</span>
-                            </button>
+                    {((currProdId && !isMechanicalLabor) || (isMechanicalLabor && mechanicalLaborName)) && (
+                        <div className="flex justify-end gap-6 pt-2 animate-fadeIn">
                             <button
                                 onClick={handleCancelEdit}
-                                className="text-xs font-bold text-slate-400 hover:text-red-500 uppercase tracking-wider flex items-center gap-1"
+                                className="text-[10px] font-black text-slate-400 hover:text-red-500 transition-all uppercase tracking-widest"
                             >
-                                <span>✕ cancelar</span>
+                                ✕ Cancelar
+                            </button>
+                            <button
+                                onClick={handleAddItem}
+                                disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
+                                className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 disabled:opacity-30 transition-all uppercase tracking-widest"
+                            >
+                                {editingItemId ? '✓ Confirmar Edición' : '+ Agregar'}
                             </button>
                         </div>
                     )}
@@ -369,7 +358,6 @@ export function OrderRecipeStep({
                     <div className="space-y-4 pt-4 border-t border-slate-100">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Resumen de Insumos / Labores</label>
                         <div className="space-y-3">
-                            {/* Grouping items by groupId for hierarchical display */}
                             {Array.from(new Set(items.map(i => i.groupId || i.id))).map(groupId => {
                                 const groupItems = items.filter(i => (i.groupId || i.id) === groupId);
                                 const first = groupItems[0];
@@ -405,7 +393,7 @@ export function OrderRecipeStep({
                                                             {item.multiplier ? `${item.multiplier} x ` : ''}
                                                             {item.isVirtualDéficit
                                                                 ? 'Faltan'
-                                                                : (item.presentationLabel || (isLabor ? 'Labor' : 'A granel'))}
+                                                                : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
                                                             {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
                                                             {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
                                                         </span>
@@ -571,6 +559,6 @@ export function OrderRecipeStep({
                     {isSowingOrder ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Carga'}
                 </Button>
             </div>
-        </div >
+        </div>
     );
 }

@@ -92,7 +92,7 @@ export default function GlobalOrdersPage() {
     const handleDownload = async (order: Order & { clientName: string; farmName: string; lotName: string }) => {
         const client = clients.find(c => c.id === order.clientId);
         if (client) {
-            await generateOrderPDF(order, client);
+            await generateOrderPDF(order, client, lots);
         }
     };
 

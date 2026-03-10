@@ -96,7 +96,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                 O
                             </button>
                             <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                Orden de Carga
+                                {order.type === 'SOWING' ? 'Orden de Siembra' : 'Orden de Carga'}
                             </div>
                         </div>
                         {order.facturaImageUrl && (

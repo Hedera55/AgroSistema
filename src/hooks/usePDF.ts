@@ -82,10 +82,10 @@ export function usePDF() {
 
         autoTable(doc, {
             body: [
-                [`FECHA:`, `${formatDate(order.date)}`],
+                [`FECHA EMISIÓN:`, `${formatDate(order.date)}`],
+                [order.isDateRange ? `VENTANA DE APLICACIÓN:` : `FECHA DE APLICACIÓN:`, `${appDateDisplay}`],
                 [`ORDEN NRO:`, `${order.orderNumber || '-'}`],
-                [`CLIENTE:`, `${client.name}`],
-                [`SOLICITANTE:`, `${client.name}`]
+                [`EMPRESA:`, `${client.name}`]
             ],
             startY: 32,
             margin: { left: 61 },
@@ -245,21 +245,19 @@ export function usePDF() {
         });
         lastY = (doc as any).lastAutoTable.finalY + 10;
 
-        // Ubicacion de Aplicacion
         // Gather lot info
-        let lotsDisplay = order.lotIds && order.lotIds.length > 0 ? order.lotIds.map(id => {
+        const lotRows = (order.lotIds || []).map(id => {
             const l = lots.find(x => x.id === id);
-            return l ? l.name : id;
-        }).join(', ') : (order.lotName || '-');
+            return [`${l ? l.name : id}`, `${l?.hectares || 0} ha`];
+        });
 
         autoTable(doc, {
             head: [
-                [{ content: "UBICACIÓN DE APLICACIÓN", colSpan: 2, styles: { halign: 'left', fillColor: [230, 245, 240], textColor: 0, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.1, cellPadding: { top: 2, bottom: 2, left: 5, right: 2 } } }]
+                [{ content: "UBICACIÓN", colSpan: 2, styles: { halign: 'left', fillColor: [230, 245, 240], textColor: 0, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.1, cellPadding: { top: 2, bottom: 2, left: 5, right: 2 } } }]
             ],
             body: [
-                ["CAMPO:", `${order.farmName || '-'}`],
-                ["UBICACIÓN GPS:", `-`], // Placeholder
-                ["LOTE(S):", `${lotsDisplay}`],
+                ["Campo:", `${order.farmName || '-'}`],
+                ...lotRows,
                 ["SUPERFICIE TOTAL (HA):", `${formatNumber(order.treatedArea || 0, 1)}`]
             ],
             startY: lastY,
@@ -270,6 +268,22 @@ export function usePDF() {
             columnStyles: {
                 0: { fontStyle: 'bold', cellWidth: 45 },
                 1: { cellWidth: 'auto' }
+            },
+            didParseCell: (data) => {
+                const isLotRow = data.row.index > 0 && data.row.index <= lotRows.length;
+                if (isLotRow) {
+                    data.cell.styles.fontStyle = 'normal';
+                    const isFirstCol = data.column.index === 0;
+                    const isLastCol = data.column.index === 1;
+                    const isLastLot = data.row.index === lotRows.length;
+
+                    data.cell.styles.lineWidth = {
+                        top: 0,
+                        bottom: isLastLot ? 0.1 : 0,
+                        left: isFirstCol ? 0.1 : 0,
+                        right: isLastCol ? 0.1 : 0
+                    } as any;
+                }
             }
         });
         lastY = (doc as any).lastAutoTable.finalY + 10;
@@ -279,35 +293,25 @@ export function usePDF() {
         doc.setDrawColor(0, 0, 0);
         doc.setFillColor(255, 255, 255);
         doc.setLineWidth(0.1);
-        doc.rect(14, lastY, respWidth, 20, 'FD');
+        doc.rect(14, lastY, respWidth, 28, 'FD');
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(0);
-        doc.text("RESPONSABLE TÉCNICO DE PRESCRIPCIÓN", 16, lastY + 5);
+        doc.text("RESPONSABLE TÉCNICO DE PRESCRIPCIÓN", 16, lastY + 6);
+
         doc.setFont("helvetica", "normal");
-        doc.text("NOMBRE:", 16, lastY + 11);
-        doc.text("REGISTRO:", 16, lastY + 17);
+        doc.text("NOMBRE:", 16, lastY + 12);
+        doc.text("REGISTRO:", 16, lastY + 18);
 
-        // Signatures (Bottom)
-        const sigY = lastY + 45;
-
-        // Firma Antigravity
-        doc.setDrawColor(150);
-        doc.setLineDashPattern([1, 1], 0);
-        doc.line(20, sigY, 90, sigY);
-        doc.setLineDashPattern([], 0); // reset
-        doc.setFontSize(7);
         doc.setFont("helvetica", "bold");
-        doc.setTextColor(0);
-        doc.text("FIRMA RESPONSABLE DE CARGA (ANTIGRAVITY)", 55, sigY + 4, { align: 'center' });
+        doc.text("CONTRATISTA - CUIT:", 16, lastY + 24);
 
-        // Firma Aplicador/Contratista
-        doc.setLineDashPattern([1, 1], 0);
-        doc.line(120, sigY, 190, sigY);
-        doc.setLineDashPattern([], 0); // reset
-        const rightSigText = isSowing ? "FIRMA CONTRATISTA / SEMBRADOR" : "FIRMA CONTRATISTA / APLICADOR";
-        doc.text(rightSigText, 155, sigY + 4, { align: 'center' });
+        doc.setFont("helvetica", "normal");
+        const contractorText = `${order.applicatorName || '-'} ${applicatorCUIT ? `(${applicatorCUIT})` : ''}`;
+        doc.text(contractorText, 48, lastY + 24);
+
+        // Signatures removed as per request
 
         doc.save(`Orden_${isSowing ? 'Siembra' : 'Carga'}_${order.orderNumber || ''}.pdf`);
     };

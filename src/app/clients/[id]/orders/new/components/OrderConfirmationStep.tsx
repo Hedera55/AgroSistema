@@ -78,7 +78,7 @@ export function OrderConfirmationStep({
             )}
 
             <div className="bg-white p-6 border border-slate-200 rounded-xl shadow-sm space-y-4">
-                <h3 className="font-bold text-lg border-b pb-2">Resumen de la Orden de Carga</h3>
+                <h3 className="font-bold text-lg border-b pb-2">Resumen de la Orden de {containsSeeds ? 'Siembra' : 'Carga'}</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                     <div><span className="text-slate-500">Campo/Lote:</span> <span className="font-medium">{selectedFarm?.name} - {selectedLot?.name}</span></div>
                     <div><span className="text-slate-500">Superficie:</span> <span className="font-medium">{selectedLot?.hectares} ha</span></div>

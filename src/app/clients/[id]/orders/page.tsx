@@ -120,7 +120,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
     const handleDownload = async (order: Order & { farmName: string; lotName: string }) => {
         if (client) {
-            await generateOrderPDF(order, client);
+            await generateOrderPDF(order, client, lots);
         }
     };
 
