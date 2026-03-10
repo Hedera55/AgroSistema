@@ -527,6 +527,12 @@ export class SyncService {
 
                 const payload = mapper(item);
 
+                // Log size for KML-heavy tables
+                if (tableName === 'lots' || tableName === 'farms') {
+                    const size = JSON.stringify(payload).length;
+                    console.log(`📤 Pushing ${tableName} ${item.id} (${(size / 1024).toFixed(1)} KB)...`);
+                }
+
                 // Specific handling for Stock to avoid unique constraint violations
                 // Constraint: stock_client_product_warehouse_key
                 let query = supabase.from(tableName).upsert(payload);

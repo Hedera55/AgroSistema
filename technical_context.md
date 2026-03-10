@@ -25,6 +25,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
         - **Seeds/Grains**: `Active Ingredient (Commercial Name) (Brand)`.
         - **Others**: `Commercial Name (Active Ingredient) (Brand)`.
     - **Form Element Fonts**: Prevent default browser fonts (like Times New Roman) from overriding form elements by enforcing `font-family: inherit !important;` in `globals.css` and setting the CSS variable `--font-sans` in `layout.tsx`.
+- **Horizontal Scrolling Standard**: All large tables MUST use the `useHorizontalScroll` React hook attached to their container. 
+    - **Behavior**: This ensures that horizontal scrolling with the mouse wheel is correctly captured without causing undesired vertical page jumping (scroll leakage).
+    - **Implementation**: The container should have `overflow-x-auto` and the `ref` from the hook.
 
 - **Action Buttons (Movement/Sale)**: All primary floating panel confirmation buttons (e.g., "Confirmar Venta", "Confirmar Retiro") must use `size="sm"` for a compact, professional look. 
     - **Vender**: Emerald theme (`bg-emerald-600`).
@@ -54,6 +57,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Direct Jump**: Clicking on **E-SIEMBRA** or **E-APLICACIÓN** rows MUST directly open the `OrderDetailView`.
 - **Movement Hierarchy**: `MovementDetailsView` is reserved for transfers, withdrawals, or sub-movements that do not constitute a primary work event.
 - **Redundancy**: The "Ver Orden Vinculada" button is prohibited in `MovementDetailsView` to ensure a direct, single-modal interaction flow.
+- **Dropdown Fallback Pattern**: When a saved field (e.g., Campaign, Investor, Partner) contains a value not found in the current fetched list (due to archiving or deletion), the system MUST implement a "Fallback Option" pattern.
+    - **Logic**: Use a `useMemo` to check if the `selectedId` exists in the `fetchedData`. If not, temporarily inject an object `{ id: selectedId, name: selectedName || selectedId }` into the options array for the component.
+    - **Benefit**: Ensures the UI remains consistent and the "Selected" state is visible even for historical data.
 
 ## 📊 Financial Reporting & Accounting Rules
 
@@ -97,6 +103,8 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 
 ## 👥 User Roles & Permissions
 - **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.
+    - **Sidebar "Green List"**: Displays a list of assigned companies directly in the sidebar for quick navigation to filtered orders.
+    - **Display Name Fallbacks**: When displaying contractor names, the system follows this priority: `username` -> `email` -> `ID (truncated)`. This ensures that even users with incomplete profiles (missing username) are distinguishable in dropdowns and lists.
 - **CLIENT**: Read-only access to most management features. Supplements: suppresses all CREATE/UPDATE/DELETE.
 - **MASTER_ADMIN**: Full access to all clients and settings.
 

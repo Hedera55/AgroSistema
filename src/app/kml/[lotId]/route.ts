@@ -17,15 +17,21 @@ export async function GET(
         return new NextResponse('Missing lotId', { status: 400 });
     }
 
+    if (!process.env.SUPABASE_SERVICE_KEY) {
+        console.error("CRITICAL: SUPABASE_SERVICE_KEY is missing!");
+        return new NextResponse('Error de configuración del servidor', { status: 500 });
+    }
+
     try {
-        const { data, error } = await supabase
+        // 1. Fetch Lot
+        const { data: lotData, error: lotError } = await supabase
             .from('lots')
-            .select('*')
+            .select('*, farms(*)')
             .eq('id', lotId)
             .single();
 
-        if (error || !data) {
-            console.error("Error fetching lot for KML:", error);
+        if (lotError || !lotData) {
+            console.error("Error fetching lot for KML:", lotError);
             const htmlError = `
             <!DOCTYPE html>
             <html lang="es">
@@ -58,7 +64,18 @@ export async function GET(
             });
         }
 
-        if (!data.kml_data) {
+        // 2. Check for KML (Lot or Farm fallback)
+        let kmlContent = lotData.kml_data;
+        let finalFileName = `${lotData.name || 'campo'}.kml`;
+
+        if (!kmlContent && lotData.farms?.kml_data) {
+            console.info(`Lot ${lotId} has no KML, falling back to Farm KML for ${lotData.farms.name}`);
+            kmlContent = lotData.farms.kml_data;
+            finalFileName = `${lotData.farms.name || 'campo'}_general.kml`;
+        }
+
+        if (!kmlContent) {
+            console.warn(`No KML data found for Lot ${lotId} (Name: ${lotData.name}) or its Farm.`);
             const htmlNoMap = `
             <!DOCTYPE html>
             <html lang="es">
@@ -72,7 +89,7 @@ export async function GET(
                     h1 { color: #0f172a; margin-top: 10px; margin-bottom: 5px; font-size: 1.25rem; font-weight: 700; }
                     p { color: #475569; margin-bottom: 25px; font-size: 0.95rem; line-height: 1.5; }
                     .lot-name { color: #94a3b8; font-size: 0.8rem; margin-bottom: 25px; margin-top: -15px; }
-                    .icon { font-size: 3.5rem; margin-bottom: 10px; }
+                    .info-box { background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 0.75rem; text-align: left; color: #64748b; margin-bottom: 25px; overflow-x: auto; }
                     .btn { display: inline-block; padding: 10px 24px; background: #059669; color: white; font-weight: 600; text-decoration: none; border-radius: 8px; font-size: 0.95rem; }
                     .btn:hover { background: #047857; }
                 </style>
@@ -81,7 +98,13 @@ export async function GET(
                 <div class="card">
                     <h1>Sin mapa disponible</h1>
                     <p>No se ha cargado un KML para este campo.</p>
-                    <div class="lot-name">Lote: ${data.name || 'Desconocido'}</div>
+                    <div class="lot-name">Lote: ${lotData.name || 'Desconocido'}</div>
+                    <div class="info-box">
+                        ID: ${lotId}<br>
+                        Farm: ${lotData.farms?.name || 'N/A'}<br>
+                        Status: ${lotData.status}<br>
+                        Has Farm KML: ${!!lotData.farms?.kml_data}
+                    </div>
                     <a href="/" class="btn">Volver al inicio</a>
                 </div>
             </body>
@@ -93,13 +116,11 @@ export async function GET(
             });
         }
 
-        const fileName = `${data.name || 'campo'}.kml`;
-
-        return new NextResponse(data.kml_data, {
+        return new NextResponse(kmlContent, {
             status: 200,
             headers: {
                 'Content-Type': 'application/vnd.google-earth.kml+xml',
-                'Content-Disposition': `attachment; filename="${fileName}"`,
+                'Content-Disposition': `attachment; filename="${finalFileName}"`,
             },
         });
     } catch (err) {
