@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Use service-role client to bypass RLS (this route has no authenticated user)
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-);
+export const dynamic = 'force-dynamic';
 
 export async function GET(
     request: Request,
@@ -13,13 +9,18 @@ export async function GET(
 ) {
     const { lotId } = await params;
 
-    if (!lotId) {
-        return new NextResponse('Missing lotId', { status: 400 });
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+        console.error("CRITICAL: Supabase environment variables are missing!");
+        return new NextResponse('Error de configuración del servidor', { status: 500 });
     }
 
-    if (!process.env.SUPABASE_SERVICE_KEY) {
-        console.error("CRITICAL: SUPABASE_SERVICE_KEY is missing!");
-        return new NextResponse('Error de configuración del servidor', { status: 500 });
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (!lotId) {
+        return new NextResponse('Missing lotId', { status: 400 });
     }
 
     try {
