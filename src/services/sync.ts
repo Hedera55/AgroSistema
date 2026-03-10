@@ -455,9 +455,12 @@ export class SyncService {
                         const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
 
                         if (remoteTime > localTime) {
-                            // Preserve boundary if remote is blank but local exists
+                            // Preserve boundary/KML if remote is blank but local exists
                             if (!mappedItem.boundary && localItem.boundary) {
                                 mappedItem.boundary = localItem.boundary;
+                            }
+                            if (!mappedItem.kmlData && localItem.kmlData) {
+                                mappedItem.kmlData = localItem.kmlData;
                             }
                             await db.put(localStore, mappedItem);
                         }
@@ -530,7 +533,9 @@ export class SyncService {
                 // Log size for KML-heavy tables
                 if (tableName === 'lots' || tableName === 'farms') {
                     const size = JSON.stringify(payload).length;
-                    console.log(`📤 Pushing ${tableName} ${item.id} (${(size / 1024).toFixed(1)} KB)...`);
+                    const hasKmlInPayload = !!payload.kml_data;
+                    const kmlLength = payload.kml_data?.length || 0;
+                    console.log(`📤 Pushing ${tableName} ${item.id} (${(size / 1024).toFixed(1)} KB) | KML: ${hasKmlInPayload ? `YES (${kmlLength} chars)` : 'NO'}`);
                 }
 
                 // Specific handling for Stock to avoid unique constraint violations
@@ -668,9 +673,12 @@ export class SyncService {
                     const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
 
                     if (remoteTime > localTime) {
-                        // Preserve boundary if remote is blank but local exists
+                        // Preserve boundary/KML if remote is blank but local exists
                         if (!mappedItem.boundary && localItem.boundary) {
                             mappedItem.boundary = localItem.boundary;
+                        }
+                        if (!mappedItem.kmlData && localItem.kmlData) {
+                            mappedItem.kmlData = localItem.kmlData;
                         }
                         await db.put(localStoreName, mappedItem);
                     }

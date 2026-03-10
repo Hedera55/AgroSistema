@@ -76,6 +76,14 @@ export async function GET(
 
         if (!kmlContent) {
             console.warn(`No KML data found for Lot ${lotId} (Name: ${lotData.name}) or its Farm.`);
+
+            // diagnostic info
+            const farmData = Array.isArray(lotData.farms) ? lotData.farms[0] : lotData.farms;
+            const hasLotKml = !!lotData.kml_data;
+            const hasFarmKml = !!farmData?.kml_data;
+            const lotKmlLength = lotData.kml_data?.length || 0;
+            const farmKmlLength = farmData?.kml_data?.length || 0;
+
             const htmlNoMap = `
             <!DOCTYPE html>
             <html lang="es">
@@ -92,6 +100,7 @@ export async function GET(
                     .info-box { background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 0.75rem; text-align: left; color: #64748b; margin-bottom: 25px; overflow-x: auto; }
                     .btn { display: inline-block; padding: 10px 24px; background: #059669; color: white; font-weight: 600; text-decoration: none; border-radius: 8px; font-size: 0.95rem; }
                     .btn:hover { background: #047857; }
+                    .diag { font-family: monospace; color: #94a3b8; font-size: 0.65rem; margin-top: 10px; }
                 </style>
             </head>
             <body>
@@ -101,11 +110,13 @@ export async function GET(
                     <div class="lot-name">Lote: ${lotData.name || 'Desconocido'}</div>
                     <div class="info-box">
                         ID: ${lotId}<br>
-                        Farm: ${lotData.farms?.name || 'N/A'}<br>
+                        Farm: ${farmData?.name || 'N/A'}<br>
                         Status: ${lotData.status}<br>
-                        Has Farm KML: ${!!lotData.farms?.kml_data}
+                        Lot KML: ${hasLotKml ? `Available (${lotKmlLength} chars)` : 'None'}<br>
+                        Farm KML: ${hasFarmKml ? `Available (${farmKmlLength} chars)` : 'None'}
                     </div>
                     <a href="/" class="btn">Volver al inicio</a>
+                    <div class="diag">Timestamp: ${new Date().toISOString()} | Trace: ${Math.random().toString(36).substring(7)}</div>
                 </div>
             </body>
             </html>
