@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, UserRole, Client } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { db } from '@/services/db';
 import Link from 'next/link';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 
 export default function UserManagementPage() {
     const { isMaster, loading: authLoading, user: currentUser, refreshProfile } = useAuth();
@@ -14,7 +15,7 @@ export default function UserManagementPage() {
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingId, setSavingId] = useState<string | null>(null);
-    const tableContainerRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useHorizontalScroll();
 
     const sortUsers = (userList: UserProfile[]) => {
         const roleOrder: Record<string, number> = {
@@ -185,22 +186,6 @@ export default function UserManagementPage() {
         }
     };
 
-    const handleWheel = (e: React.WheelEvent) => {
-        if (!tableContainerRef.current) return;
-        const container = tableContainerRef.current;
-
-        // Horizontal scroll with wheel if not at edges
-        if (Math.abs(e.deltaY) > 0) {
-            const isAtLeft = container.scrollLeft <= 0;
-            const isAtRight = container.scrollLeft + container.clientWidth >= container.scrollWidth;
-
-            // Only prevent default if we can actually scroll horizontally
-            if (!(e.deltaY < 0 && isAtLeft) && !(e.deltaY > 0 && isAtRight)) {
-                e.preventDefault();
-                container.scrollLeft += e.deltaY;
-            }
-        }
-    };
 
     if (authLoading || loading) {
         return (
@@ -285,10 +270,10 @@ export default function UserManagementPage() {
 
             {/* Modal de Editar Perfil Removed */}
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Tabla de Usuarios */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
                 <div
-                    ref={tableContainerRef}
-                    onWheel={handleWheel}
+                    ref={scrollRef}
                     className="overflow-x-auto"
                 >
                     <table className="min-w-full divide-y divide-slate-200">

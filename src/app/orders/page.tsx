@@ -10,9 +10,12 @@ import { usePDF } from '@/hooks/usePDF';
 import { useAuth } from '@/hooks/useAuth';
 import { useAllOrders } from '@/hooks/useAllOrders';
 import { OrderDetailView } from '@/components/OrderDetailView';
+import { useSearchParams } from 'next/navigation';
 
 export default function GlobalOrdersPage() {
     const { role, profile, displayName } = useAuth();
+    const searchParams = useSearchParams();
+    const clientIdFilter = searchParams.get('clientId');
 
     // Data Hooks
     const { orders: rawOrders, loading: ordersLoading, refreshOrders } = useAllOrders();
@@ -67,7 +70,12 @@ export default function GlobalOrdersPage() {
 
     const orders = useMemo(() => {
         if (loading) return [];
-        return rawOrders.map(o => {
+        let filtered = rawOrders;
+        if (clientIdFilter) {
+            filtered = rawOrders.filter(o => o.clientId === clientIdFilter);
+        }
+
+        return filtered.map(o => {
             const client = clients.find(c => c.id === o.clientId);
             const farm = farms.find(f => f.id === o.farmId);
             const lot = lots.find(l => l.id === o.lotId);
@@ -79,7 +87,7 @@ export default function GlobalOrdersPage() {
                 hectares: lot?.hectares || o.treatedArea || 0
             };
         });
-    }, [rawOrders, clients, farms, lots, loading]);
+    }, [rawOrders, clients, farms, lots, loading, clientIdFilter]);
 
     const handleDownload = async (order: Order & { clientName: string; farmName: string; lotName: string }) => {
         const client = clients.find(c => c.id === order.clientId);

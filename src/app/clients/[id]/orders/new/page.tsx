@@ -35,7 +35,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const router = useRouter();
     const searchParams = useSearchParams();
     const editId = searchParams.get('editId');
-    const { displayName } = useAuth();
+    const { displayName, user: authUser, role, assignedClients } = useAuth();
 
     // Data Hooks
     const { farms } = useFarms(clientId);
@@ -346,22 +346,77 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         }).filter(i => i.missing > 0 && i.productId !== 'LABOREO_MECANICO');
     }, [items, stock]);
 
+
     useEffect(() => {
         const fetchContractors = async () => {
-            const { data } = await supabase
-                .from('profiles')
-                .select('id, username, assigned_clients')
-                .eq('role', 'CONTRATISTA');
-            if (data) {
-                // Whitelist: Only show contractors assigned to this client
-                const filtered = data.filter((p: any) =>
-                    p.assigned_clients && Array.isArray(p.assigned_clients) && p.assigned_clients.includes(clientId)
-                );
-                setContractors(filtered);
+            try {
+                // Fetch ALL contractors and filter locally for maximum robustness
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, username, email, role, assigned_clients')
+                    .eq('role', 'CONTRATISTA');
+
+                if (error) {
+                    console.error('Error fetching contractors:', error);
+                    return;
+                }
+
+                // Robust local filtering
+                const assignedToThisClient = (data || []).filter(p => {
+                    const assigned = p.assigned_clients;
+                    if (!assigned) return false;
+                    // Handle both array of strings and potential JSON string formats
+                    const assignedArray = Array.isArray(assigned) ? assigned : JSON.parse(String(assigned));
+                    return assignedArray.includes(clientId);
+                });
+
+                // Format display names with fallbacks
+                let finalContractors = assignedToThisClient.map(p => ({
+                    id: p.id,
+                    username: p.username || p.email || `Usuario ${p.id.slice(0, 5)}`
+                }));
+
+                // Self-inclusion if I am a CONTRATISTA assigned to this client
+                if (role === 'CONTRATISTA' && assignedClients.includes(clientId)) {
+                    const alreadyIn = finalContractors.some(c => c.id === authUser?.id);
+                    if (!alreadyIn) {
+                        finalContractors.push({
+                            id: authUser?.id || '',
+                            username: displayName
+                        });
+                    }
+                }
+
+                setContractors(finalContractors);
+            } catch (err) {
+                console.error('Unexpected error in fetchContractors:', err);
             }
         };
         fetchContractors();
-    }, [clientId]);
+    }, [clientId, authUser?.id, role, assignedClients, displayName]);
+
+    // Enhanced Campaign/Partner lists with selected-value fallbacks
+    const enhancedCampaigns = useMemo(() => {
+        if (!campaigns) return [];
+        let list = [...campaigns];
+        if (selectedCampaignId && !list.find(c => c.id === selectedCampaignId)) {
+            list.push({
+                id: selectedCampaignId,
+                name: 'Campaña guardada',
+                clientId: clientId,
+                mode: 'MONEY' // Dummy mode to satisfy type
+            });
+        }
+        return list;
+    }, [campaigns, selectedCampaignId, clientId]);
+
+    const enhancedPartners = useMemo(() => {
+        let partners = client?.partners || [];
+        if (selectedPartnerName && !partners.find(p => p.name === selectedPartnerName)) {
+            partners = [...partners, { name: selectedPartnerName }];
+        }
+        return partners;
+    }, [client?.partners, selectedPartnerName]);
 
     const handleSubmit = async () => {
         // Smart Sowing Validation
@@ -498,25 +553,37 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     warehouses={warehouses}
                     contractors={contractors}
                     typeLabels={typeLabels}
-                    currLoadingOrder={currLoadingOrder} setCurrLoadingOrder={setCurrLoadingOrder}
-                    isMechanicalLabor={isMechanicalLabor} setIsMechanicalLabor={setIsMechanicalLabor}
-                    currProdId={currProdId} setCurrProdId={setCurrProdId}
-                    currWarehouseId={currWarehouseId} setCurrWarehouseId={setCurrWarehouseId}
-                    currDosage={currDosage} setCurrDosage={setCurrDosage}
-                    mechanicalLaborName={mechanicalLaborName} setMechanicalLaborName={setMechanicalLaborName}
-                    plantingSpacing={plantingSpacing} setPlantingSpacing={setPlantingSpacing}
-                    expectedYield={expectedYield} setExpectedYield={setExpectedYield}
-                    fertilizerPlacement={fertilizerPlacement} setFertilizerPlacement={setFertilizerPlacement}
+                    currLoadingOrder={currLoadingOrder}
+                    setCurrLoadingOrder={setCurrLoadingOrder}
+                    isMechanicalLabor={isMechanicalLabor}
+                    setIsMechanicalLabor={setIsMechanicalLabor}
+                    currProdId={currProdId}
+                    setCurrProdId={setCurrProdId}
+                    currDosage={currDosage}
+                    setCurrDosage={setCurrDosage}
+                    mechanicalLaborName={mechanicalLaborName}
+                    setMechanicalLaborName={setMechanicalLaborName}
+                    plantingSpacing={plantingSpacing}
+                    setPlantingSpacing={setPlantingSpacing}
+                    expectedYield={expectedYield}
+                    setExpectedYield={setExpectedYield}
+                    fertilizerPlacement={fertilizerPlacement}
+                    setFertilizerPlacement={setFertilizerPlacement}
                     editingItemId={editingItemId}
-                    selectedApplicatorId={selectedApplicatorId} setSelectedApplicatorId={setSelectedApplicatorId}
-                    servicePrice={servicePrice} setServicePrice={setServicePrice}
-                    selectedPartnerName={selectedPartnerName} setSelectedPartnerName={setSelectedPartnerName}
-                    selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId}
-                    campaigns={campaigns}
-                    showNotes={showNotes} setShowNotes={setShowNotes}
-                    notes={notes} setNotes={setNotes}
-                    facturaImageUrl={facturaImageUrl} setFacturaImageUrl={setFacturaImageUrl}
-                    subQuantities={subQuantities} setSubQuantities={setSubQuantities}
+                    selectedApplicatorId={selectedApplicatorId}
+                    setSelectedApplicatorId={setSelectedApplicatorId}
+                    servicePrice={servicePrice}
+                    setServicePrice={setServicePrice}
+                    selectedPartnerName={selectedPartnerName}
+                    setSelectedPartnerName={setSelectedPartnerName}
+                    showNotes={showNotes}
+                    setShowNotes={setShowNotes}
+                    notes={notes}
+                    setNotes={setNotes}
+                    facturaImageUrl={facturaImageUrl}
+                    setFacturaImageUrl={setFacturaImageUrl}
+                    subQuantities={subQuantities}
+                    setSubQuantities={setSubQuantities}
                     stock={stock}
                     handleAddItem={handleAddItem}
                     handleEditItem={handleEditItem}
@@ -524,7 +591,12 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     handleCancelEdit={handleCancelEdit}
                     onBack={() => setStep(1)}
                     onNext={() => setStep(3)}
-                    clientPartners={[...(client?.partners || []), ...(client?.investors || [])]}
+                    clientPartners={enhancedPartners}
+                    selectedCampaignId={selectedCampaignId}
+                    setSelectedCampaignId={setSelectedCampaignId}
+                    campaigns={enhancedCampaigns}
+                    currWarehouseId={currWarehouseId}
+                    setCurrWarehouseId={setCurrWarehouseId}
                 />
             )}
 

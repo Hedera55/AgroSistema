@@ -13,12 +13,25 @@ import { Warehouse } from '@/types';
 export default function Layout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { isActive, loading, role, user, isMaster, assignedId, displayName } = useAuth();
+    const { isActive, loading, role, user, isMaster, assignedId, displayName, profile } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
     const [currentClientName, setCurrentClientName] = useState<string | null>(null);
     const [persistedClientId, setPersistedClientId] = useState<string | null>(null);
+    const [assignedCompanies, setAssignedCompanies] = useState<{ id: string, name: string }[]>([]);
     const isInitializing = useRef(false);
+
+    // Fetch assigned companies for Contratista
+    useEffect(() => {
+        if (role === 'CONTRATISTA' && assignedId) {
+            db.getAll('clients').then(all => {
+                const assigned = all.filter((c: any) =>
+                    profile?.assigned_clients?.includes(c.id) && !c.deleted
+                ).map((c: any) => ({ id: c.id, name: c.name }));
+                setAssignedCompanies(assigned);
+            });
+        }
+    }, [role, assignedId, profile?.assigned_clients]);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -202,22 +215,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
                 <nav className="flex-1 px-4 space-y-2">
                     {navigation.map((item) => {
-                        const isActive = pathname === item.href;
+                        const isMainActive = pathname === item.href;
+                        const isOrders = item.name === 'Órdenes' && role === 'CONTRATISTA';
+
                         return (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                className={`block px-4 py-3 rounded-lg transition-colors ${isActive
-                                    ? 'bg-emerald-600 text-white shadow-lg'
-                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                                    }`}
-                            >
-                                {item.name}
-                            </Link>
+                            <div key={item.name} className="space-y-1">
+                                <Link
+                                    href={item.href}
+                                    className={`block px-4 py-3 rounded-lg transition-colors ${isMainActive
+                                        ? 'bg-emerald-600 text-white shadow-lg'
+                                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                        }`}
+                                >
+                                    {item.name}
+                                </Link>
+
+                                {isOrders && assignedCompanies.length > 0 && (
+                                    <div className="space-y-1 py-1 animate-fadeIn">
+                                        {assignedCompanies.map((comp) => {
+                                            const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+                                            const isSelected = pathname === '/orders' && searchParams?.get('clientId') === comp.id;
+                                            return (
+                                                <Link
+                                                    key={comp.id}
+                                                    href={`/orders?clientId=${comp.id}`}
+                                                    className={`block px-4 py-2 text-sm font-medium transition-all truncate hover:text-emerald-400 ${isSelected ? 'text-emerald-400 font-bold' : 'text-emerald-500'}`}
+                                                >
+                                                    {comp.name}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         );
                     })}
 
-                    {currentClientName && showClientMenu && (
+                    {currentClientName && showClientMenu && role !== 'CONTRATISTA' && (
                         <div className="mt-4 px-4 animate-fadeIn">
                             <Link
                                 href={`/clients/${effectiveId}`}

@@ -103,9 +103,10 @@ export function StockTable({
                 <div
                     className="overflow-x-auto"
                     onWheel={(e) => {
-                        if (e.deltaY !== 0) {
+                        const container = e.currentTarget;
+                        if (container.scrollWidth > container.clientWidth && e.deltaY !== 0) {
                             e.preventDefault();
-                            e.currentTarget.scrollLeft += e.deltaY;
+                            container.scrollLeft += e.deltaY;
                         }
                     }}
                 >

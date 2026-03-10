@@ -365,12 +365,6 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     const st = stock.find(s => s.productId === it.productId && s.warehouseId === editingMovement.warehouseId && (s.presentationLabel || '') === (it.presentationLabel || '') && (s.presentationContent || 0) === (it.presentationContent || 0));
                     if (st) await updateStock({ ...st, quantity: st.quantity - it.quantity });
                 }
-            } else if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
-                const oldItems = editingMovement.items || [{ productId: editingMovement.productId, quantity: editingMovement.quantity, presentationLabel: (editingMovement as any).presentationLabel, presentationContent: (editingMovement as any).presentationContent }];
-                for (const it of oldItems) {
-                    const st = stock.find(s => s.productId === it.productId && s.warehouseId === editingMovement.warehouseId && (s.presentationLabel || '') === (it.presentationLabel || '') && (s.presentationContent || 0) === (it.presentationContent || 0));
-                    if (st) await updateStock({ ...st, quantity: st.quantity + it.quantity });
-                }
             }
             const now = new Date();
             const movementItems: MovementItem[] = [];
