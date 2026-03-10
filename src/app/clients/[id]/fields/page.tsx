@@ -234,6 +234,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
         setLotName('');
         setLotHectares('');
+        setEditingLotId(null);
         setShowLotForm(false);
     };
 
@@ -532,6 +533,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     };
 
     const handleEditLot = (lot: Lot) => {
+        setSelectedFarmId(lot.farmId);
         setLotName(lot.name);
         setLotHectares(lot.hectares.toString());
         setEditingLotId(lot.id);

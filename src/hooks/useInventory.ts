@@ -64,6 +64,30 @@ export function useInventory() {
             updatedAt: new Date().toISOString()
         } as Client;
         await db.put('clients', finalClient);
+
+        // Create default warehouses for the new company
+        const now = new Date().toISOString();
+        await Promise.all([
+            db.put('warehouses', {
+                id: generateId(),
+                clientId: finalClient.id,
+                name: 'Acopio de Granos',
+                createdAt: now,
+                updatedAt: now,
+                synced: false,
+                deleted: false
+            }),
+            db.put('warehouses', {
+                id: generateId(),
+                clientId: finalClient.id,
+                name: 'Galpón',
+                createdAt: now,
+                updatedAt: now,
+                synced: false,
+                deleted: false
+            })
+        ]);
+
         await refresh();
         syncService.pushChanges();
         return finalClient;

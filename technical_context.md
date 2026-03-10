@@ -100,6 +100,15 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **CLIENT**: Read-only access to most management features. Supplements: suppresses all CREATE/UPDATE/DELETE.
 - **MASTER_ADMIN**: Full access to all clients and settings.
 
+## 📍 QR & KML System
+- **QR Target**: Scans point to `${window.location.origin}/kml/[lotId]` (generated dynamically in `usePDF.ts`).
+- **Server Route**: `src/app/kml/[lotId]/route.ts` — a Next.js API Route (not a page).
+    - Uses a **service-role Supabase client** (`SUPABASE_SERVICE_KEY` in `.env.local`) to bypass RLS, since the route has no authenticated user session.
+    - Returns the KML file directly with `Content-Disposition: attachment` headers for immediate download.
+    - If the lot is not found or has no `kml_data`, returns a styled HTML error page.
+    - **Note**: Supabase columns are snake_case (`kml_data`), not camelCase.
+    - **Next.js 15+ Params**: Route handler `params` is a `Promise` and must be `await`ed.
+
 ## 📖 Documentation
 - **Technical Context**: Located in `.gemini/antigravity/brain/` (this file).
 - **Knowledge Base**: `knowledge.md` is located in the **apps main folder**.
