@@ -629,7 +629,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             } else {
                 combined.set(key, {
                     ...item,
-                    productName: product?.name || 'Producto Desconocido',
+                    productName: product?.name || 'Insumo Desconocido',
                     warehouseName: activeWarehouseIds.length > 1 ? 'Múltiples' : (warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón')),
                     productType: product?.type || 'OTHER',
                     unit: product?.unit || 'UNIT',
@@ -1019,7 +1019,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 clientId: id,
                 warehouseId: stockRecord.warehouseId,
                 productId: stockRecord.productId,
-                productName: product?.name || 'Producto Desconocido',
+                productName: product?.name || 'Insumo Desconocido',
                 productCommercialName: product?.commercialName || '',
                 productBrand: stockRecord.productBrand || '-',
                 type: 'OUT',
@@ -1090,7 +1090,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     clientId: id,
                     warehouseId: destinationWarehouseId,
                     productId: stockRecord.productId,
-                    productName: product?.name || 'Producto Desconocido',
+                    productName: product?.name || 'Insumo Desconocido',
                     productCommercialName: product?.commercialName || '',
                     productBrand: stockRecord.productBrand || '-',
                     type: 'IN',
@@ -1139,12 +1139,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
 
     const handleDeleteProduct = React.useCallback(async (productId: string) => {
-        if (!confirm('¿Está seguro que desea eliminar este producto del catálogo? Esto no eliminará el historial pero podría afectar la visualización de stock actual.')) return;
+        if (!confirm('¿Está seguro que desea eliminar este insumo del catálogo? Esto no eliminará el historial pero podría afectar la visualización de stock actual.')) return;
         try {
             await deleteProduct(productId);
         } catch (e) {
             console.error(e);
-            alert('Error al eliminar producto');
+            alert('Error al eliminar insumo');
         }
     }, [deleteProduct]);
 
@@ -1169,7 +1169,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         );
 
         if (existingItem) {
-            if (confirm(`Ya existe stock de este producto con la marca "${newBrand}". ¿Desea unificar ambos registros?\n\nCantidad actual: ${item.quantity}\nCantidad en "${newBrand}": ${existingItem.quantity}\nTotal resultante: ${item.quantity + existingItem.quantity}`)) {
+            if (confirm(`Ya existe stock de este insumo con la marca "${newBrand}". ¿Desea unificar ambos registros?\n\nCantidad actual: ${item.quantity}\nCantidad en "${newBrand}": ${existingItem.quantity}\nTotal resultante: ${item.quantity + existingItem.quantity}`)) {
                 // Merge logic:
                 // 1. Update the existing item with the sum of quantities
                 await updateStock({
@@ -1263,11 +1263,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     importedCount++;
                 }
             }
-            if (importedCount > 0) alert(`${importedCount} productos importados.`);
-            else alert('No se importaron productos nuevos (todos ya existían).');
+            if (importedCount > 0) alert(`${importedCount} insumos importados.`);
+            else alert('No se importaron insumos nuevos (todos ya existían).');
         } catch (error) {
             console.error('Import error:', error);
-            alert('Error al importar productos.');
+            alert('Error al importar insumos.');
         } finally {
             setIsSubmitting(false);
         }
@@ -1326,7 +1326,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                     setSaleQuantity(item.quantity.toString());
                                                 }
                                             } else {
-                                                alert('Por favor selecciona un solo producto para vender.');
+                                                alert('Por favor selecciona un solo insumo para vender.');
                                             }
                                         }}
                                         variant={sellingStockId ? "secondary" : "primary"}
@@ -1498,7 +1498,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         onClick={handleToggleCatalog}
                         className={`text-xs px-4 py-2 rounded-full border shadow-sm transition-all font-medium ${showCatalog ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-emerald-600 hover:bg-white'}`}
                     >
-                        {showCatalog ? 'Cerrar catálogo' : 'Catálogo de productos'}
+                        {showCatalog ? 'Cerrar catálogo' : 'Catálogo de insumos'}
                     </button>
                 )}
                 <Link

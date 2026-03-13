@@ -76,6 +76,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             // Contractor & Partners
             setSelectedApplicatorId(order.applicatorId || '');
             setServicePrice(order.servicePrice ? String(order.servicePrice) : '');
+            setSelectedInvestors(order.investors || (order.investorName ? [{ name: order.investorName, percentage: 100 }] : []));
             setSelectedPartnerName(order.investorName || '');
             setSelectedCampaignId(order.campaignId || '');
 
@@ -127,7 +128,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [plantingSpacing, setPlantingSpacing] = useState('');
     const [expectedYield, setExpectedYield] = useState('');
     const [servicePrice, setServicePrice] = useState('');
-    const [selectedPartnerName, setSelectedPartnerName] = useState('');
+    const [selectedInvestors, setSelectedInvestors] = useState<Array<{ name: string; percentage: number }>>(
+        editId ? [] : [] // Will be populated by preload if editing
+    );
+    const [selectedPartnerName, setSelectedPartnerName] = useState(''); // Legacy fallback
     const [notes, setNotes] = useState('');
     const [facturaImageUrl, setFacturaImageUrl] = useState<string | null>(null);
     const [showNotes, setShowNotes] = useState(false);
@@ -497,7 +501,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 facturaImageUrl: facturaImageUrl || undefined,
                 boundary: boundary || undefined,
                 kmlData: kmlData || undefined,
-                investorName: selectedPartnerName,
+                investorName: selectedInvestors.length > 0 ? selectedInvestors[0].name : '',
+                investors: selectedInvestors,
                 campaignId: selectedCampaignId || undefined,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -573,21 +578,23 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     currProdId={currProdId}
                     setCurrProdId={setCurrProdId}
                     currDosage={currDosage}
-                    setCurrDosage={setCurrDosage}
+                    setCurrDosage={(val) => setCurrDosage(val.replace(',', '.'))}
                     mechanicalLaborName={mechanicalLaborName}
                     setMechanicalLaborName={setMechanicalLaborName}
                     plantingSpacing={plantingSpacing}
-                    setPlantingSpacing={setPlantingSpacing}
+                    setPlantingSpacing={(val) => setPlantingSpacing(val.replace(',', '.'))}
                     expectedYield={expectedYield}
-                    setExpectedYield={setExpectedYield}
+                    setExpectedYield={(val) => setExpectedYield(val.replace(',', '.'))}
                     fertilizerPlacement={fertilizerPlacement}
                     setFertilizerPlacement={setFertilizerPlacement}
                     editingItemId={editingItemId}
                     selectedApplicatorId={selectedApplicatorId}
                     setSelectedApplicatorId={setSelectedApplicatorId}
                     servicePrice={servicePrice}
-                    setServicePrice={setServicePrice}
+                    setServicePrice={(val) => setServicePrice(val.replace(',', '.'))}
                     selectedPartnerName={selectedPartnerName}
+                    selectedInvestors={selectedInvestors}
+                    setSelectedInvestors={setSelectedInvestors}
                     setSelectedPartnerName={setSelectedPartnerName}
                     showNotes={showNotes}
                     setShowNotes={setShowNotes}
@@ -608,7 +615,9 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     handleCancelEdit={handleCancelEdit}
                     onBack={() => setStep(1)}
                     onNext={() => setStep(3)}
-                    clientPartners={enhancedPartners}
+                    partners={client?.partners || []}
+                    investors={client?.investors || []}
+                    orderType={selectedFarmId ? 'APPLICATION' : 'SOWING'} // Simple heuristic or use a dedicated state
                     selectedCampaignId={selectedCampaignId}
                     setSelectedCampaignId={setSelectedCampaignId}
                     campaigns={enhancedCampaigns}
@@ -637,6 +646,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     selectedApplicatorId={selectedApplicatorId}
                     servicePrice={servicePrice}
                     selectedPartnerName={selectedPartnerName}
+                    selectedInvestors={selectedInvestors}
                     campaignName={campaigns.find(c => c.id === selectedCampaignId)?.name}
                     notes={notes}
                     onBack={() => setStep(2)}

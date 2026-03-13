@@ -19,6 +19,7 @@ interface OrderConfirmationStepProps {
     selectedApplicatorId: string;
     servicePrice: string;
     selectedPartnerName: string;
+    selectedInvestors: Array<{ name: string; percentage: number }>;
     campaignName?: string;
     notes: string;
     onBack: () => void;
@@ -41,6 +42,7 @@ export function OrderConfirmationStep({
     selectedApplicatorId,
     servicePrice,
     selectedPartnerName,
+    selectedInvestors,
     campaignName,
     notes,
     onBack,

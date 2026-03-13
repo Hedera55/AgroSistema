@@ -29,6 +29,18 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Behavior**: This ensures that horizontal scrolling with the mouse wheel is correctly captured without causing undesired vertical page jumping (scroll leakage).
     - **Implementation**: The container should have `overflow-x-auto` and the `ref` from the hook.
 
+- **Numerical Notation (Spanish/Argentine)**:
+    - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator.
+    - **Implementation**: 
+        - Use `type="text"` combined with `inputMode="decimal"`.
+        - Always normalize input strings using `.replace(',', '.')` before converting to numbers (e.g., `parseFloat(val.replace(',', '.'))`).
+    - **Display**: All numeric values displayed in the UI should be formatted using `.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })` or similar to respect local formatting.
+
+- **Stock History Subrows (Expandable Rows)**: 
+    - **Trigger**: Clicking a row in the Stock History table toggles its expanded state.
+    - **Visuals**: The expanded area must use a slightly grayer background (e.g., `bg-slate-100/60`) and include bold, uppercase subtitle rows: `PRODUCTOS` and `PAGADO POR`. 
+    - **Content**: Displays detailed `MovementItem` lists and the breakdown of participating partners.
+
 - **Action Buttons (Movement/Sale)**: All primary floating panel confirmation buttons (e.g., "Confirmar Venta", "Confirmar Retiro") must use `size="sm"` for a compact, professional look. 
     - **Vender**: Emerald theme (`bg-emerald-600`).
     - **Mover**: Orange theme (`bg-orange-600`).
@@ -50,6 +62,16 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Note Input Flow**: The note `textarea` is now rendered *after* the action row in the JSX to ensure it appears below the "Agregar Nota" button.
 - **Input Height Standard**: Note input boxes (e.g., in `StockSalePanel.tsx`) should be compact to save vertical space.
     - **Standard**: `rows={2}` and `min-h-[60px]` (or `h-12` for single-line expandable inputs).
+
+### Reusable Investor Selector (`InvestorSelector.tsx`)
+- **Purpose**: A unified component for selecting multiple partners and assigning percentage shares.
+- **Location**: `src/components/InvestorSelector.tsx`.
+- **Validation**: Includes a real-time warning if the total percentage deviates from 100%.
+- **Layout**: In complex forms (like New Order), it should be placed in its own **full-width row** to prevent UI congestion.
+
+### Stock Entry Form Logic
+- **Auto-Calculation**: The form must automatically update the `Total Quantity` based on the formula: `Presentation Content` × `Physical Amount`.
+- **Filtering**: `availableProducts` in the stock entry form must be filtered by the current `clientId` to prevent cross-client data selection.
 
 ## Navigation & Order Logic
 

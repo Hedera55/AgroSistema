@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Warehouse, Campaign, Lot, Farm, InventoryMovement } from '@/types';
+import { InvestorSelector } from '@/components/InvestorSelector';
 
 interface HarvestData {
     date: string;
     contractor: string;
     campaignId: string;
     laborPricePerHa: number;
-    investor: string;
+    investor?: string;
+    investors?: Array<{ name: string; percentage: number }>;
     harvestType: 'SEMILLA' | 'GRANO';
     totalYield: number;
     distributions: Array<{
@@ -65,7 +67,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(initialDistributions?.[0]?.logistics?.campaignId || '');
     const [observedYield, setObservedYield] = useState(initialYield || '');
     const [harvestLaborPrice, setHarvestLaborPrice] = useState(initialLaborPrice || '');
-    const [selectedHarvestInvestor, setSelectedHarvestInvestor] = useState(initialDistributions?.[0]?.logistics?.investorName || '');
+    const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>(
+        initialDistributions?.[0]?.logistics?.investors || (initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : [])
+    );
     const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(initialDistributions?.[0]?.logistics?.type === 'GRANO' ? 'GRANO' : 'GRANO'); // Default to Grano, will refine mapping if needed 
 
     // Step 2 State
@@ -214,6 +218,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         }));
     };
 
+    const handleUpdateDistributionAmountString = (id: string, val: string) => {
+        const normalized = val.replace(',', '.');
+        const num = parseFloat(normalized) || 0;
+        handleUpdateDistributionAmount(id, num);
+    };
+
     const handleDeleteDistribution = (id: string) => {
         setDistributions(prev => prev.filter(d => d.id !== id));
         if (activeTabId === id) setActiveTabId('general');
@@ -301,7 +311,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             contractor: harvestContractor,
             campaignId: selectedHarvestCampaignId,
             laborPricePerHa: parseFloat(harvestLaborPrice) || 0,
-            investor: selectedHarvestInvestor,
+            investor: selectedHarvestInvestors.length > 0 ? selectedHarvestInvestors[0].name : '',
+            investors: selectedHarvestInvestors,
             harvestType,
             totalYield: totalYieldNum,
             distributions: finalDistributions
@@ -342,10 +353,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         </div>
                         <Input
                             label="PRODUCCIÓN TOTAL (kg)"
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Ej. 65000"
                             value={observedYield}
-                            onChange={e => setObservedYield(e.target.value)}
+                            onChange={e => setObservedYield(e.target.value.replace(',', '.'))}
                             className="bg-white border-blue-300 focus:ring-blue-500"
                             labelClassName="block text-[10px] uppercase font-bold text-blue-600 mb-1"
                         />
@@ -380,43 +392,20 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         </div>
                         <Input
                             label="Precio Labor (USD/ha) (Opcional)"
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={harvestLaborPrice}
-                            onChange={e => setHarvestLaborPrice(e.target.value)}
+                            onChange={e => setHarvestLaborPrice(e.target.value.replace(',', '.'))}
                             className="bg-white"
                             labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                         />
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Labor Pagada Por (Opcional)</label>
-                            <select
-                                className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
-                                value={selectedHarvestInvestor}
-                                onChange={e => setSelectedHarvestInvestor(e.target.value)}
-                            >
-                                <option value="">Seleccionar...</option>
-                                {(() => {
-                                    const source = [...(partners || []), ...(investors || [])];
-                                    return source.map((p: any, idx) => {
-                                        let name = '';
-                                        if (typeof p === 'string') {
-                                            if (p.trim().startsWith('{')) {
-                                                try {
-                                                    const parsed = JSON.parse(p);
-                                                    name = parsed.name || p;
-                                                } catch (e) {
-                                                    name = p;
-                                                }
-                                            } else {
-                                                name = p;
-                                            }
-                                        } else {
-                                            name = p?.name || '';
-                                        }
-                                        if (!name) return null;
-                                        return <option key={`${name}-${idx}`} value={name}>{name}</option>;
-                                    });
-                                })()}
-                            </select>
+                        <div className="md:col-span-2">
+                            <InvestorSelector
+                                label="Labor Pagada Por (Opcional)"
+                                availablePartners={[...(partners || []), ...(investors || [])]}
+                                selectedInvestors={selectedHarvestInvestors}
+                                onChange={setSelectedHarvestInvestors}
+                            />
                         </div>
                     </div>
                 </div>
@@ -486,10 +475,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                         <div className="w-32">
                                             <div className="relative">
                                                 <input
-                                                    type="number"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     value={dist.amount || ''}
-                                                    onChange={e => handleUpdateDistributionAmount(dist.id, parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded text-right pr-6"
+                                                    onChange={e => handleUpdateDistributionAmountString(dist.id, e.target.value)}
+                                                    className="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded text-right pr-6 font-bold text-blue-600"
                                                     placeholder="0"
                                                 />
                                                 <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">kg</span>
@@ -572,10 +562,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             />
                             <Input
                                 label="Humedad (%)"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
                                 value={getLogisticsValue(activeTabId, 'humidity')}
-                                onChange={e => updateLogistics(activeTabId, 'humidity', parseFloat(e.target.value))}
+                                onChange={e => updateLogistics(activeTabId, 'humidity', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Nro de Descarga"
@@ -585,24 +576,27 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             />
                             <Input
                                 label="Peso Hectolítrico"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
                                 value={getLogisticsValue(activeTabId, 'hectoliterWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'hectoliterWeight', parseFloat(e.target.value))}
+                                onChange={e => updateLogistics(activeTabId, 'hectoliterWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Bruto (kg)"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
                                 value={getLogisticsValue(activeTabId, 'grossWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'grossWeight', parseFloat(e.target.value))}
+                                onChange={e => updateLogistics(activeTabId, 'grossWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Tara (kg)"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
                                 value={getLogisticsValue(activeTabId, 'tareWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'tareWeight', parseFloat(e.target.value))}
+                                onChange={e => updateLogistics(activeTabId, 'tareWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Empresa de Destino"

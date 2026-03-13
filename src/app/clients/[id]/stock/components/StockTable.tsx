@@ -97,7 +97,7 @@ export function StockTable({
             ) : enrichedStock.length === 0 ? (
                 <div className="p-12 text-center text-slate-500">
                     <h3 className="text-lg font-medium text-slate-900">Sin inventario</h3>
-                    <p>No hay productos cargados en los galpones seleccionados.</p>
+                    <p>No hay insumos cargados en los galpones seleccionados.</p>
                 </div>
             ) : (
                 <div

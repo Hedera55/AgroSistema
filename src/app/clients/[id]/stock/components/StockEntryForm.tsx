@@ -357,7 +357,7 @@ const StockEntryFormInternal = memo(({
             <form onSubmit={handleStockSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end mb-4 border-b border-slate-100 pb-6">
                     <div className="md:col-span-12 lg:col-span-8">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo / Producto</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo</label>
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={activeStockItem.productId}
@@ -378,7 +378,7 @@ const StockEntryFormInternal = memo(({
                             inputMode="decimal"
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={activeStockItem.price}
-                            onChange={e => updateActiveStockItem('price', e.target.value)}
+                            onChange={e => updateActiveStockItem('price', e.target.value.replace(',', '.'))}
                         />
                     </div>
                 </div>
@@ -406,7 +406,7 @@ const StockEntryFormInternal = memo(({
                             inputMode="decimal"
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={activeStockItem.presentationContent || ''}
-                            onChange={e => updateActiveStockItem('presentationContent', e.target.value)}
+                            onChange={e => updateActiveStockItem('presentationContent', e.target.value.replace(',', '.'))}
                             placeholder="Ej: 20"
                         />
                     </div>
@@ -422,7 +422,7 @@ const StockEntryFormInternal = memo(({
                             inputMode="decimal"
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 font-bold text-emerald-600"
                             value={activeStockItem.presentationAmount || ''}
-                            onChange={e => updateActiveStockItem('presentationAmount', e.target.value)}
+                            onChange={e => updateActiveStockItem('presentationAmount', e.target.value.replace(',', '.'))}
                             placeholder="Ej: 5"
                         />
                     </div>
@@ -456,7 +456,7 @@ const StockEntryFormInternal = memo(({
 
                 {stockItems.length > 0 && (
                     <div className="space-y-2 pt-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Productos a cargar</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Insumos a cargar</label>
                         <div className="overflow-hidden divide-y divide-slate-100">
                             {stockItems.map((item, idx) => {
                                 const product = availableProducts.find(p => p.id === item.productId);

@@ -60,6 +60,27 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     // StockEntryForm Required States
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' });
+    
+    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
+        setActiveStockItem(prev => {
+            const newState = { ...prev, [field]: value };
+
+            // Auto-calculate quantity if presentation content or amount changes
+            if (field === 'presentationContent' || field === 'presentationAmount') {
+                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
+                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
+
+                const content = parseFloat(contentVal.toString().replace(',', '.'));
+                const amount = parseFloat(amountVal.toString().replace(',', '.'));
+
+                if (!isNaN(content) && !isNaN(amount)) {
+                    newState.quantity = (content * amount).toString();
+                }
+            }
+
+            return newState;
+        });
+    }, []);
     const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; presentationLabel?: string; presentationContent?: string; presentationAmount?: string; }[]>([]);
     const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
     const [facturaDate, setFacturaDate] = useState('');
@@ -646,7 +667,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 <div>
                     <Link href={`/clients/${clientId}/stock`} className="text-sm text-slate-500 hover:text-emerald-600 mb-2 inline-block">← Volver al Galpón</Link>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Historial de Movimientos</h1>
-                    <p className="text-slate-500 mt-1">Ingresos y egresos de productos.</p>
+                    <p className="text-slate-500 mt-1">Ingresos y egresos de insumos.</p>
                 </div>
                 {!isReadOnly && (
                     <Button 
@@ -720,7 +741,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             <thead className="bg-slate-50">
                                 <tr>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Producto</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Insumo</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Marca</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Comercial</th>
                                     <th className="px-6 py-2 text-center text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Tipo</th>
@@ -728,7 +749,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">P. Unit.</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Total</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Vendedor</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Socio que pagó</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Pagado por</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Emisión</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Venc.</th>
@@ -781,7 +802,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         }
 
                                         const productObj = productsData[m.productId];
-                                        let dispName = isConsolidated ? 'Varios' : (singleItem?.productName || m.productName || productObj?.name || 'Producto');
+                                        let dispName = isConsolidated ? 'Varios' : (singleItem?.productName || m.productName || productObj?.name || 'Insumo');
                                         if (dispName.toLowerCase().includes('soja')) dispName = 'Soja';
 
                                         const enrichedOrder = m.referenceId ? ordersData.find(o => o.id === m.referenceId) : null;
@@ -840,19 +861,43 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {isConsolidated && m.items.map((it: any, i: number) => (
-                                                    <tr key={`${m.id}-item-${i}`} className="bg-slate-50/30 text-[11px]">
-                                                        <td colSpan={1} className="px-6 py-1"></td>
-                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10">↳ {it.productName}</td>
-                                                        <td className="px-6 py-1 text-slate-400">{it.productBrand || '-'}</td>
-                                                        <td className="px-6 py-1 text-slate-500">{it.productCommercialName || '-'}</td>
-                                                        <td colSpan={1}></td>
-                                                        <td className="px-6 py-1 text-right font-mono text-slate-500">{Math.abs(Number(it.quantity))} {it.unit || m.unit}</td>
-                                                        <td className="px-6 py-1 text-right font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                        <td className="px-6 py-1 text-right font-mono font-bold text-slate-900 border-r border-slate-100">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                        <td colSpan={8}></td>
-                                                    </tr>
-                                                ))}
+                                                {isSelected && (
+                                                    <>
+                                                        {m.items && m.items.length > 0 && (
+                                                            <>
+                                                                <tr className="bg-slate-100/60 border-y border-slate-200/50">
+                                                                    <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                </tr>
+                                                                {m.items.map((it: any, i: number) => (
+                                                                    <tr key={`${m.id}-item-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
+                                                                        <td colSpan={1} className="px-6 py-1"></td>
+                                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10">↳ {it.productName}</td>
+                                                                        <td className="px-6 py-1 text-slate-400">{it.productBrand || '-'}</td>
+                                                                        <td className="px-6 py-1 text-slate-500">{it.productCommercialName || '-'}</td>
+                                                                        <td colSpan={1}></td>
+                                                                        <td className="px-6 py-1 text-right font-mono text-slate-500">{Math.abs(Number(it.quantity))} {it.unit || m.unit}</td>
+                                                                        <td className="px-6 py-1 text-right font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                        <td className="px-6 py-1 text-right font-mono font-bold text-slate-900">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                        <td colSpan={8}></td>
+                                                                    </tr>
+                                                                ))}
+                                                            </>
+                                                        )}
+                                                        {m.investors && m.investors.length > 0 && (
+                                                            <>
+                                                                <tr className="bg-slate-100/60 border-y border-slate-200/50">
+                                                                    <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
+                                                                </tr>
+                                                                {m.investors.map((inv: any, i: number) => (
+                                                                    <tr key={`${m.id}-inv-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
+                                                                        <td colSpan={1}></td>
+                                                                        <td colSpan={15} className="px-10 py-2 font-bold text-slate-600">↳ {inv.name} <span className="text-slate-400 font-medium ml-2">({inv.percentage}%)</span></td>
+                                                                    </tr>
+                                                                ))}
+                                                            </>
+                                                        )}
+                                                    </>
+                                                )}
                                             </React.Fragment>
                                         );
                                     }).slice(0, movementsLimit);
@@ -1014,7 +1059,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             </div>
                         </form>
                     ) : (
-                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData)} activeStockItem={activeStockItem as any} updateActiveStockItem={(f, v) => { setActiveStockItem(prev => ({ ...prev, [f]: v })); }} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
+                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} activeStockItem={activeStockItem as any} updateActiveStockItem={updateActiveStockItem} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
                     )}
                 </div>
             )}

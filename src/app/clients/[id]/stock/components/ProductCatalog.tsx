@@ -126,14 +126,14 @@ function ProductCatalogInternal({
         <>
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-semibold text-slate-900">Catálogo de Productos</h2>
+                    <h2 className="text-lg font-semibold text-slate-900">Catálogo de Insumos</h2>
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2 mr-2">
                             <button
                                 onClick={() => {
                                     const dataStr = JSON.stringify(availableProducts, null, 2);
                                     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-                                    const exportFileDefaultName = 'catalogo_productos.json';
+                                    const exportFileDefaultName = 'catalogo_insumos.json';
                                     const linkElement = document.createElement('a');
                                     linkElement.setAttribute('href', dataUri);
                                     linkElement.setAttribute('download', exportFileDefaultName);
@@ -160,9 +160,9 @@ function ProductCatalogInternal({
                                             try {
                                                 const json = JSON.parse(event.target?.result as string);
                                                 if (Array.isArray(json)) {
-                                                    if (confirm(`¿Importar ${json.length} productos? Se agregarán al catálogo existente.`)) {
+                                                    if (confirm(`¿Importar ${json.length} insumos? Se agregarán al catálogo existente.`)) {
                                                         await importProducts(json);
-                                                        alert('Productos importados correctamente');
+                                                        alert('Insumos importados correctamente');
                                                     }
                                                 }
                                             } catch (err) {
@@ -206,7 +206,7 @@ function ProductCatalogInternal({
                                 }}
                                 className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded px-1"
                             >
-                                Registrar nuevo producto
+                                Registrar nuevo insumo
                             </button>
                         )}
                         <button
@@ -225,7 +225,7 @@ function ProductCatalogInternal({
                 ) : availableProducts.length === 0 ? (
                     <div className="p-12 text-center text-slate-500">
                         <h3 className="text-lg font-medium text-slate-900">Catálogo vacío</h3>
-                        <p>Agregue productos para comenzar.</p>
+                        <p>Agregue insumos para comenzar.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -271,7 +271,7 @@ function ProductCatalogInternal({
                                                     </button>
                                                     <button
                                                         onClick={async () => {
-                                                            if (confirm('¿Eliminar producto del catálogo?')) await deleteProduct(p.id);
+                                                            if (confirm('¿Eliminar insumo del catálogo?')) await deleteProduct(p.id);
                                                         }}
                                                         className="text-slate-400 hover:text-red-900 p-1 transition-colors"
                                                         title="Eliminar"
@@ -293,7 +293,7 @@ function ProductCatalogInternal({
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fadeIn mb-8">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-emerald-800">
-                            {editingProductId ? 'Editar Producto' : 'Registrar Nuevo Producto'}
+                            {editingProductId ? 'Editar Insumo' : 'Registrar Nuevo Insumo'}
                         </h2>
                         <button
                             onClick={() => {
@@ -466,7 +466,7 @@ function ProductCatalogInternal({
                             {isDuplicate && (
                                 <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg animate-fadeIn flex-1 sm:flex-initial">
                                     <p className="text-xs font-bold text-red-600 uppercase tracking-tight">
-                                        ⚠️ Este producto ya existe en el catálogo
+                                        ⚠️ Este insumo ya existe en el catálogo
                                     </p>
                                 </div>
                             )}

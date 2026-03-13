@@ -335,7 +335,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Ubicación</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Tipo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Estado</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Monto Total</th>
+                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Costo de labor</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha de aplicación planeada</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Autor</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
@@ -572,7 +572,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
                     <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-slideUp">
                         <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Registrar Costo de Servicio (USD)</h3>
+                             <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Registrar Costo de Labor (USD)</h3>
                             <button onClick={() => setPriceModalOrder(null)} className="text-slate-400 hover:text-slate-600">✕</button>
                         </div>
                         <div className="p-6 space-y-4">

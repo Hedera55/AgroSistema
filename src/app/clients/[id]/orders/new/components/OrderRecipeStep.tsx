@@ -2,15 +2,19 @@
 
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { OrderItem, Product, Warehouse, ProductType } from '@/types';
+import { OrderItem, Product, Warehouse, ProductType, OrderType } from '@/types';
 import { kml } from '@tmcw/togeojson';
+import { InvestorSelector } from '@/components/InvestorSelector';
 
 interface OrderRecipeStepProps {
     selectedLot: { name: string; hectares: number };
     items: OrderItem[];
     availableProducts: Product[];
     warehouses: Warehouse[];
-    contractors: { id: string; username: string }[];
+    contractors: any[];
+    partners: any[];
+    investors: any[];
+    orderType: OrderType;
     typeLabels: Record<ProductType, string>;
     currLoadingOrder: string;
     setCurrLoadingOrder: (val: string) => void;
@@ -32,11 +36,13 @@ interface OrderRecipeStepProps {
     setFertilizerPlacement: (val: 'LINE' | 'SIDE' | undefined) => void;
     editingItemId: string | null;
     selectedApplicatorId: string;
-    setSelectedApplicatorId: (val: string) => void;
+    setSelectedApplicatorId: (id: string) => void;
     servicePrice: string;
-    setServicePrice: (val: string) => void;
+    setServicePrice: (price: string) => void;
     selectedPartnerName: string;
-    setSelectedPartnerName: (val: string) => void;
+    setSelectedPartnerName: (name: string) => void;
+    selectedInvestors: Array<{ name: string; percentage: number }>;
+    setSelectedInvestors: (investors: Array<{ name: string; percentage: number }>) => void;
     showNotes: boolean;
     setShowNotes: (val: boolean) => void;
     notes: string;
@@ -55,7 +61,6 @@ interface OrderRecipeStepProps {
     handleCancelEdit: () => void;
     onBack: () => void;
     onNext: () => void;
-    clientPartners?: any[];
     kmlData: string | null;
     setKmlData: (val: string | null) => void;
     boundary: any;
@@ -68,6 +73,9 @@ export function OrderRecipeStep({
     availableProducts,
     warehouses,
     contractors,
+    partners,
+    investors,
+    orderType,
     typeLabels,
     currLoadingOrder,
     setCurrLoadingOrder,
@@ -92,6 +100,8 @@ export function OrderRecipeStep({
     setServicePrice,
     selectedPartnerName,
     setSelectedPartnerName,
+    selectedInvestors,
+    setSelectedInvestors,
     showNotes,
     setShowNotes,
     notes,
@@ -107,7 +117,6 @@ export function OrderRecipeStep({
     handleCancelEdit,
     onBack,
     onNext,
-    clientPartners,
     selectedCampaignId,
     setSelectedCampaignId,
     campaigns,
@@ -141,7 +150,8 @@ export function OrderRecipeStep({
     const showLoadingOrder = !isSowingOrder && !isMechanicalLabor;
 
     const handleMultiplierChange = (stockId: string, val: string) => {
-        const num = parseInt(val) || 0;
+        const normalized = val.replace(',', '.');
+        const num = parseFloat(normalized) || 0;
         setSubQuantities({ ...subQuantities, [stockId]: num });
     };
 
@@ -162,9 +172,9 @@ export function OrderRecipeStep({
                             <div className="md:col-span-1">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden</label>
                                 <Input
-                                    type="number"
+                                    type="text"
+                                    inputMode="numeric"
                                     placeholder=""
-                                    min="1"
                                     value={currLoadingOrder}
                                     onChange={e => {
                                         const val = e.target.value.replace(/[^0-9]/g, '');
@@ -176,7 +186,7 @@ export function OrderRecipeStep({
                         )}
 
                         <div className={showLoadingOrder ? "md:col-span-8" : "md:col-span-9"}>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Producto / Labor</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Insumo / Labor</label>
                             <select
                                 className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-2.5 px-4 text-sm h-[46px]"
                                 value={isMechanicalLabor ? 'LABOREO_MECANICO' : currProdId}
@@ -213,11 +223,11 @@ export function OrderRecipeStep({
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Dosis</label>
                                     <div className="relative flex items-center h-[46px]">
                                         <Input
-                                            type="number"
-                                            step="0.01"
+                                            type="text"
+                                            inputMode="decimal"
                                             placeholder={selectedProduct?.type === 'SEED' ? "ej. 80" : "0.00"}
                                             value={currDosage}
-                                            onChange={e => setCurrDosage(e.target.value)}
+                                            onChange={e => setCurrDosage(e.target.value.replace(',', '.'))}
                                             className="h-[46px] pr-12"
                                         />
                                         {(currProdId) && (
@@ -292,8 +302,8 @@ export function OrderRecipeStep({
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">x</span>
                                                             <input
-                                                                type="number"
-                                                                min="0"
+                                                                type="text"
+                                                                inputMode="decimal"
                                                                 className="w-16 h-8 rounded-md border-slate-200 text-sm font-bold text-center focus:border-emerald-500 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                 value={subQuantities[s.id] || ''}
                                                                 onChange={e => handleMultiplierChange(s.id, e.target.value)}
@@ -335,11 +345,11 @@ export function OrderRecipeStep({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Espaciamiento (cm)</label>
-                                <Input type="number" step="0.1" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value)} className="h-[46px]" />
+                                <Input type="text" inputMode="decimal" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value.replace(',', '.'))} className="h-[46px]" />
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Rinde esperado (kg/ha)</label>
-                                <Input type="number" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value)} className="h-[46px]" />
+                                <Input type="text" inputMode="decimal" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value.replace(',', '.'))} className="h-[46px]" />
                             </div>
                         </div>
                     )}
@@ -438,7 +448,7 @@ export function OrderRecipeStep({
                 )}
 
                 <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-4">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -452,45 +462,15 @@ export function OrderRecipeStep({
                     <div className="lg:col-span-4">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
                         <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0.00"
                             value={servicePrice}
-                            onChange={e => setServicePrice(e.target.value)}
+                            onChange={e => setServicePrice(e.target.value.replace(',', '.'))}
                             className="h-[46px]"
                         />
                     </div>
-                    <div className="lg:col-span-3">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pagado por</label>
-                        <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
-                            value={selectedPartnerName}
-                            onChange={e => setSelectedPartnerName(e.target.value)}
-                        >
-                            <option value="">Seleccione Socio...</option>
-                            {clientPartners?.map((p: any, idx: number) => {
-                                let name = '';
-                                if (typeof p === 'string') {
-                                    if (p.trim().startsWith('{')) {
-                                        try {
-                                            const parsed = JSON.parse(p);
-                                            name = parsed.name || p;
-                                        } catch (e) {
-                                            name = p;
-                                        }
-                                    } else {
-                                        name = p;
-                                    }
-                                } else {
-                                    name = p?.name || '';
-                                }
-                                if (!name) return null;
-                                return <option key={`${name}-${idx}`} value={name}>{name}</option>;
-                            })}
-                        </select>
-                    </div>
-
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-4">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -502,6 +482,15 @@ export function OrderRecipeStep({
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
+                    </div>
+
+                    <div className="col-span-12">
+                        <InvestorSelector
+                            label="Pagado por (Opcional)"
+                            availablePartners={[...(partners || []), ...(investors || [])]}
+                            selectedInvestors={selectedInvestors}
+                            onChange={setSelectedInvestors}
+                        />
                     </div>
                 </div>
 
