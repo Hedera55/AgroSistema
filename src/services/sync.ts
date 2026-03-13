@@ -106,7 +106,9 @@ const mappers = {
         deleted_by: o.deletedBy || null,
         sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null,
         investor_name: o.investorName || null,
-        campaign_id: o.campaignId || null
+        campaign_id: o.campaignId || null,
+        boundary: o.boundary || null,
+        kml_data: o.kmlData || null
     }),
     movement: (m: InventoryMovement) => {
         let mappedType = m.type;
@@ -282,7 +284,9 @@ const reverseMappers = {
         deletedBy: o.deleted_by,
         sowingOrderId: o.sowing_order_id,
         investorName: o.investor_name,
-        campaignId: o.campaign_id
+        campaignId: o.campaign_id,
+        boundary: o.boundary,
+        kmlData: o.kml_data
     }),
     movement: (m: any): InventoryMovement => ({
         id: m.id,

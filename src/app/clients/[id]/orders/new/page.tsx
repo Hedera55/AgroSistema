@@ -82,6 +82,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             // Notes & Extra
             setNotes(order.notes || '');
             setFacturaImageUrl(order.facturaImageUrl || null);
+            setKmlData(order.kmlData || null);
+            setBoundary(order.boundary || null);
             if (order.notes) setShowNotes(true);
         };
 
@@ -129,6 +131,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [notes, setNotes] = useState('');
     const [facturaImageUrl, setFacturaImageUrl] = useState<string | null>(null);
     const [showNotes, setShowNotes] = useState(false);
+    const [kmlData, setKmlData] = useState<string | null>(null);
+    const [boundary, setBoundary] = useState<any>(null);
 
     // Mechanical Labor State
     const [isMechanicalLabor, setIsMechanicalLabor] = useState(false);
@@ -338,11 +342,12 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     // Stock Validation
     const stockShortages = useMemo(() => {
         return items.map(item => {
-            const stockItem = stock.find(s => s.productId === item.productId);
-            const available = stockItem?.quantity || 0;
+            const totalAvailable = stock
+                .filter(s => s.productId === item.productId)
+                .reduce((acc, s) => acc + (s.quantity || 0), 0);
             const needed = item.totalQuantity;
-            const missing = needed > available ? needed - available : 0;
-            return { ...item, available, missing };
+            const missing = needed > totalAvailable ? needed - totalAvailable : 0;
+            return { ...item, available: totalAvailable, missing };
         }).filter(i => i.missing > 0 && i.productId !== 'LABOREO_MECANICO');
     }, [items, stock]);
 
@@ -427,23 +432,29 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 const lot = lots.find(l => l.id === lotId);
                 if (!lot) continue;
 
+                // Bypass validation if the lot is empty or recently harvested (new cycle)
+                if (lot.status === 'EMPTY' || lot.status === 'HARVESTED') continue;
+
                 const previousSowings = allOrders.filter(o =>
                     o.clientId === clientId &&
                     !o.deleted &&
+                    o.campaignId === selectedCampaignId && // Campaign Isolation
                     (o.lotIds?.includes(lotId) || o.lotId === lotId) &&
                     o.type === 'SOWING' &&
                     o.id !== editId
                 );
 
                 const sownArea = previousSowings.reduce((acc, o) => {
-                    const ha = o.lotHectares?.[lotId] ?? o.treatedArea; // Fallback to treatedArea for single-lot legacy orders
+                    // For multi-lot orders, if lotHectares[lotId] is missing, we can't assume treatedArea (total order area)
+                    const isMultiLot = (o.lotIds?.length || 0) > 1;
+                    const ha = o.lotHectares?.[lotId] ?? (isMultiLot ? 0 : o.treatedArea);
                     return acc + ha;
                 }, 0);
 
                 const currentArea = lotHectares[lotId] ?? lot.hectares;
 
-                if (sownArea + currentArea > lot.hectares + 0.01) { // 0.01 tolerance for float precision
-                    alert(`El lote "${lot.name}" ya tiene ${sownArea.toFixed(1)} ha sembradas. Sumando las ${currentArea.toFixed(1)} ha actuales, supera el total de ${lot.hectares} ha. Por favor, ajuste el recorte.`);
+                if (sownArea + currentArea > lot.hectares + 0.1) { // Increased tolerance slightly for area sums
+                    alert(`El lote "${lot.name}" ya tiene ${sownArea.toFixed(1)} ha sembradas en esta campaña. Sumando las ${currentArea.toFixed(1)} ha actuales, supera el total de ${lot.hectares} ha.`);
                     return;
                 }
             }
@@ -484,6 +495,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 plantingSpacing: items.find(i => i.plantingSpacing)?.plantingSpacing,
                 notes: notes,
                 facturaImageUrl: facturaImageUrl || undefined,
+                boundary: boundary || undefined,
+                kmlData: kmlData || undefined,
                 investorName: selectedPartnerName,
                 campaignId: selectedCampaignId || undefined,
                 createdAt: new Date().toISOString(),
@@ -582,6 +595,10 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     setNotes={setNotes}
                     facturaImageUrl={facturaImageUrl}
                     setFacturaImageUrl={setFacturaImageUrl}
+                    kmlData={kmlData}
+                    setKmlData={setKmlData}
+                    boundary={boundary}
+                    setBoundary={setBoundary}
                     subQuantities={subQuantities}
                     setSubQuantities={setSubQuantities}
                     stock={stock}

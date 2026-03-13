@@ -125,14 +125,20 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **CLIENT**: Read-only access to most management features. Supplements: suppresses all CREATE/UPDATE/DELETE.
 - **MASTER_ADMIN**: Full access to all clients and settings.
 
+## 🗺️ Map & Geo-Data Architecture
+
+### Public vs. Internal Map Logic
+- **Internal Map**: Powered by **IndexedDB** local cache (via `SyncService`). 
+    - **Reasoning**: Field work often occurs in areas with poor connectivity. Using a local IndexedDB store ensures **instant rendering** and extreme speed when handling large GeoJSON boundaries for multiple farms and lots, eliminating network latency during navigation.
+- **Public Map**: Powered by **Direct Supabase Fetches**.
+    - **Reasoning**: Designed for lightweight, one-off guest access (QR codes). Because external users do not have a synchronized local database, the system fetches data on-the-fly directly from Supabase, balancing simplicity for the guest with consistency for the owner.
+
 ## 📍 QR & KML System
-- **QR Target**: Scans point to `${window.location.origin}/kml/[lotId]` (generated dynamically in `usePDF.ts`).
-- **Server Route**: `src/app/kml/[lotId]/route.ts` — a Next.js API Route (not a page).
-    - Uses a **service-role Supabase client** (`SUPABASE_SERVICE_KEY` in `.env.local`) to bypass RLS, since the route has no authenticated user session.
-    - Returns the KML file directly with `Content-Disposition: attachment` headers for immediate download.
-    - If the lot is not found or has no `kml_data`, returns a styled HTML error page.
+- **QR Target**: Scans point to the Public Map page `${window.location.origin}/public/map/[clientId]?orderId=...` (or the direct KML download route if legacy).
+- **Server Route (Direct Download)**: `src/app/kml/[lotId]/route.ts` — a Next.js API Route (not a page).
+    - Uses a **service-role Supabase client** (`SUPABASE_SERVICE_KEY` in `.env.local`) to bypass RLS.
+    - Returns the KML file directly with `Content-Disposition: attachment`.
     - **Note**: Supabase columns are snake_case (`kml_data`), not camelCase.
-    - **Next.js 15+ Params**: Route handler `params` is a `Promise` and must be `await`ed.
 
 ## 📖 Documentation
 - **Technical Context**: Located in `.gemini/antigravity/brain/` (this file).

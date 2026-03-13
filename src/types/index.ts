@@ -325,6 +325,8 @@ export interface Order {
     investorName?: string; // Who is responsible for the service cost
     investors?: { name: string; percentage: number }[]; // Multi-investor support
     campaignId?: string; // Link to Campaign
+    boundary?: any; // New: Section KML GeoJSON
+    kmlData?: string; // New: Original KML content
 }
 
 export interface OrderActivity {

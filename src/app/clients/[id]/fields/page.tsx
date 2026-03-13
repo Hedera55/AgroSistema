@@ -79,6 +79,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [selectedHarvestWarehouseId, setSelectedHarvestWarehouseId] = useState('');
     const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState('');
     const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>('GRANO');
+    const [tempFarmKmlData, setTempFarmKmlData] = useState<string | null>(null);
+    const [tempFarmBoundary, setTempFarmBoundary] = useState<any>(null);
+    const [tempLotKmlData, setTempLotKmlData] = useState<string | null>(null);
+    const [tempLotBoundary, setTempLotBoundary] = useState<any>(null);
 
     const getSowingTooltip = (lotId: string) => {
         if (!orders) return 'Sembrado';
@@ -227,6 +231,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 name: lotName,
                 hectares: parseFloat(lotHectares),
                 status: 'EMPTY',
+                boundary: tempLotBoundary || undefined,
+                kmlData: tempLotKmlData || undefined,
                 createdBy: displayName || 'Sistema',
                 lastUpdatedBy: displayName || 'Sistema'
             });
@@ -235,6 +241,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setLotName('');
         setLotHectares('');
         setEditingLotId(null);
+        setTempLotBoundary(null);
+        setTempLotKmlData(null);
         setShowLotForm(false);
     };
 
@@ -549,6 +557,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     };
 
+    const parseKml = (kmlText: string) => {
+        const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
+        return kml(dom);
+    };
+
     const handleKmlUpload = async (lot: Lot, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -557,8 +570,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         reader.onload = async (event) => {
             const kmlText = event.target?.result as string;
             try {
-                const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
-                const geojson = kml(dom);
+                const geojson = parseKml(kmlText);
 
                 await updateLot({
                     ...lot,
@@ -583,8 +595,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         reader.onload = async (event) => {
             const kmlText = event.target?.result as string;
             try {
-                const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
-                const geojson = kml(dom);
+                const geojson = parseKml(kmlText);
 
                 await updateFarm({
                     ...farm,
@@ -828,6 +839,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 address: newFarmAddress,
                 city: newFarmCity,
                 province: newFarmProvince,
+                boundary: tempFarmBoundary || undefined,
+                kmlData: tempFarmKmlData || undefined,
                 createdBy: displayName || 'Sistema',
                 lastUpdatedBy: displayName || 'Sistema'
             });
@@ -836,6 +849,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setNewFarmAddress('');
         setNewFarmCity('');
         setNewFarmProvince('');
+        setTempFarmBoundary(null);
+        setTempFarmKmlData(null);
         setShowFarmForm(false);
     };
 
@@ -939,6 +954,47 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 onChange={e => setNewFarmProvince(e.target.value)}
                             />
                         </div>
+
+                        {!editingFarmId && (
+                            <div className="pt-2 border-t border-slate-200 flex gap-2">
+                                <label className="flex-1 text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2">
+                                    {tempFarmKmlData ? 'KML Cargado (Cambiar)' : 'Cargar KML'}
+                                    <input
+                                        type="file"
+                                        accept=".kml"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = (event) => {
+                                                const kmlText = event.target?.result as string;
+                                                try {
+                                                    const geojson = parseKml(kmlText);
+                                                    setTempFarmBoundary(geojson);
+                                                    setTempFarmKmlData(kmlText);
+                                                } catch (err) {
+                                                    alert('Error al procesar KML.');
+                                                }
+                                            };
+                                            reader.readAsText(file);
+                                        }}
+                                    />
+                                </label>
+                                {tempFarmKmlData && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTempFarmKmlData(null);
+                                            setTempFarmBoundary(null);
+                                        }}
+                                        className="px-3 py-2 text-xs font-semibold text-red-500 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+                                    >
+                                        Eliminar
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         {editingFarmId && (
                             <div className="pt-2 border-t border-slate-200 flex gap-2">
@@ -1109,6 +1165,47 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             onChange={e => setLotHectares(e.target.value)}
                                             required
                                         />
+
+                                        {!editingLotId && (
+                                            <div className="pt-2 border-t border-slate-200 flex gap-2">
+                                                <label className="flex-1 text-xs font-semibold bg-white text-slate-500 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-all cursor-pointer flex items-center justify-center gap-2">
+                                                    {tempLotKmlData ? 'KML Cargado (Cambiar)' : 'Cargar KML'}
+                                                    <input
+                                                        type="file"
+                                                        accept=".kml"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (!file) return;
+                                                            const reader = new FileReader();
+                                                            reader.onload = (event) => {
+                                                                const kmlText = event.target?.result as string;
+                                                                try {
+                                                                    const geojson = parseKml(kmlText);
+                                                                    setTempLotBoundary(geojson);
+                                                                    setTempLotKmlData(kmlText);
+                                                                } catch (err) {
+                                                                    alert('Error al procesar KML.');
+                                                                }
+                                                            };
+                                                            reader.readAsText(file);
+                                                        }}
+                                                    />
+                                                </label>
+                                                {tempLotKmlData && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setTempLotKmlData(null);
+                                                            setTempLotBoundary(null);
+                                                        }}
+                                                        className="px-3 py-2 text-xs font-semibold text-red-500 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+                                                    >
+                                                        Eliminar
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {editingLotId && (
                                             <div className="pt-2 border-t border-slate-200 flex gap-2">

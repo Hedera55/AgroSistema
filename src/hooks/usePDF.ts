@@ -106,7 +106,7 @@ export function usePDF() {
         // Right: QR Code + Text
         try {
             const baseUrl = window.location.origin;
-            const qrUrl = `${baseUrl}/kml/${order.lotIds?.[0] || order.lotId}`;
+            const qrUrl = `${baseUrl}/public/map/${client.id}?orderId=${order.id}&selected=${order.lotIds?.[0] || order.lotId}`;
             const qrDataUrl = await QRCode.toDataURL(qrUrl);
             doc.addImage(qrDataUrl, 'PNG', pageWidth - 42, 14, 30, 30);
             doc.setFontSize(9);

@@ -3,6 +3,7 @@
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { OrderItem, Product, Warehouse, ProductType } from '@/types';
+import { kml } from '@tmcw/togeojson';
 
 interface OrderRecipeStepProps {
     selectedLot: { name: string; hectares: number };
@@ -55,6 +56,10 @@ interface OrderRecipeStepProps {
     onBack: () => void;
     onNext: () => void;
     clientPartners?: any[];
+    kmlData: string | null;
+    setKmlData: (val: string | null) => void;
+    boundary: any;
+    setBoundary: (val: any) => void;
 }
 
 export function OrderRecipeStep({
@@ -105,7 +110,11 @@ export function OrderRecipeStep({
     clientPartners,
     selectedCampaignId,
     setSelectedCampaignId,
-    campaigns
+    campaigns,
+    kmlData,
+    setKmlData,
+    boundary,
+    setBoundary
 }: OrderRecipeStepProps) {
     const selectedProduct = availableProducts.find(p => p.id === currProdId);
 
@@ -346,7 +355,7 @@ export function OrderRecipeStep({
                             <button
                                 onClick={handleAddItem}
                                 disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
-                                className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 disabled:opacity-30 transition-all uppercase tracking-widest"
+                                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-30 transition-all shadow-sm"
                             >
                                 {editingItemId ? '✓ Confirmar Edición' : '+ Agregar'}
                             </button>
@@ -504,28 +513,72 @@ export function OrderRecipeStep({
                     >
                         {showNotes ? '✕ Cancelar' : (notes ? 'Editar Nota' : '+ Agregar Nota')}
                     </button>
-                    <div className="flex items-center">
-                        <button
-                            type="button"
-                            onClick={() => document.getElementById('factura-upload')?.click()}
-                            className={`inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all ${facturaImageUrl ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
-                        >
-                            {facturaImageUrl ? '✓ Factura Adjunta' : '+ Adjuntar Factura'}
-                        </button>
-                        <input
-                            id="factura-upload"
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => setFacturaImageUrl(reader.result as string);
-                                    reader.readAsDataURL(file);
-                                }
-                            }}
-                        />
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => document.getElementById('factura-upload')?.click()}
+                                className={`inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all ${facturaImageUrl ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                            >
+                                {facturaImageUrl ? '✓ Factura Adjunta' : '+ Adjuntar Factura'}
+                            </button>
+                            <input
+                                id="factura-upload"
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => setFacturaImageUrl(reader.result as string);
+                                        reader.readAsDataURL(file);
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        <div className="flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => document.getElementById('kml-upload')?.click()}
+                                className={`inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all ${kmlData ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                            >
+                                {kmlData ? '✓ KML adjunto' : '+ Adjuntar KML'}
+                            </button>
+                            <input
+                                id="kml-upload"
+                                type="file"
+                                className="hidden"
+                                accept=".kml"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (event) => {
+                                            const kmlText = event.target?.result as string;
+                                            try {
+                                                const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
+                                                const geojson = kml(dom);
+                                                setBoundary(geojson);
+                                                setKmlData(kmlText);
+                                            } catch (err) {
+                                                alert('Error al leer KML.');
+                                            }
+                                        };
+                                        reader.readAsText(file);
+                                    }
+                                }}
+                            />
+                            {kmlData && (
+                                <button
+                                    onClick={() => { setKmlData(null); setBoundary(null); }}
+                                    className="ml-2 text-[10px] text-red-500 font-bold uppercase"
+                                >
+                                    [ Eliminar ]
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
