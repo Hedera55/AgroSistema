@@ -18,6 +18,18 @@ import { OrderDetailView } from '@/components/OrderDetailView';
 export default function OrdersPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { role, isMaster, profile, displayName } = useAuth();
+    
+    const formatDate = (dateStr?: string) => {
+        if (!dateStr || typeof dateStr !== 'string') return dateStr || '---';
+        if (dateStr.includes('-')) {
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                if (parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                return dateStr;
+            }
+        }
+        return dateStr;
+    };
 
     // Data Hooks
     const { orders: rawOrders, loading: ordersLoading, updateOrderStatus, deleteOrder } = useOrders(id);
@@ -103,13 +115,22 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             // For Admin/Client, hide HARVEST orders as requested
             filtered = filtered.filter(o => o.type !== 'HARVEST');
         }
-        return filtered.map(o => ({
-            ...o,
-            farmName: farms.find(f => f.id === o.farmId)?.name || 'Unknown Farm',
-            lotName: lots.find(l => l.id === o.lotId)?.name || 'Unknown Lot',
-            hectares: lots.find(l => l.id === o.lotId)?.hectares || 0,
-            contractorName: o.contractorName || o.applicatorName || contractors.find(c => c.id === o.applicatorId)?.username
-        })); // The hook already sorts by date
+        return filtered.map(o => {
+            const farm = farms.find(f => f.id === o.farmId);
+            const lot = lots.find(l => l.id === o.lotId);
+            const totalHectares = o.lotIds?.reduce((acc, lid) => {
+                const l = lots.find(lot => lot.id === lid);
+                return acc + (l?.hectares || 0);
+            }, 0) || lot?.hectares || 0;
+
+            return {
+                ...o,
+                farmName: farm?.name || 'Unknown Farm',
+                lotName: o.lotIds?.map(lid => lots.find(l => l.id === lid)?.name).join(', ') || lot?.name || 'Unknown Lot',
+                totalHectares: totalHectares,
+                contractorName: o.contractorName || o.applicatorName || contractors.find(c => c.id === o.applicatorId)?.username
+            };
+        }); // The hook already sorts by date
     }, [rawOrders, farms, lots, loading, role, profile]);
 
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
@@ -347,14 +368,19 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                             {order.orderNumber || '---'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            <div>{order.date}</div>
+                                            <div>{formatDate(order.date)}</div>
                                             <div className="text-xs text-slate-400 font-normal">{order.time || '--:--'}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            {formatAppliedAt(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
+                                            {formatDate(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                            <div className="font-medium text-slate-800">{order.lotName} ({order.hectares} ha)</div>
+                                            <div className="font-medium text-slate-800">
+                                                {order.lotName} (
+                                                {order.treatedArea && order.treatedArea < (order as any).totalHectares 
+                                                    ? `${order.treatedArea}/${(order as any).totalHectares}` 
+                                                    : order.treatedArea || (order as any).totalHectares} ha)
+                                            </div>
                                             <div className="text-xs text-slate-400">{order.farmName}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -393,7 +419,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                             {order.servicePrice && order.servicePrice > 0 ? (
                                                 <div className="flex flex-col items-end">
                                                     <span className="text-slate-900 font-bold text-sm">
-                                                        USD {(order.servicePrice * order.hectares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        USD {(order.servicePrice * (order.treatedArea || (order as any).totalHectares || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
                                             ) : order.status === 'DONE' ? (
@@ -626,6 +652,9 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         order={selectedOrderDetailOrder as any}
                         client={client}
                         onClose={() => setSelectedOrderDetailOrder(null)}
+                        onEdit={(orderId) => {
+                            window.location.href = `/clients/${id}/orders/new?editId=${orderId}`;
+                        }}
                         warehouses={warehouses}
                         createdBy={displayName || 'Sistema'}
                         lots={lots}

@@ -15,6 +15,18 @@ import { useSearchParams } from 'next/navigation';
 export default function GlobalOrdersPage() {
     const { role, profile, displayName } = useAuth();
     const searchParams = useSearchParams();
+
+    const formatDate = (dateStr?: string) => {
+        if (!dateStr || typeof dateStr !== 'string') return dateStr || '---';
+        if (dateStr.includes('-')) {
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                if (parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                return dateStr;
+            }
+        }
+        return dateStr;
+    };
     const clientIdFilter = searchParams.get('clientId');
 
     // Data Hooks
@@ -79,12 +91,17 @@ export default function GlobalOrdersPage() {
             const client = clients.find(c => c.id === o.clientId);
             const farm = farms.find(f => f.id === o.farmId);
             const lot = lots.find(l => l.id === o.lotId);
+            const totalHectares = o.lotIds?.reduce((acc, lid) => {
+                const l = lots.find(lot => lot.id === lid);
+                return acc + (l?.hectares || 0);
+            }, 0) || lot?.hectares || 0;
+
             return {
                 ...o,
                 clientName: client?.name || 'Unknown Company',
                 farmName: farm?.name || 'Unknown Farm',
-                lotName: lot?.name || 'Unknown Lot',
-                hectares: lot?.hectares || o.treatedArea || 0
+                lotName: o.lotIds?.map(lid => lots.find(l => l.id === lid)?.name).join(', ') || lot?.name || 'Unknown Lot',
+                totalHectares: totalHectares
             };
         });
     }, [rawOrders, clients, farms, lots, loading, clientIdFilter]);
@@ -238,14 +255,19 @@ export default function GlobalOrdersPage() {
                                             {order.clientName}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            <div>{order.date}</div>
+                                            <div>{formatDate(order.date)}</div>
                                             <div className="text-xs text-slate-400 font-normal">{order.time || '--:--'}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            {formatAppliedAt(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
+                                            {formatDate(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                            <div className="font-medium text-slate-800">{order.lotName} ({order.hectares} ha)</div>
+                                            <div className="font-medium text-slate-800">
+                                                {order.lotName} (
+                                                {order.treatedArea && order.treatedArea < (order as any).totalHectares 
+                                                    ? `${order.treatedArea}/${(order as any).totalHectares}` 
+                                                    : order.treatedArea || (order as any).totalHectares} ha)
+                                            </div>
                                             <div className="text-xs text-slate-400">{order.farmName}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -352,6 +374,9 @@ export default function GlobalOrdersPage() {
                         order={selectedOrderDetailOrder as any}
                         client={clients.find(c => c.id === selectedOrderDetailOrder.clientId)!}
                         onClose={() => setSelectedOrderDetailOrder(null)}
+                        onEdit={(orderId, clientId) => {
+                            window.location.href = `/clients/${clientId}/orders/new?editId=${orderId}`;
+                        }}
                         warehouses={warehouses.filter(w => w.clientId === selectedOrderDetailOrder.clientId)}
                         createdBy={displayName}
                         lots={lots.filter(l => farms.find(f => f.id === l.farmId)?.clientId === selectedOrderDetailOrder.clientId)}

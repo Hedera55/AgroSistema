@@ -477,7 +477,7 @@ export function OrderRecipeStep({
                             className="h-[46px]"
                         />
                     </div>
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-4">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
                         <Input
                             type="text"
@@ -488,7 +488,7 @@ export function OrderRecipeStep({
                             className="h-[46px]"
                         />
                     </div>
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-2">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"

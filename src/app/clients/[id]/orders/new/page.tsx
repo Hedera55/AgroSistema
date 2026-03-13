@@ -56,11 +56,11 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
 
         const preloadOrder = async () => {
             const order = await db.get('orders', editId) as Order;
-            if (!order) return;
-
+            setPreloadedOrder(order);
             // Basic Info
             setSelectedFarmId(order.farmId || '');
             setSelectedLotIds(order.lotIds || (order.lotId ? [order.lotId] : []));
+            setLotHectares(order.lotHectares || {});
             setLotObservations(order.lotObservations || {});
 
             // Dates
@@ -146,6 +146,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [isMechanicalLabor, setIsMechanicalLabor] = useState(false);
     const [mechanicalLaborName, setMechanicalLaborName] = useState('');
     const [currLoadingOrder, setCurrLoadingOrder] = useState('');
+    const [preloadedOrder, setPreloadedOrder] = useState<Order | null>(null);
     const [fertilizerPlacement, setFertilizerPlacement] = useState<'LINE' | 'SIDE' | undefined>(undefined);
 
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -469,11 +470,26 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
         }
 
         try {
-            const allOrders = await db.getAll('orders');
-            const clientOrders = allOrders.filter((o: Order) => o.clientId === clientId);
-            const nextOrderNumber = clientOrders.length > 0
-                ? Math.max(...clientOrders.map((o: Order) => o.orderNumber || 0)) + 1
-                : 1;
+            let nextOrderNumber = undefined;
+            if (editId) {
+                // If editing, try to get the existing number from preloadedOrder or fallback to calculate
+                // But we should DEFINITELY have it if we are editing.
+                nextOrderNumber = preloadedOrder?.orderNumber;
+                
+                // If for some reason preloadedOrder is not available yet, we fetch it again as a safety measure
+                if (nextOrderNumber === undefined) {
+                    const existingOrder = await db.get('orders', editId) as Order;
+                    nextOrderNumber = existingOrder?.orderNumber;
+                }
+            }
+            
+            if (nextOrderNumber === undefined) {
+                const allOrders = await db.getAll('orders');
+                const clientOrders = allOrders.filter((o: Order) => o.clientId === clientId && !o.deleted);
+                nextOrderNumber = clientOrders.length > 0
+                    ? Math.max(...clientOrders.map((o: Order) => typeof o.orderNumber === 'string' ? parseInt(o.orderNumber) : o.orderNumber || 0)) + 1
+                    : 1;
+            }
 
             const order: Order = {
                 id: editId || generateId(),

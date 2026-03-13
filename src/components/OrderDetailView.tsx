@@ -10,17 +10,26 @@ interface OrderDetailViewProps {
     warehouses?: any[];
     lots?: any[];
     campaigns?: any[];
+    onEdit?: (id: string, clientId: string) => void;
 }
 
-export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [] }) => {
+export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
+    order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [], onEdit
+}) => {
     const [showFullNote, setShowFullNote] = useState(false);
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
 
     const formatDate = (dateStr?: string) => {
-        if (!dateStr) return '---';
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr;
-        return d.toLocaleDateString('es-AR');
+        if (!dateStr || typeof dateStr !== 'string') return dateStr || '---';
+        if (dateStr.includes('-')) {
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length === 3) {
+                // Return DD-MM-YYYY
+                if (parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                return dateStr;
+            }
+        }
+        return dateStr;
     };
 
     const getAppDateDisplay = () => {
@@ -76,23 +85,6 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                             </div>
                         </div>
 
-                        <div className="relative group/tooltip">
-                            <button
-                                onClick={() => {
-                                    if (order.remitoImageUrl) {
-                                        window.open(order.remitoImageUrl, '_blank');
-                                    } else {
-                                        generateRemitoPDF(order, client);
-                                    }
-                                }}
-                                className={`w-7 h-7 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center border ${order.remitoImageUrl ? 'bg-white border-emerald-500 text-emerald-600 hover:bg-emerald-50' : 'bg-white border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200'}`}
-                            >
-                                R
-                            </button>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
-                            </div>
-                        </div>
 
                         <div className="relative group/tooltip">
                             <button
@@ -121,7 +113,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                     </div>
                     <div className="flex gap-2">
                         <button
-                            onClick={() => { /* onEdit handler will be passed eventually if needed, for now placeholders for the UI */ }}
+                            onClick={() => onEdit?.(order.id, order.clientId)}
                             className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
                             title="Editar Orden"
                         >
@@ -231,9 +223,9 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                     <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-1">Locación</h4>
                     <div className="px-5 py-2">
                         <div className="grid grid-cols-12 gap-4 border-b border-slate-100 pb-2 mb-2">
-                            <div className="col-span-4 text-[10px] font-bold text-slate-400 uppercase">Establecimiento</div>
-                            <div className="col-span-5 text-[10px] font-bold text-slate-400 uppercase">Lotes</div>
-                            <div className="col-span-3 text-[10px] font-bold text-slate-400 uppercase">Total</div>
+                            <div className="col-span-4 text-[10px] font-bold text-slate-400 uppercase">Campo</div>
+                            <div className="col-span-5 text-[10px] font-bold text-slate-400 uppercase">Lote</div>
+                            <div className="col-span-3 text-[10px] font-bold text-slate-400 uppercase">Superficie</div>
                         </div>
 
                         {/* Grouping logic: even if order has one farmName, we group identified lots by farm if they differ */}
@@ -247,44 +239,54 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                             }, {});
 
                             const farmNames = Object.keys(farmGroups);
+                            const totalHectaresOrder = (order as any).totalHectares || order.hectares || 0;
+                            const isPartial = order.treatedArea && order.treatedArea < totalHectaresOrder;
+
                             if (farmNames.length === 0 && order.farmName) {
-                                // Fallback if no lot objects resolved but farmName exists
                                 return (
                                     <div className="grid grid-cols-12 gap-4 py-1">
                                         <div className="col-span-4 text-sm font-bold text-slate-700">{order.farmName}</div>
                                         <div className="col-span-5 text-sm text-slate-400 italic">Sin lotes cargados</div>
                                         <div className="col-span-3 text-sm font-black text-slate-400 uppercase tracking-[0.2em] text-right">
-                                            {order.treatedArea || order.hectares || 0} ha
+                                            {isPartial ? `${order.treatedArea}/${totalHectaresOrder}` : order.treatedArea || totalHectaresOrder} ha
                                         </div>
                                     </div>
                                 );
                             }
 
-                            return farmNames.map((fName, idx) => (
-                                <div key={fName} className={`grid grid-cols-12 gap-4 ${idx > 0 ? 'mt-4 pt-4 border-t border-slate-50' : 'py-1'}`}>
-                                    <div className="col-span-4 text-sm font-bold text-slate-800">{fName}</div>
-                                    <div className="col-span-5 space-y-2">
-                                        {farmGroups[fName].map((lot: any) => (
-                                            <div key={lot.id} className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">
-                                                    {lot.name || 'Lote sin nombre'} <span className="text-slate-400 font-medium ml-1">({lot.hectares || 0} ha)</span>
-                                                </span>
-                                                {order.lotObservations?.[lot.id] && (
-                                                    <span className="text-[10px] text-slate-400 italic leading-tight">{order.lotObservations[lot.id]}</span>
+                            return (
+                                <>
+                                    {farmNames.map((fName, idx) => (
+                                        <div key={fName} className={`grid grid-cols-12 gap-4 ${idx > 0 ? 'mt-4 pt-4 border-t border-slate-50' : 'py-1'}`}>
+                                            <div className="col-span-4 text-sm font-bold text-slate-800">{fName}</div>
+                                            <div className="col-span-5 space-y-2">
+                                                {farmGroups[fName].map((lot: any) => (
+                                                    <div key={lot.id} className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-700">
+                                                            {lot.name || 'Lote sin nombre'}
+                                                        </span>
+                                                        {order.lotObservations?.[lot.id] && (
+                                                            <span className="text-[10px] text-slate-400 italic leading-tight">{order.lotObservations[lot.id]}</span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="col-span-3 text-right">
+                                                {idx === 0 && (
+                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">
+                                                        {isPartial ? `${order.treatedArea}/${totalHectaresOrder}` : order.treatedArea || totalHectaresOrder}
+                                                    </span>
                                                 )}
                                             </div>
-                                        ))}
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-end mt-4">
+                                        <span className="text-sm font-black text-emerald-600 uppercase tracking-tight">
+                                            {order.treatedArea || totalHectaresOrder} HA
+                                        </span>
                                     </div>
-                                    <div className="col-span-3 text-right">
-                                        {/* Show total only for the first farm or if it's the primary one mentioned in the order headers */}
-                                        {idx === 0 && (
-                                            <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">
-                                                {order.treatedArea || order.hectares || 0} ha
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            ));
+                                </>
+                            );
                         })()}
                     </div>
                 </div>
