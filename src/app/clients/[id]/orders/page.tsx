@@ -14,6 +14,8 @@ import { useFarms } from '@/hooks/useLocations';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { supabase } from '@/lib/supabase';
 import { OrderDetailView } from '@/components/OrderDetailView';
+import { OrderWizard } from './components/OrderWizard';
+
 
 export default function OrdersPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -48,14 +50,25 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     const [tempPrice, setTempPrice] = useState('');
     const [tempInvestor, setTempInvestor] = useState('');
     const [isApplyingFromStatus, setIsApplyingFromStatus] = useState(false);
-    const [selectedOrderDetailOrder, setSelectedOrderDetailOrder] = useState<Order | null>(null);
-    const detailsRef = useRef<HTMLDivElement>(null);
+     const [selectedOrderDetailOrder, setSelectedOrderDetailOrder] = useState<Order | null>(null);
+     const detailsRef = useRef<HTMLDivElement>(null);
+     const wizardRef = useRef<HTMLDivElement>(null);
+     const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+     const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+
 
     useEffect(() => {
         if (selectedOrderDetailOrder && detailsRef.current) {
             detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }, [selectedOrderDetailOrder]);
+
+    useEffect(() => {
+        if ((isCreatingOrder || editingOrderId) && wizardRef.current) {
+            wizardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [isCreatingOrder, editingOrderId]);
+
 
     // Load lots and client separately
     useEffect(() => {
@@ -322,11 +335,15 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     <p className="text-slate-500 mt-1">Ver órdenes de pulverización y planillas de siembra.</p>
                 </div>
                 {!isReadOnly && role !== 'CONTRATISTA' && (
-                    <Link href={`/clients/${id}/orders/new`}>
-                        <Button>+ Nueva Orden</Button>
-                    </Link>
+                    <Button onClick={() => {
+                        setEditingOrderId(null);
+                        setIsCreatingOrder(true);
+                    }}>
+                        + Nueva Orden
+                    </Button>
                 )}
             </div>
+
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {loading ? (
@@ -503,17 +520,21 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                 {!isReadOnly && (
                                                     <>
                                                         <div className="relative group/tooltip">
-                                                            <Link href={`/clients/${id}/orders/new?editId=${order.id}`}>
-                                                                <button
-                                                                    className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                                                                >
-                                                                    ✎
-                                                                </button>
-                                                            </Link>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setIsCreatingOrder(false);
+                                                                    setEditingOrderId(order.id);
+                                                                }}
+                                                                className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                                                            >
+                                                                ✎
+                                                            </button>
                                                             <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
                                                                 Editar
                                                             </div>
                                                         </div>
+
                                                         <div className="relative group/tooltip">
                                                             <button
                                                                 onClick={() => handleDeleteOrder(order.id)}
@@ -653,8 +674,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         client={client}
                         onClose={() => setSelectedOrderDetailOrder(null)}
                         onEdit={(orderId) => {
-                            window.location.href = `/clients/${id}/orders/new?editId=${orderId}`;
+                            setSelectedOrderDetailOrder(null);
+                            setEditingOrderId(orderId);
+                            setIsCreatingOrder(false);
                         }}
+
                         warehouses={warehouses}
                         createdBy={displayName || 'Sistema'}
                         lots={lots}
@@ -662,6 +686,25 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     />
                 )}
             </div>
+
+            {/* Inline Order Wizard */}
+            <div ref={wizardRef} className="scroll-mt-24 pt-4 pb-20">
+                {(isCreatingOrder || editingOrderId) && (
+                    <OrderWizard 
+                        clientId={id}
+                        editId={editingOrderId}
+                        onClose={() => {
+                            setIsCreatingOrder(false);
+                            setEditingOrderId(null);
+                        }}
+                        onOrderCreated={() => {
+                            // The useOrders hook should handle the update since it listens to DB changes
+                            // but we can add manual triggers if needed.
+                        }}
+                    />
+                )}
+            </div>
         </div>
+
     );
 }
