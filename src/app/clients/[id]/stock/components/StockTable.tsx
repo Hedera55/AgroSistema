@@ -183,8 +183,13 @@ export function StockTable({
                                                                         <span className="text-emerald-600 font-black">{b.presentationAmount || '-'}</span>
                                                                     </span>
                                                                 </div>
-                                                                <div className="text-sm font-black text-slate-800">
-                                                                    {b.quantity} <span className="text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
+                                                                <div className="flex flex-col items-end">
+                                                                    <div className="text-sm font-black text-slate-800">
+                                                                        {b.quantity} <span className="text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
+                                                                    </div>
+                                                                    <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                                                        USD {(b as any)._specificPPP ? (b as any)._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -193,8 +198,13 @@ export function StockTable({
                                                             <div className="flex items-center gap-3 italic text-slate-400">
                                                                 <span className="text-[11px] font-medium uppercase tracking-widest min-w-[100px] text-left">Granel / Otros</span>
                                                             </div>
-                                                            <div className="text-sm font-bold text-slate-400">
-                                                                {b.quantity} <span className="text-[10px] uppercase">{item.unit}</span>
+                                                            <div className="flex flex-col items-end">
+                                                                <div className="text-sm font-bold text-slate-400">
+                                                                    {b.quantity} <span className="text-[10px] uppercase">{item.unit}</span>
+                                                                </div>
+                                                                <div className="text-[11px] font-medium text-slate-400 mt-0.5">
+                                                                    USD {(b as any)._specificPPP ? (b as any)._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}

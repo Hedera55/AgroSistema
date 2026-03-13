@@ -132,6 +132,15 @@ export interface Campaign {
     deleted?: boolean;
 }
 
+export interface CampaignSnapshot {
+    id: string;
+    clientId: string;
+    campaignId: string;
+    createdAt: string;
+    stockSnapshot: ClientStock[]; // The state of ClientStock at the time of closing
+    synced?: boolean;
+}
+
 // "Galpón Virtual" (Stock)
 export interface ClientStock {
     id: string;

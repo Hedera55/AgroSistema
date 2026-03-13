@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { generateId } from '@/lib/uuid';
 import { syncService } from '@/services/sync';
+import { CampaignSnapshot, ClientStock } from '@/types';
 
 export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -41,6 +42,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const [newCampaignName, setNewCampaignName] = useState('');
     const [newCampaignMode, setNewCampaignMode] = useState<CampaignMode>('MONEY');
     const [viewCampaignId, setViewCampaignId] = useState<string>('all');
+    
+    // Campaign Snapshots
+    const [snapshots, setSnapshots] = useState<CampaignSnapshot[]>([]);
+    const [isSnapshotting, setIsSnapshotting] = useState(false);
 
 
     useEffect(() => {
@@ -69,12 +74,82 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             }
             setLoading(false);
         });
+        
+        loadSnapshots();
 
         return () => {
             // Trigger sync when leaving Contaduría to ensure configuration changes are pushed/pulled
             syncService.sync().catch(err => console.error('Auto-sync on leave failed:', err));
         };
     }, [id]);
+
+    const loadSnapshots = async () => {
+        try {
+            const allSnapshots = await db.getAll('campaign_snapshots');
+            setSnapshots(allSnapshots.filter((s: CampaignSnapshot) => s.clientId === id));
+        } catch (e) {
+            console.error('Error loading snapshots', e);
+        }
+    };
+
+    const handleCerrarCampaña = async (campaignId: string) => {
+        if (!confirm('¿Está seguro de cerrar esta campaña y guardar una copia de seguridad del stock? (Snapshot)')) return;
+        setIsSnapshotting(true);
+        try {
+            const allStock = await db.getAll('stock');
+            const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+            
+            const snapshot: CampaignSnapshot = {
+                id: generateId(),
+                clientId: id,
+                campaignId: campaignId,
+                createdAt: new Date().toISOString(),
+                stockSnapshot: clientStock,
+                synced: false
+            };
+            
+            await db.put('campaign_snapshots', snapshot);
+            alert('Campaña cerrada y snapshot guardado.');
+            await loadSnapshots();
+        } catch (e) {
+            console.error(e);
+            alert('Error al guardar snapshot');
+        } finally {
+            setIsSnapshotting(false);
+        }
+    };
+
+    const handleRecrearArchivo = async (campaignId: string) => {
+        // Find existing snapshot
+        const existing = snapshots.find(s => s.campaignId === campaignId);
+        if (!existing) return alert('No hay snapshot anterior para recrear.');
+        if (!confirm('Esto reemplazará el archivo de cierre de esta campaña con el stock actual reconstruido hasta su último movimiento. ¿Continuar?')) return;
+        
+        setIsSnapshotting(true);
+        try {
+            // Note: Recalculation logic will go here if needed. 
+            // For now, in Contaduría, this just saves a new snapshot of the *current* state 
+            // under this campaign, effectively updating the snapshot if movements were edited.
+            const allStock = await db.getAll('stock');
+            const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+            
+            const newSnapshot: CampaignSnapshot = {
+                ...existing,
+                stockSnapshot: clientStock,
+                createdAt: new Date().toISOString(),
+                synced: false
+            };
+            
+            await db.put('campaign_snapshots', newSnapshot);
+            alert('Archivo de campaña recreado con éxito.');
+            await loadSnapshots();
+        } catch (e) {
+            console.error(e);
+            alert('Error recreando archivo');
+        } finally {
+            setIsSnapshotting(false);
+        }
+    };
 
     const handleSaveInvestors = async () => {
         if (!client) return;
@@ -746,11 +821,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     )}
 
                     <div className="space-y-0 divide-y divide-slate-200">
-                        {showEditCampaigns && campaigns.length > 0 && (
-                            <div className="px-6 py-2">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Campañas Existentes</span>
-                            </div>
-                        )}
+
                         {campaigns.map(camp => (
                             <div key={camp.id} className="px-6 animate-fadeIn">
                                 {showEditCampaigns ? (
@@ -785,30 +856,61 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                         </div>
                                     ) : (
                                         /* Management Mode - Floating with icons */
-                                        <div className="flex items-center justify-between py-2.5 group">
-                                            <span className="font-medium text-slate-800 text-sm">{camp.name}</span>
-                                            <div className="flex items-center gap-6">
-                                                <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">
+                                        /* Management Mode - Floating with icons */
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between py-2 group gap-3">
+                                            {/* Left - Label Area (takes priority) */}
+                                            <div className="flex-1 min-w-0">
+                                                <span className="font-semibold text-slate-900 text-sm truncate block" title={camp.name}>
+                                                    {camp.name}
+                                                </span>
+                                            </div>
+
+                                            {/* Right - Actions & Metadata */}
+                                            <div className="flex items-center gap-4 shrink-0 px-2 py-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] whitespace-nowrap">
                                                     Repartición de {camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}
                                                 </span>
-                                                <div className="flex items-center gap-1">
+
+                                                <div className="flex items-center gap-1.5">
                                                     <button
                                                         onClick={() => setEditingCampaignId(camp.id)}
-                                                        className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
-                                                        title="Editar"
+                                                        className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                                                        title="Editar detalles de campaña"
                                                     >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
                                                     </button>
+
+                                                    {snapshots.some(s => s.campaignId === camp.id) ? (
+                                                        <button
+                                                            onClick={() => handleRecrearArchivo(camp.id)}
+                                                            disabled={isSnapshotting}
+                                                            title="Recalcular todos los movimientos históricos y actualizar el cierre"
+                                                            className="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-100 text-[9px] font-black uppercase tracking-wider rounded transition-colors whitespace-nowrap shadow-sm border border-orange-100"
+                                                        >
+                                                            {isSnapshotting ? 'Procesando...' : 'Recrear Archivo'}
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleCerrarCampaña(camp.id)}
+                                                            disabled={isSnapshotting}
+                                                            title="cerrar campaña y guardar copia"
+                                                            className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[9px] font-black uppercase tracking-wider rounded transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm border border-emerald-100"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                                            {isSnapshotting ? 'Guardando...' : 'Cerrar Campaña'}
+                                                        </button>
+                                                    )}
+
                                                     <button
                                                         onClick={() => {
                                                             if (confirm(`¿Eliminar campaña ${camp.name}? Los movimientos asociados quedarán huérfanos.`)) {
                                                                 deleteCampaign(camp.id);
                                                             }
                                                         }}
-                                                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
-                                                        title="Eliminar"
+                                                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                                                        title="Eliminar campaña"
                                                     >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                                                     </button>
                                                 </div>
                                             </div>

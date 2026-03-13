@@ -55,10 +55,15 @@ interface AgronomicDB extends DBSchema {
         value: import('@/types').Campaign;
         indexes: { 'by-client': string };
     };
+    campaign_snapshots: {
+        key: string;
+        value: import('@/types').CampaignSnapshot;
+        indexes: { 'by-client': string; 'by-campaign': string };
+    };
 }
 
 const DB_NAME = 'agronomic-db';
-const DB_VERSION = 7; // Added campaigns
+const DB_VERSION = 8; // Added campaign_snapshots
 
 export const dbPromise = typeof window !== 'undefined'
     ? openDB<AgronomicDB>(DB_NAME, DB_VERSION, {
@@ -130,6 +135,11 @@ export const dbPromise = typeof window !== 'undefined'
             if (!db.objectStoreNames.contains('campaigns')) {
                 const store = db.createObjectStore('campaigns', { keyPath: 'id' });
                 store.createIndex('by-client', 'clientId');
+            }
+            if (!db.objectStoreNames.contains('campaign_snapshots')) {
+                const store = db.createObjectStore('campaign_snapshots', { keyPath: 'id' });
+                store.createIndex('by-client', 'clientId');
+                store.createIndex('by-campaign', 'campaignId');
             }
         },
     }) : Promise.resolve(null as any);

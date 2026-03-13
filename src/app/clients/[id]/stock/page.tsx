@@ -495,8 +495,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     // Enrich stock data with product details (name, unit, type) and weighted average price
     const enrichedStock = useMemo<EnrichedStockItem[]>(() => {
-        // 1. Group movements to calculate weighted averages
-        // key: productId_brand or normalized_name
+        // 1. Group movements to calculate weighted averages per specific presentation
+        // key: productId_pLabel_pContent or normalized_name_pLabel_pContent
         const purchasePricing = new Map<string, { totalVal: number; totalQty: number }>();
         const salePricing = new Map<string, { totalVal: number; totalQty: number }>();
 
@@ -508,34 +508,52 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             map.set(key, entry);
         };
 
+        const getPresentKey = (baseId: string, item: any) => {
+             const label = (item.presentationLabel || '').trim().toLowerCase();
+             const content = (item.presentationContent || 0).toString();
+             return `${baseId}_${label}_${content}`;
+        }
+
         movements.forEach(m => {
             if (m.type === 'IN') {
                 if (m.productId === 'CONSOLIDATED' && m.items) {
                     m.items.forEach((item: any) => {
-                        const cost = item.quantity * (item.price || 0);
-                        // 1. Specific ID
-                        updateStats(purchasePricing, item.productId, item.quantity, cost);
-                        // 2. Generic Name
+                        const cost = item.quantity * (item.price || 0); // USD per Unit * Unit Qty = Total USD
+                        
+                        // 1. Specific ID + Presentation
+                        const pKeySpecific = getPresentKey(item.productId, item);
+                        updateStats(purchasePricing, pKeySpecific, item.quantity, cost);
+                        
+                        // 2. Generic Name + Presentation
                         if (item.productName) {
-                            updateStats(purchasePricing, item.productName.toLowerCase().trim(), item.quantity, cost);
+                            const pKeyGeneric = getPresentKey(item.productName.toLowerCase().trim(), item);
+                            updateStats(purchasePricing, pKeyGeneric, item.quantity, cost);
                         }
                     });
                 } else {
                     const cost = m.quantity * (m.purchasePrice || m.price || 0);
-                    // 1. Specific ID
-                    updateStats(purchasePricing, m.productId, m.quantity, cost);
-                    // 2. Generic Name
+                    
+                    // 1. Specific ID + Presentation
+                    const pKeySpecific = getPresentKey(m.productId, m);
+                    updateStats(purchasePricing, pKeySpecific, m.quantity, cost);
+                    
+                    // 2. Generic Name + Presentation
                     if (m.productName) {
-                        updateStats(purchasePricing, m.productName.toLowerCase().trim(), m.quantity, cost);
+                         const pKeyGeneric = getPresentKey(m.productName.toLowerCase().trim(), m);
+                         updateStats(purchasePricing, pKeyGeneric, m.quantity, cost);
                     }
                 }
             } else if (m.type === 'SALE') {
                 const cost = m.quantity * (m.salePrice || 0);
-                // 1. Specific ID
-                updateStats(salePricing, m.productId, m.quantity, cost);
-                // 2. Generic Name
+                
+                // 1. Specific ID + Presentation
+                const pKeySpecific = getPresentKey(m.productId, m);
+                updateStats(salePricing, pKeySpecific, m.quantity, cost);
+                
+                // 2. Generic Name + Presentation
                 const nameKey = (m.crop || m.productName || '').toLowerCase().trim();
-                updateStats(salePricing, nameKey, m.quantity, cost);
+                const pKeyGeneric = getPresentKey(nameKey, m);
+                updateStats(salePricing, pKeyGeneric, m.quantity, cost);
             }
         });
 
@@ -554,34 +572,60 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
             const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
             const normalizedName = (product?.name || '').toLowerCase().trim();
-            const commercialName = (product?.commercialName || '').toLowerCase().trim();
+            
+            const isPropia = (product?.type === 'GRAIN' || product?.type === 'SEED') && brand === 'propia';
+
+            // Find specific PPP for this presentation
+            const pKeySpecific = getPresentKey(item.productId, item);
+            const pKeyGeneric = getPresentKey(normalizedName, item);
+            
+            let specificAvgPrice = 0;
+            
+            if (isPropia) {
+                 const saleDataSpecific = salePricing.get(pKeySpecific) || salePricing.get(`${item.productId}__0`);
+                 const saleDataGeneric = salePricing.get(pKeyGeneric) || salePricing.get(`${normalizedName}__0`);
+                 
+                 if (saleDataSpecific && saleDataSpecific.totalQty > 0) {
+                     specificAvgPrice = saleDataSpecific.totalVal / saleDataSpecific.totalQty;
+                 } else if (saleDataGeneric && saleDataGeneric.totalQty > 0) {
+                     specificAvgPrice = saleDataGeneric.totalVal / saleDataGeneric.totalQty;
+                 }
+            } else {
+                 const purchaseDataSpecific = purchasePricing.get(pKeySpecific) || purchasePricing.get(`${item.productId}__0`);
+                 const purchaseDataGeneric = purchasePricing.get(pKeyGeneric) || purchasePricing.get(`${normalizedName}__0`);
+
+                 if (purchaseDataSpecific && purchaseDataSpecific.totalQty > 0) {
+                     specificAvgPrice = purchaseDataSpecific.totalVal / purchaseDataSpecific.totalQty;
+                 } else if (purchaseDataGeneric && purchaseDataGeneric.totalQty > 0) {
+                     specificAvgPrice = purchaseDataGeneric.totalVal / purchaseDataGeneric.totalQty;
+                 }
+            }
+
+            // Temporarily piggyback the specific PPP onto the breakdown item for rendering
+            const enrichedBreakdownItem = { ...item, _specificPPP: specificAvgPrice } as any;
 
             const key = `${item.productId}_${brand}`;
-
-            let avgPrice = 0;
-            const saleDataSpecific = salePricing.get(item.productId);
-            const saleDataGeneric = salePricing.get(normalizedName);
-
-            if (saleDataSpecific && saleDataSpecific.totalQty > 0) {
-                avgPrice = saleDataSpecific.totalVal / saleDataSpecific.totalQty;
-            } else if (saleDataGeneric && saleDataGeneric.totalQty > 0) {
-                avgPrice = saleDataGeneric.totalVal / saleDataGeneric.totalQty;
-            } else {
-                const purchaseDataSpecific = purchasePricing.get(item.productId);
-                const purchaseDataGeneric = purchasePricing.get(normalizedName);
-
-                if (purchaseDataSpecific && purchaseDataSpecific.totalQty > 0) {
-                    avgPrice = purchaseDataSpecific.totalVal / purchaseDataSpecific.totalQty;
-                } else if (purchaseDataGeneric && purchaseDataGeneric.totalQty > 0) {
-                    avgPrice = purchaseDataGeneric.totalVal / purchaseDataGeneric.totalQty;
-                }
-            }
 
             if (combined.has(key)) {
                 const existing = combined.get(key)!;
                 existing.quantity += item.quantity;
                 if (!existing.breakdown) existing.breakdown = [];
-                existing.breakdown.push(item);
+                
+                const existingBreakdown = existing.breakdown.find(b => 
+                    b.presentationLabel === enrichedBreakdownItem.presentationLabel && 
+                    b.presentationContent === enrichedBreakdownItem.presentationContent
+                );
+
+                if (existingBreakdown) {
+                    existingBreakdown.quantity += enrichedBreakdownItem.quantity;
+                    if (existingBreakdown.presentationAmount && enrichedBreakdownItem.presentationAmount) {
+                         existingBreakdown.presentationAmount += enrichedBreakdownItem.presentationAmount;
+                    } else if (enrichedBreakdownItem.presentationAmount) {
+                         existingBreakdown.presentationAmount = enrichedBreakdownItem.presentationAmount;
+                    }
+                } else {
+                    existing.breakdown.push(enrichedBreakdownItem);
+                }
             } else {
                 combined.set(key, {
                     ...item,
@@ -589,13 +633,24 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     warehouseName: activeWarehouseIds.length > 1 ? 'Múltiples' : (warehouse?.name || (item.warehouseId === null && warehouses[0] ? warehouses[0].name : 'Galpón')),
                     productType: product?.type || 'OTHER',
                     unit: product?.unit || 'UNIT',
-                    price: avgPrice,
+                    price: 0, // Will calculate global avg after all items processed
                     productBrand: item.productBrand || product?.brandName || '',
                     productCommercialName: product?.commercialName || (brand === 'propia' ? 'Propia' : ''),
                     hasProduct: !!product,
                     campaignId: item.campaignId,
-                    breakdown: [item]
+                    breakdown: [enrichedBreakdownItem]
                 });
+            }
+        });
+
+        // Second pass to calculate true weighted average price for the main row
+        Array.from(combined.values()).forEach(item => {
+            if (item.breakdown && item.quantity > 0) {
+                let trueTotalValue = 0;
+                item.breakdown.forEach((b: any) => {
+                    trueTotalValue += (b.quantity * (b._specificPPP || 0));
+                });
+                item.price = trueTotalValue / item.quantity; // USD per Unit
             }
         });
 
@@ -763,15 +818,19 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 });
             }
 
+            const singleValidItem = validItems.length === 1 ? validItems[0] : null;
+            const rootPrice = singleValidItem && singleValidItem.price ? parseFloat(singleValidItem.price.toString().replace(',', '.')) : undefined;
+
             const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
                 warehouseId: selectedWarehouseId || undefined,
-                productId: 'CONSOLIDATED', // Marker for multi-item
-                productName: 'Compra de insumos',
+                productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
+                productName: validItems.length === 1 ? (availableProducts.find((p: Product) => p.id === singleValidItem!.productId)?.name || 'Unknown') : 'Compra de insumos',
+                productBrand: validItems.length === 1 ? singleValidItem!.tempBrand : undefined,
                 type: 'IN',
-                quantity: validItems.length, // count of products
-                unit: 'items',
+                quantity: validItems.length === 1 ? parseFloat(singleValidItem!.quantity.toString().replace(',', '.')) : validItems.length,
+                unit: validItems.length === 1 ? (availableProducts.find((p: Product) => p.id === singleValidItem!.productId)?.unit || 'L') : 'items',
                 date: dateStr,
                 time: timeStr,
                 referenceId: `PURCHASE-${movementId}`,
@@ -780,13 +839,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
-                // investorName: selectedInvestor || undefined, -> Deprecated in favor of investors array
                 investors: selectedInvestors,
                 sellerName: selectedSeller || undefined,
                 facturaDate: facturaDate || undefined,
                 dueDate: dueDate || undefined,
                 campaignId: selectedCampaignId || undefined,
-                items: movementItems
+                items: movementItems,
+                purchasePrice: rootPrice
             };
 
             await db.put('movements', movementData);

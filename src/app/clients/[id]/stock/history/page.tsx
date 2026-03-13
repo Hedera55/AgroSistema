@@ -3,7 +3,7 @@
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem, ClientStock } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem, ClientStock, CampaignSnapshot } from '@/types';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { useAuth } from '@/hooks/useAuth';
@@ -94,6 +94,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [saleDepartureDateTime, setSaleDepartureDateTime] = useState('');
     const [saleDistanceKm, setSaleDistanceKm] = useState('');
     const [saleFreightTariff, setSaleFreightTariff] = useState('');
+
+    // Recalcular Fuerte states
+    const [showRecalculateModal, setShowRecalculateModal] = useState(false);
+    const [recalculateCampaignId, setRecalculateCampaignId] = useState('');
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     const loadData = React.useCallback(async () => {
         const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
@@ -320,17 +325,56 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 const qtyNum = parseFloat(saleQuantity.toString().replace(',', '.'));
                 const priceNum = parseFloat(salePrice.toString().replace(',', '.'));
 
+                let currentStockState = [...stock];
+
                 // Revert old quantity
-                const oldSt = stock.find(s => s.productId === editingMovement.productId && s.warehouseId === editingMovement.warehouseId);
-                if (oldSt) await updateStock({ ...oldSt, quantity: oldSt.quantity + editingMovement.quantity });
+                const oldSt = currentStockState.find((s: ClientStock) =>
+                    s.productId === editingMovement.productId &&
+                    s.warehouseId === editingMovement.warehouseId &&
+                    (s.productBrand || '').toLowerCase().trim() === (editingMovement.productBrand || '').toLowerCase().trim() &&
+                    (s.campaignId || undefined) === (editingMovement.campaignId || undefined) &&
+                    (s.presentationLabel || '') === ((editingMovement as any).presentationLabel || '') &&
+                    (s.presentationContent || 0) === ((editingMovement as any).presentationContent || 0)
+                );
+                
+                if (oldSt) {
+                    const updatedOldSt = { ...oldSt, quantity: oldSt.quantity + editingMovement.quantity };
+                    await updateStock(updatedOldSt);
+                    currentStockState = currentStockState.map(s => s.id === oldSt.id ? updatedOldSt : s);
+                }
 
                 // Apply new quantity
-                const newSt = stock.find(s => s.productId === editingMovement.productId && s.warehouseId === selectedWarehouseId);
-                if (newSt) await updateStock({ ...newSt, quantity: newSt.quantity - qtyNum });
+                const newSt = currentStockState.find((s: ClientStock) =>
+                    s.productId === editingMovement.productId &&
+                    s.warehouseId === selectedWarehouseId &&
+                    (s.productBrand || '').toLowerCase().trim() === (editingMovement.productBrand || '').toLowerCase().trim() &&
+                    (s.campaignId || undefined) === (selectedCampaignId || undefined) &&
+                    (s.presentationLabel || '') === ((editingMovement as any).presentationLabel || '') &&
+                    (s.presentationContent || 0) === ((editingMovement as any).presentationContent || 0)
+                );
+
+                if (newSt) {
+                    await updateStock({ ...newSt, quantity: newSt.quantity - qtyNum });
+                } else {
+                    await updateStock({
+                        id: generateId(),
+                        clientId,
+                        warehouseId: selectedWarehouseId || undefined,
+                        productId: editingMovement.productId,
+                        productBrand: editingMovement.productBrand || '',
+                        campaignId: selectedCampaignId || undefined,
+                        quantity: -qtyNum,
+                        lastUpdated: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        presentationLabel: (editingMovement as any).presentationLabel || undefined,
+                        presentationContent: (editingMovement as any).presentationContent || undefined,
+                    });
+                }
 
                 await db.put('movements', {
                     ...editingMovement,
                     warehouseId: selectedWarehouseId || undefined,
+                    campaignId: selectedCampaignId || undefined,
                     quantity: qtyNum,
                     salePrice: isSale ? priceNum : undefined,
                     notes: note,
@@ -360,41 +404,100 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             }
 
             if (editingMovement.type === 'IN' || editingMovement.type === 'HARVEST') {
-                const oldItems = editingMovement.items || [{ productId: editingMovement.productId, quantity: editingMovement.quantity, presentationLabel: (editingMovement as any).presentationLabel, presentationContent: (editingMovement as any).presentationContent }];
+                let currentStockState = [...stock];
+                const oldItems = editingMovement.items || [{ 
+                    productId: editingMovement.productId, 
+                    quantity: editingMovement.quantity, 
+                    productBrand: editingMovement.productBrand,
+                    presentationLabel: (editingMovement as any).presentationLabel, 
+                    presentationContent: (editingMovement as any).presentationContent,
+                    presentationAmount: (editingMovement as any).presentationAmount
+                }];
                 for (const it of oldItems) {
-                    const st = stock.find(s => s.productId === it.productId && s.warehouseId === editingMovement.warehouseId && (s.presentationLabel || '') === (it.presentationLabel || '') && (s.presentationContent || 0) === (it.presentationContent || 0));
-                    if (st) await updateStock({ ...st, quantity: st.quantity - it.quantity });
+                    const st = currentStockState.find((s: ClientStock) => 
+                        s.productId === it.productId && 
+                        s.warehouseId === editingMovement.warehouseId && 
+                        (s.campaignId || undefined) === (editingMovement.campaignId || undefined) &&
+                        (s.productBrand || '').toLowerCase().trim() === (it.productBrand || '').toLowerCase().trim() &&
+                        (s.presentationLabel || '') === (it.presentationLabel || '') && 
+                        (s.presentationContent || 0) === (it.presentationContent || 0)
+                    );
+                    if (st) {
+                        const updatedSt = { ...st, quantity: st.quantity - it.quantity };
+                        await updateStock(updatedSt);
+                        currentStockState = currentStockState.map(s => s.id === st.id ? updatedSt : s);
+                    }
                 }
-            }
-            const now = new Date();
-            const movementItems: MovementItem[] = [];
-            for (const item of validItems) {
-                const product = productsData[item.productId];
-                const qtyNum = parseFloat(item.quantity.toString().replace(',', '.'));
-                const priceNum = item.price ? parseFloat(item.price.toString().replace(',', '.')) : 0;
-                const pLabel = (item.presentationLabel || '').trim();
-                const pContent = item.presentationContent ? parseFloat(item.presentationContent.toString().replace(',', '.')) : 0;
-                const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.toString().replace(',', '.')) : 0;
-                const existing = stock.find(s => s.productId === item.productId && s.warehouseId === selectedWarehouseId && (s.presentationLabel || '') === pLabel && (s.presentationContent || 0) === pContent);
-                const stockId = existing ? existing.id : generateId();
-                await updateStock({
-                    id: stockId, clientId, warehouseId: selectedWarehouseId || undefined, productId: item.productId, productBrand: item.tempBrand || product?.brandName || '',
-                    quantity: (existing ? existing.quantity : 0) + (editingMovement.type === 'IN' ? qtyNum : -qtyNum),
-                    lastUpdated: now.toISOString(), updatedAt: now.toISOString(),
-                    presentationLabel: pLabel || undefined, presentationContent: pContent || undefined,
-                    presentationAmount: existing ? (existing.presentationAmount || 0) + (editingMovement.type === 'IN' ? pAmount : -pAmount) : pAmount
+                const now = new Date();
+                const movementItems: MovementItem[] = [];
+                for (const item of validItems) {
+                    const product = productsData[item.productId];
+                    const qtyNum = parseFloat(item.quantity.toString().replace(',', '.'));
+                    const priceNum = item.price ? parseFloat(item.price.toString().replace(',', '.')) : 0;
+                    const pLabel = (item.presentationLabel || '').trim();
+                    const pContent = item.presentationContent ? parseFloat(item.presentationContent.toString().replace(',', '.')) : 0;
+                    const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.toString().replace(',', '.')) : 0;
+                    const pBrand = (item.tempBrand || product?.brandName || '').toLowerCase().trim();
+
+                    const existing = currentStockState.find((s: ClientStock) => 
+                        s.productId === item.productId && 
+                        s.warehouseId === selectedWarehouseId && 
+                        (s.campaignId || undefined) === (selectedCampaignId || undefined) &&
+                        (s.productBrand || '').toLowerCase().trim() === pBrand &&
+                        (s.presentationLabel || '') === pLabel && 
+                        (s.presentationContent || 0) === pContent
+                    );
+                    
+                    const stockId = existing ? existing.id : generateId();
+                    const newQuantity = (existing ? existing.quantity : 0) + qtyNum;
+                    const newPresentationAmount = existing ? (existing.presentationAmount || 0) + pAmount : pAmount;
+                    
+                    const newItem = {
+                        id: stockId, clientId, warehouseId: selectedWarehouseId || undefined, productId: item.productId, productBrand: item.tempBrand || product?.brandName || '',
+                        campaignId: selectedCampaignId || undefined,
+                        quantity: newQuantity,
+                        lastUpdated: now.toISOString(), updatedAt: now.toISOString(),
+                        presentationLabel: pLabel || undefined, presentationContent: pContent || undefined,
+                        presentationAmount: newPresentationAmount
+                    };
+
+                    await updateStock(newItem);
+                    currentStockState = existing ? currentStockState.map(s => s.id === stockId ? newItem : s) : [...currentStockState, newItem];
+
+                    movementItems.push({
+                        id: generateId(), productId: item.productId, productName: product?.name || 'Unknown', productCommercialName: product?.commercialName || '-',
+                        productBrand: item.tempBrand || product?.brandName || '', quantity: qtyNum, unit: product?.unit || 'L', price: priceNum,
+                        sellerName: selectedSeller || undefined, presentationLabel: pLabel || undefined, presentationContent: pContent || 0, presentationAmount: pAmount || 0
+                    });
+                }
+                
+                const singleValidItem = validItems.length === 1 ? validItems[0] : null;
+                const rootPurchasePrice = singleValidItem && singleValidItem.price ? parseFloat(singleValidItem.price.toString().replace(',', '.')) : undefined;
+
+                await db.put('movements', { 
+                    ...editingMovement,
+                    warehouseId: selectedWarehouseId || undefined,
+                    campaignId: selectedCampaignId || undefined,
+                    notes: note,
+                    facturaDate: facturaDate || undefined,
+                    dueDate: dueDate || undefined,
+                    investors: selectedInvestors,
+                    sellerName: selectedSeller || undefined,
+                    items: movementItems,
+                    updatedAt: now.toISOString(),
+                    quantity: validItems.length === 1 ? parseFloat(singleValidItem!.quantity.toString().replace(',', '.')) : validItems.length,
+                    unit: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.unit || 'L') : 'items',
+                    productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
+                    productName: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.name || 'Unknown') : 'Compra de insumos',
+                    productBrand: validItems.length === 1 ? singleValidItem!.tempBrand : undefined,
+                    purchasePrice: rootPurchasePrice 
                 });
-                movementItems.push({
-                    id: generateId(), productId: item.productId, productName: product?.name || 'Unknown', productCommercialName: product?.commercialName || '-',
-                    productBrand: item.tempBrand || product?.brandName || '', quantity: qtyNum, unit: product?.unit || 'L', price: priceNum,
-                    sellerName: selectedSeller || undefined, presentationLabel: pLabel || undefined, presentationContent: pContent || 0, presentationAmount: pAmount || 0
-                });
+                await loadData();
+                setShowEditForm(false);
+                setEditingMovement(null);
+                syncService.pushChanges();
+                return;
             }
-            await db.put('movements', { ...editingMovement, warehouseId: selectedWarehouseId || undefined, notes: note, facturaDate: facturaDate || undefined, dueDate: dueDate || undefined, investors: selectedInvestors, sellerName: selectedSeller || undefined, items: movementItems, updatedAt: now.toISOString() });
-            await loadData();
-            setShowEditForm(false);
-            setEditingMovement(null);
-            syncService.pushChanges();
         } catch (error) {
             console.error(error);
             alert('Error al guardar los cambios');
@@ -408,6 +511,135 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         saleFreightTariff, loadData, updateStock, productsData, clientId, selectedSeller, facturaDate, dueDate, selectedInvestors
     ]);
 
+    const handleRecalcularFuerte = async () => {
+        if (!recalculateCampaignId) return alert('Seleccione una campaña de partida.');
+        if (!confirm('ATENCIÓN: Esto reescribirá todo el stock actual basándose en los movimientos posteriores a la campaña seleccionada. Esta acción no se puede deshacer. ¿Continuar con el Recálculo Fuerte?')) return;
+        
+        setIsRecalculating(true);
+        try {
+            // 1. Load the snapshot
+            const snapshots = await db.getAll('campaign_snapshots');
+            const targetSnapshot = snapshots.find((s: CampaignSnapshot) => s.clientId === clientId && s.campaignId === recalculateCampaignId);
+            
+            if (!targetSnapshot) {
+                alert('No se encontró un snapshot cerrado para esta campaña. Vaya a Contaduría y cierre la campaña primero.');
+                return;
+            }
+
+            // 2. Fetch all current stock to wipe/overwrite
+            const allStock = await db.getAll('stock');
+            const clientStock = allStock.filter((s: ClientStock) => s.clientId === clientId);
+            
+            // Delete current stock
+            for (const s of clientStock) {
+                await db.delete('stock', s.id);
+            }
+
+            // Restore stock from snapshot (using new IDs to prevent primary key issues if recreating)
+            let currentTempStock: ClientStock[] = [];
+            for (const s of targetSnapshot.stockSnapshot) {
+                const restoredInstance: ClientStock = {
+                    ...s,
+                    id: generateId(), // New cache ID
+                    lastUpdated: new Date().toISOString(),
+                    synced: false
+                };
+                await db.put('stock', restoredInstance);
+                currentTempStock.push(restoredInstance);
+            }
+
+            // 3. Fetch all POST-snapshot movements and apply them chronologically
+            const allMovements = await db.getAll('movements');
+            const postMovements = allMovements.filter((m: InventoryMovement) => 
+                m.clientId === clientId && 
+                new Date(m.createdAt || m.date).getTime() > new Date(targetSnapshot.createdAt).getTime()
+            ).sort((a: InventoryMovement, b: InventoryMovement) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+
+            // 4. Replay logic
+            for (const mov of postMovements) {
+                const isOut = ['OUT', 'SALE'].includes(mov.type);
+                const isIn = ['IN', 'HARVEST'].includes(mov.type);
+                
+                const processItemMath = (item: { productId: string; quantity: number; tempBrand?: string; presentationLabel?: string; presentationContent?: number; presentationAmount?: number; }) => {
+                    const existingIdx = currentTempStock.findIndex(s => 
+                        s.productId === item.productId &&
+                        s.warehouseId === mov.warehouseId &&
+                        s.clientId === clientId &&
+                        (item.tempBrand ? s.productBrand === item.tempBrand : true) &&
+                        (item.presentationLabel ? s.presentationLabel === item.presentationLabel : true) &&
+                        (item.presentationContent ? s.presentationContent === item.presentationContent : true)
+                    );
+
+                    if (existingIdx !== -1) {
+                        const existing = currentTempStock[existingIdx];
+                        let newQty = parseFloat(String(existing.quantity));
+                        let newAmount = parseFloat(String(existing.presentationAmount || 0));
+                        
+                        let itemQty = parseFloat(String(item.quantity));
+                        let itemAmount = parseFloat(String(item.presentationAmount || 0));
+
+                        if (isIn) {
+                            newQty += itemQty;
+                            newAmount += itemAmount;
+                        } else if (isOut) {
+                            newQty -= itemQty;
+                            newAmount -= itemAmount;
+                        }
+                        
+                        currentTempStock[existingIdx] = { ...existing, quantity: newQty, presentationAmount: newAmount, updatedAt: new Date().toISOString(), synced: false };
+                    } else if (isIn) { // Only create if it's an IN operation AND didn't exist
+                        const newItem: ClientStock = {
+                            id: generateId(),
+                            clientId,
+                            warehouseId: mov.warehouseId,
+                            productId: item.productId,
+                            productBrand: item.tempBrand,
+                            quantity: item.quantity,
+                            presentationLabel: item.presentationLabel,
+                            presentationContent: item.presentationContent,
+                            presentationAmount: item.presentationAmount,
+                            lastUpdated: new Date().toISOString(),
+                            synced: false,
+                            campaignId: mov.campaignId
+                        };
+                        currentTempStock.push(newItem);
+                    }
+                };
+
+                if (mov.items && mov.items.length > 0) {
+                    for (const item of mov.items) {
+                        processItemMath({ ...item, tempBrand: item.productBrand, quantity: parseFloat(item.quantity.toString()), presentationAmount: parseFloat(item.presentationAmount?.toString() || '0') });
+                    }
+                } else {
+                    processItemMath({ 
+                        productId: mov.productId, 
+                        quantity: parseFloat(mov.quantity.toString()), 
+                        tempBrand: mov.productBrand,
+                        presentationLabel: mov.presentationLabel,
+                        presentationContent: mov.presentationContent,
+                        presentationAmount: parseFloat(mov.presentationAmount?.toString() || '0')
+                    });
+                }
+            }
+
+            // 5. Save all fully calculated stock to DB
+            for (const s of currentTempStock) {
+                await db.put('stock', s);
+            }
+
+            alert(`Recálculo Fuerte completado. Se procesaron ${postMovements.length} movimientos.`);
+            setShowRecalculateModal(false);
+            setRecalculateCampaignId('');
+            // Trigger refresh
+            window.location.reload(); 
+        } catch (error) {
+            console.error(error);
+            alert('Error crítico durante el Recálculo Fuerte.');
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -416,7 +648,62 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Historial de Movimientos</h1>
                     <p className="text-slate-500 mt-1">Ingresos y egresos de productos.</p>
                 </div>
+                {!isReadOnly && (
+                    <Button 
+                        onClick={() => setShowRecalculateModal(true)} 
+                        variant="outline" 
+                        className="border-orange-200 text-orange-600 hover:bg-orange-50 font-bold uppercase tracking-widest text-[10px]"
+                    >
+                        ⚡ Recalcular Fuerte
+                    </Button>
+                )}
             </div>
+
+            {showRecalculateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-3 text-orange-600 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><polyline points="16 16 21 16 21 21"/></svg>
+                            <h2 className="text-lg font-bold">Recalcular Fuerte</h2>
+                        </div>
+                        
+                        <p className="text-sm text-slate-600 mb-6">
+                            Esta herramienta reconstruye el inventario actual partiendo desde cero. 
+                            Tomará el registro de stock guardado en la campaña seleccionada y 
+                            re-aplicará todos los movimientos posteriores matemáticamente.
+                        </p>
+
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold text-slate-700 uppercase mb-2 drop-shadow-sm">Iniciar recálculo desde cierre de:</label>
+                            <select
+                                value={recalculateCampaignId}
+                                onChange={e => setRecalculateCampaignId(e.target.value)}
+                                className="w-full h-11 px-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 outline-none text-slate-700 bg-slate-50"
+                            >
+                                <option value="">Seleccione una Campaña cerrada...</option>
+                                {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setShowRecalculateModal(false)}
+                                disabled={isRecalculating}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button 
+                                className="bg-orange-500 hover:bg-orange-600 font-bold"
+                                onClick={handleRecalcularFuerte}
+                                isLoading={isRecalculating}
+                            >
+                                {isRecalculating ? 'Procesando...' : 'Iniciar'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {loading ? (

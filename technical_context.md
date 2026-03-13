@@ -87,7 +87,24 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Actual Transactions**: Sales and Purchases use their specific confirmed invoice prices.
 - **Robust Fallbacks (Propia)**: To handle items with unique IDs but no history (e.g. "Soja Propia"), the system aggregates pricing by **Product Name / Crop** as well.
     - *Priority*: Specific ID Price -> Generic Name Price -> Manual Reference.
+- **True PPP per Presentation**: Stock valuation uses a **Weighted Average Purchase Price (PPP)** computed per specific presentation (`presentationLabel` + `presentationContent`). 
+    - **Normalization**: All PPP values are calculated and stored as **USD per Unit (Kg/L)**. This ensures that a 1KG bag's overhead/price doesn't disproportionately affect the valuation of bulk stock.
+    - **Valuation Rule**: Purchases dictate PPP. Only own harvest (Propia brand grains/seeds) use Sales averages (WASP).
 - **Obsolescence**: "Catalog Price" (`product.price`) is deprecated and removed.
+
+## 📦 Campaign Snapshots & Integrity
+### Campaign Snapshots
+- **Definition**: A "frozen" cache of all stock levels and partner balances at the moment of closing a campaign.
+- **Purpose**: Prevents expensive "beginning-of-time" recalculations by providing a verified starting point for the following campaign.
+- **Schema**: Stored in `campaign_snapshots` table, indexed by `campaignId` and `clientId`.
+
+### Deep Recalculation ("Recalcular Fuerte")
+- **Logic**: Implements an **Event Sourcing** pattern for data recovery.
+- **Process**:
+    1. Wipes the current `stock` tables for a client.
+    2. Restores the state from the last valid `CampaignSnapshot`.
+    3. Re-processes every historical `Movement` chronologically from the snapshot date to the present.
+- **Usage**: Used to resolve data corruption or ripple typo fixes (e.g., historical price corrections) forward into the current live inventory.
 
 ## 🛠️ Infrastructure & Sync
 - **Invalid UUIDs**: The sync service (`sync.ts`) automatically cleans up legacy local IDs (e.g., "grain-soja") to prevent Supabase type errors.
