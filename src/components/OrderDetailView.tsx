@@ -78,13 +78,19 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
 
                         <div className="relative group/tooltip">
                             <button
-                                onClick={() => generateRemitoPDF(order, client)}
-                                className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
+                                onClick={() => {
+                                    if (order.remitoImageUrl) {
+                                        window.open(order.remitoImageUrl, '_blank');
+                                    } else {
+                                        generateRemitoPDF(order, client);
+                                    }
+                                }}
+                                className={`w-7 h-7 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center border ${order.remitoImageUrl ? 'bg-white border-emerald-500 text-emerald-600 hover:bg-emerald-50' : 'bg-white border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200'}`}
                             >
                                 R
                             </button>
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                Remito
+                                {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
                             </div>
                         </div>
 
@@ -96,7 +102,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, client,
                                 O
                             </button>
                             <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                {order.type === 'SOWING' ? 'Orden de Siembra' : 'Orden de Carga'}
+                                {order.type === 'SOWING' ? 'Orden de Siembra' : 'Orden de Trabajo'}
                             </div>
                         </div>
                         {order.facturaImageUrl && (

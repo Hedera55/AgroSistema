@@ -188,25 +188,29 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         loadData();
     }, [clientId]);
 
-    const handleFileUpload = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>, movementId: string) => {
+    const handleFileUpload = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>, movementId: string, type: 'factura' | 'remito' = 'factura') => {
         if (!e.target.files || !e.target.files[0]) return;
         const file = e.target.files[0];
         setUploadingId(movementId);
         try {
             const fileExt = file.name.split('.').pop();
-            const filePath = `${clientId}/facturas/${movementId}.${fileExt}`;
-            const { error: uploadError } = await supabase.storage.from('facturas').upload(filePath, file, { upsert: true });
+            const bucketName = type === 'factura' ? 'facturas' : 'remitos';
+            const filePath = `${clientId}/${bucketName}/${movementId}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from(bucketName).upload(filePath, file, { upsert: true });
             if (uploadError) throw uploadError;
-            const { data: publicUrlData } = supabase.storage.from('facturas').getPublicUrl(filePath);
+            const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
             const publicUrl = publicUrlData.publicUrl;
             const movement = movements.find(m => m.id === movementId);
             if (movement) {
-                await db.put('movements', { ...movement, facturaImageUrl: publicUrl, synced: false, updatedAt: new Date().toISOString() });
+                const updateData = type === 'factura' 
+                    ? { facturaImageUrl: publicUrl }
+                    : { remitoImageUrl: publicUrl };
+                await db.put('movements', { ...movement, ...updateData, synced: false, updatedAt: new Date().toISOString() });
                 await loadData();
             }
         } catch (error) {
-            console.error('Error uploading factura:', error);
-            alert('Error al subir la factura');
+            console.error(`Error uploading ${type}:`, error);
+            alert(`Error al subir la ${type === 'factura' ? 'factura' : 'remito'}`);
         } finally {
             setUploadingId(null);
             e.target.value = '';
@@ -855,8 +859,21 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className="px-6 py-2 text-right">
                                                         <div className="flex items-center justify-end gap-2">
                                                             {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); handleEditMovement(m); }} className="w-8 h-8 text-slate-400 hover:text-emerald-500 p-2 transition-all"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg></button>}
-                                                            {m.facturaImageUrl ? <a href={m.facturaImageUrl} target="_blank" rel="noopener noreferrer" className="w-7 h-7 border border-emerald-500 text-emerald-500 rounded-md text-[11px] font-black flex items-center justify-center" onClick={e => e.stopPropagation()}>F</a> : (m.type !== 'HARVEST' && !isReadOnly && <div className="relative" onClick={e => e.stopPropagation()}><input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileUpload(e, m.id)} disabled={uploadingId === m.id} /><button className="w-7 h-7 border border-red-500 text-red-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'F'}</button></div>)}
-                                                            {(m.type === 'SALE' || m.type === 'OUT' || m.isTransfer) && client && <button onClick={(e) => { e.stopPropagation(); generateRemitoPDF(m, client, m.isTransfer ? m.originName : warehousesKey[m.warehouseId || '']); }} className="w-7 h-7 border border-blue-500 text-blue-500 rounded-md text-[11px] font-black flex items-center justify-center ml-1">R</button>}
+                                                            {m.facturaImageUrl ? <a href={m.facturaImageUrl} target="_blank" rel="noopener noreferrer" className="w-7 h-7 border border-emerald-500 text-emerald-500 rounded-md text-[11px] font-black flex items-center justify-center" onClick={e => e.stopPropagation()}>F</a> : (m.type !== 'HARVEST' && !isReadOnly && <div className="relative" onClick={e => e.stopPropagation()}><input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileUpload(e, m.id, 'factura')} disabled={uploadingId === m.id} /><button className="w-7 h-7 border border-red-500 text-red-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'F'}</button></div>)}
+                                                            {(m.type === 'SALE' || m.type === 'OUT' || m.isTransfer) && (
+                                                                <>
+                                                                    {m.remitoImageUrl ? (
+                                                                        <a href={m.remitoImageUrl} target="_blank" rel="noopener noreferrer" className="w-7 h-7 border border-emerald-500 text-emerald-500 rounded-md text-[11px] font-black flex items-center justify-center ml-1" onClick={e => e.stopPropagation()}>R</a>
+                                                                    ) : (
+                                                                        !isReadOnly && (
+                                                                            <div className="relative ml-1" onClick={e => e.stopPropagation()}>
+                                                                                <input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileUpload(e, m.id, 'remito')} disabled={uploadingId === m.id} />
+                                                                                <button className="w-7 h-7 border border-blue-500 text-blue-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'R'}</button>
+                                                                            </div>
+                                                                        )
+                                                                    )}
+                                                                </>
+                                                            )}
                                                             {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); handleDeleteMovement(m.id, m.partnerId); }} className="w-8 h-8 text-slate-400 hover:text-red-500 p-2 transition-all"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></button>}
                                                         </div>
                                                     </td>

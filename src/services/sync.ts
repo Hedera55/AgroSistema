@@ -108,7 +108,9 @@ const mappers = {
         investor_name: o.investorName || null,
         campaign_id: o.campaignId || null,
         boundary: o.boundary || null,
-        kml_data: o.kmlData || null
+        kml_data: o.kmlData || null,
+        remito_image_url: o.remitoImageUrl || null,
+        technical_responsible: o.technicalResponsible || null
     }),
     movement: (m: InventoryMovement) => {
         let mappedType = m.type;
@@ -132,6 +134,7 @@ const mappers = {
             reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
             notes: m.notes,
             factura_image_url: m.facturaImageUrl,
+            remito_image_url: m.remitoImageUrl,
             investor_name: m.investorName || null,
             created_by: m.createdBy,
             campaign_id: m.campaignId || null,
@@ -286,7 +289,9 @@ const reverseMappers = {
         investorName: o.investor_name,
         campaignId: o.campaign_id,
         boundary: o.boundary,
-        kmlData: o.kml_data
+        kmlData: o.kml_data,
+        remitoImageUrl: o.remito_image_url,
+        technicalResponsible: o.technical_responsible
     }),
     movement: (m: any): InventoryMovement => ({
         id: m.id,
@@ -305,6 +310,7 @@ const reverseMappers = {
         referenceId: m.reference_id || 'manual',
         notes: m.notes,
         facturaImageUrl: m.factura_image_url,
+        remitoImageUrl: m.remito_image_url,
         investorName: m.investor_name,
         createdBy: m.created_by,
         createdAt: m.created_at,

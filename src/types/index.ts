@@ -227,6 +227,7 @@ export interface InventoryMovement {
     facturaDate?: string; // Fecha de emisión
     dueDate?: string; // Fecha de vencimiento
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image
+    remitoImageUrl?: string; // URL to uploaded remito image
     investorName?: string; // Who paid for this
     sellerName?: string; // Where this was purchased from
     createdBy?: string; // User ID/Name
@@ -311,6 +312,8 @@ export interface Order {
     expectedYield?: number; // For sowing orders
     notes?: string;
     facturaImageUrl?: string;
+    remitoImageUrl?: string;
+    technicalResponsible?: string;
     createdBy?: string;
 
     // Sync

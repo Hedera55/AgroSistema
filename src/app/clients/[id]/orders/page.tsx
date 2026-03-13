@@ -268,14 +268,9 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             const d = date.getDate().toString().padStart(2, '0');
             const mo = (date.getMonth() + 1).toString().padStart(2, '0');
             const y = date.getFullYear();
-            const h = date.getHours().toString().padStart(2, '0');
-            const min = date.getMinutes().toString().padStart(2, '0');
 
             return (
-                <div>
-                    <div>{`${d}-${mo}-${y}`}</div>
-                    <div className="text-xs text-slate-400 font-normal">{`${h}:${min} hs`}</div>
-                </div>
+                <div>{`${d}-${mo}-${y}`}</div>
             );
         }
 
@@ -435,13 +430,20 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
                                                 <div className="relative group/tooltip">
                                                     <button
-                                                        onClick={() => client && generateRemitoPDF(order, client)}
-                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (order.remitoImageUrl) {
+                                                                window.open(order.remitoImageUrl, '_blank');
+                                                            } else if (client) {
+                                                                generateRemitoPDF(order, client);
+                                                            }
+                                                        }}
+                                                        className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
                                                     >
                                                         R
                                                     </button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Remito
+                                                        {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
                                                     </div>
                                                 </div>
 
@@ -453,7 +455,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                         O
                                                     </button>
                                                     <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Orden de Carga
+                                                        Orden de Trabajo
                                                     </div>
                                                 </div>
 
@@ -468,7 +470,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                         F
                                                     </button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Factura
+                                                        {order.facturaImageUrl ? 'Ver Factura' : 'Cargar Factura'}
                                                     </div>
                                                 </div>
 

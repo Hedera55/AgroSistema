@@ -150,8 +150,12 @@ interface StockEntryFormProps {
     facturaFile: File | null;
     setFacturaFile: (val: File | null) => void;
     handleFacturaChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    isSubmitting: boolean;
     facturaUploading: boolean;
+    remitoFile?: File | null;
+    setRemitoFile?: (val: File | null) => void;
+    handleRemitoChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    remitoUploading?: boolean;
+    movementType?: 'IN' | 'OUT' | 'SALE' | 'TRANSFER'; // to conditionally show
     campaigns?: Campaign[];
     selectedCampaignId?: string;
     setSelectedCampaignId?: (id: string) => void;
@@ -187,8 +191,12 @@ const StockEntryFormInternal = memo(({
     facturaFile,
     setFacturaFile,
     handleFacturaChange,
-    isSubmitting,
     facturaUploading,
+    remitoFile,
+    setRemitoFile,
+    handleRemitoChange,
+    remitoUploading,
+    movementType = 'IN',
     selectedInvestors,
     setSelectedInvestors,
     facturaDate,
@@ -737,6 +745,41 @@ const StockEntryFormInternal = memo(({
                                 </button>
                             )}
                         </div>
+
+                        {/* Remito Conditionally Rendered for non-IN types if this form is ever repurposed, or just generally supported */}
+                        {(movementType !== 'IN') && handleRemitoChange && setRemitoFile && (
+                            <div className="flex items-center gap-2 border-l pl-4 border-slate-100">
+                                <label
+                                    htmlFor="remito-upload-stock"
+                                    className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 focus:outline-none focus:underline"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            document.getElementById('remito-upload-stock')?.click();
+                                        }
+                                    }}
+                                >
+                                    {remitoFile ? (
+                                        <span className="text-emerald-700 font-bold truncate max-w-[200px]">{remitoFile.name}</span>
+                                    ) : (
+                                        <span>+ Adjuntar remito</span>
+                                    )}
+                                </label>
+                                <input
+                                    id="remito-upload-stock"
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    onChange={handleRemitoChange}
+                                    className="hidden"
+                                />
+                                {remitoFile && (
+                                    <button type="button" onClick={() => setRemitoFile(null)} className="text-red-400 hover:text-red-600">
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <Button

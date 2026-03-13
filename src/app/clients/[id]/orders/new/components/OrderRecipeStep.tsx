@@ -49,6 +49,8 @@ interface OrderRecipeStepProps {
     setNotes: (val: string) => void;
     facturaImageUrl: string | null;
     setFacturaImageUrl: (val: string | null) => void;
+    remitoImageUrl: string | null;
+    setRemitoImageUrl: (val: string | null) => void;
     selectedCampaignId?: string;
     setSelectedCampaignId?: (val: string) => void;
     campaigns?: any[];
@@ -65,6 +67,8 @@ interface OrderRecipeStepProps {
     setKmlData: (val: string | null) => void;
     boundary: any;
     setBoundary: (val: any) => void;
+    technicalResponsible: string;
+    setTechnicalResponsible: (val: string) => void;
 }
 
 export function OrderRecipeStep({
@@ -108,6 +112,8 @@ export function OrderRecipeStep({
     setNotes,
     facturaImageUrl,
     setFacturaImageUrl,
+    remitoImageUrl,
+    setRemitoImageUrl,
     subQuantities,
     setSubQuantities,
     stock,
@@ -123,7 +129,9 @@ export function OrderRecipeStep({
     kmlData,
     setKmlData,
     boundary,
-    setBoundary
+    setBoundary,
+    technicalResponsible,
+    setTechnicalResponsible
 }: OrderRecipeStepProps) {
     const selectedProduct = availableProducts.find(p => p.id === currProdId);
 
@@ -446,9 +454,9 @@ export function OrderRecipeStep({
                         </div>
                     </div>
                 )}
-
+ 
                 <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-3">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -459,7 +467,17 @@ export function OrderRecipeStep({
                             {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
                         </select>
                     </div>
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-3">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Responsable Técnico</label>
+                        <Input
+                            type="text"
+                            placeholder="Nombre..."
+                            value={technicalResponsible}
+                            onChange={e => setTechnicalResponsible(e.target.value)}
+                            className="h-[46px]"
+                        />
+                    </div>
+                    <div className="lg:col-span-3">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
                         <Input
                             type="text"
@@ -470,7 +488,7 @@ export function OrderRecipeStep({
                             className="h-[46px]"
                         />
                     </div>
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-3">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
                         <select
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
@@ -521,6 +539,30 @@ export function OrderRecipeStep({
                                     if (file) {
                                         const reader = new FileReader();
                                         reader.onloadend = () => setFacturaImageUrl(reader.result as string);
+                                        reader.readAsDataURL(file);
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        <div className="flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => document.getElementById('remito-upload')?.click()}
+                                className={`inline-flex items-center text-[10px] font-bold uppercase tracking-widest transition-all ${remitoImageUrl ? 'text-emerald-700' : 'text-emerald-600 hover:text-emerald-700'}`}
+                            >
+                                {remitoImageUrl ? '✓ Remito Adjunto' : '+ Adjuntar Remito'}
+                            </button>
+                            <input
+                                id="remito-upload"
+                                type="file"
+                                className="hidden"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => setRemitoImageUrl(reader.result as string);
                                         reader.readAsDataURL(file);
                                     }
                                 }}
@@ -598,7 +640,7 @@ export function OrderRecipeStep({
             <div className="flex justify-between pt-6 border-t border-slate-100">
                 <Button variant="secondary" onClick={onBack}>Volver</Button>
                 <Button onClick={onNext} disabled={items.length === 0}>
-                    {isSowingOrder ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Carga'}
+                    {isSowingOrder ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Trabajo'}
                 </Button>
             </div>
         </div>

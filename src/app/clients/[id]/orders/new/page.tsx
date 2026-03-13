@@ -83,6 +83,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
             // Notes & Extra
             setNotes(order.notes || '');
             setFacturaImageUrl(order.facturaImageUrl || null);
+            setRemitoImageUrl(order.remitoImageUrl || null);
+            setTechnicalResponsible(order.technicalResponsible || '');
             setKmlData(order.kmlData || null);
             setBoundary(order.boundary || null);
             if (order.notes) setShowNotes(true);
@@ -134,6 +136,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     const [selectedPartnerName, setSelectedPartnerName] = useState(''); // Legacy fallback
     const [notes, setNotes] = useState('');
     const [facturaImageUrl, setFacturaImageUrl] = useState<string | null>(null);
+    const [remitoImageUrl, setRemitoImageUrl] = useState<string | null>(null);
+    const [technicalResponsible, setTechnicalResponsible] = useState('');
     const [showNotes, setShowNotes] = useState(false);
     const [kmlData, setKmlData] = useState<string | null>(null);
     const [boundary, setBoundary] = useState<any>(null);
@@ -499,6 +503,8 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                 plantingSpacing: items.find(i => i.plantingSpacing)?.plantingSpacing,
                 notes: notes,
                 facturaImageUrl: facturaImageUrl || undefined,
+                remitoImageUrl: remitoImageUrl || undefined,
+                technicalResponsible: technicalResponsible || undefined,
                 boundary: boundary || undefined,
                 kmlData: kmlData || undefined,
                 investorName: selectedInvestors.length > 0 ? selectedInvestors[0].name : '',
@@ -602,10 +608,14 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
                     setNotes={setNotes}
                     facturaImageUrl={facturaImageUrl}
                     setFacturaImageUrl={setFacturaImageUrl}
+                    remitoImageUrl={remitoImageUrl}
+                    setRemitoImageUrl={setRemitoImageUrl}
                     kmlData={kmlData}
                     setKmlData={setKmlData}
                     boundary={boundary}
                     setBoundary={setBoundary}
+                    technicalResponsible={technicalResponsible}
+                    setTechnicalResponsible={setTechnicalResponsible}
                     subQuantities={subQuantities}
                     setSubQuantities={setSubQuantities}
                     stock={stock}

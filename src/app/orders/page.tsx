@@ -184,13 +184,8 @@ export default function GlobalOrdersPage() {
             const d = date.getDate().toString().padStart(2, '0');
             const mo = (date.getMonth() + 1).toString().padStart(2, '0');
             const y = date.getFullYear();
-            const h = date.getHours().toString().padStart(2, '0');
-            const min = date.getMinutes().toString().padStart(2, '0');
             return (
-                <div>
-                    <div>{`${d}-${mo}-${y}`}</div>
-                    <div className="text-xs text-slate-400 font-normal">{`${h}:${min} hs`}</div>
-                </div>
+                <div>{`${d}-${mo}-${y}`}</div>
             );
         }
         return dateStr;
@@ -283,20 +278,29 @@ export default function GlobalOrdersPage() {
                                                 <button
                                                     onClick={() => handleDownload(order as any)}
                                                     className="w-8 h-8 flex items-center justify-center rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200"
-                                                    title="Orden de Carga"
+                                                    title="Orden de Trabajo"
                                                 >
                                                     O
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        const client = clients.find(c => c.id === order.clientId);
-                                                        if (client) generateRemitoPDF(order as any, client);
-                                                    }}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-md bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
-                                                    title="Remito"
-                                                >
-                                                    R
-                                                </button>
+                                                <div className="relative group/tooltip">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const client = clients.find(c => c.id === order.clientId);
+                                                            if (order.remitoImageUrl) {
+                                                                window.open(order.remitoImageUrl, '_blank');
+                                                            } else if (client) {
+                                                                generateRemitoPDF(order as any, client);
+                                                            }
+                                                        }}
+                                                        className={`w-8 h-8 flex items-center justify-center rounded-md bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-600 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
+                                                    >
+                                                        R
+                                                    </button>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                        {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
+                                                    </div>
+                                                </div>
                                                 <button
                                                     onClick={() => setSelectedOrderDetailOrder(order as any)}
                                                     className="w-8 h-8 flex items-center justify-center rounded-md bg-white border border-slate-200 text-slate-400 hover:text-emerald-600"

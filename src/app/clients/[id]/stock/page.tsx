@@ -153,12 +153,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [saleNote, setSaleNote] = useState('');
     const [showSaleNote, setShowSaleNote] = useState(false);
     const [saleFacturaFile, setSaleFacturaFile] = useState<File | null>(null);
+    const [saleRemitoFile, setSaleRemitoFile] = useState<File | null>(null);
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
     const [facturaDate, setFacturaDate] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [selectedCampaignId, setSelectedCampaignId] = useState('');
 
     const [facturaUploading, setFacturaUploading] = useState(false);
+    const [remitoUploading, setRemitoUploading] = useState(false);
 
     // New Sale Fields
     const [saleDestination, setSaleDestination] = useState('');
@@ -902,8 +904,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             // Record Movement
             const movementId = generateId();
-            let facturaUrl = '';
-
             if (saleFacturaFile) {
                 setFacturaUploading(true);
                 const fileExt = saleFacturaFile.name.split('.').pop();
@@ -917,6 +917,22 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     facturaUrl = publicUrlData.publicUrl;
                 }
                 setFacturaUploading(false);
+            }
+
+            let remitoUrl = '';
+            if (saleRemitoFile) {
+                setRemitoUploading(true);
+                const fileExt = saleRemitoFile.name.split('.').pop();
+                const filePath = `${id}/remitos/${movementId}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('remitos') // using remitos bucket
+                    .upload(filePath, saleRemitoFile, { upsert: true });
+
+                if (!uploadError) {
+                    const { data: publicUrlData } = supabase.storage.from('remitos').getPublicUrl(filePath);
+                    remitoUrl = publicUrlData.publicUrl;
+                }
+                setRemitoUploading(false);
             }
 
             // Update Stock using auto-deduction across presentations
@@ -949,6 +965,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 referenceId: `SALE-${generateId()}`,
                 notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
                 facturaImageUrl: facturaUrl || undefined,
+                remitoImageUrl: remitoUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false,
@@ -984,6 +1001,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setSaleNote('');
             setShowSaleNote(false);
             setSaleFacturaFile(null);
+            setSaleRemitoFile(null);
             setSaleTruckDriver('');
             setSalePlateNumber('');
             setSaleDestination('');
@@ -1464,6 +1482,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     setSaleNote={setSaleNote}
                     saleFacturaFile={saleFacturaFile}
                     setSaleFacturaFile={setSaleFacturaFile}
+                    saleRemitoFile={saleRemitoFile}
+                    setSaleRemitoFile={setSaleRemitoFile}
                 />
             )}
 

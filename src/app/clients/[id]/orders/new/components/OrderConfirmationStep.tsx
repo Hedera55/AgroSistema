@@ -184,7 +184,7 @@ export function OrderConfirmationStep({
                 >
                     {stockShortages.length > 0
                         ? 'Confirmar de todas formas (Saldo Negativo)'
-                        : (containsSeeds ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Carga')}
+                        : (containsSeeds ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Trabajo')}
                 </Button>
             </div>
         </div>

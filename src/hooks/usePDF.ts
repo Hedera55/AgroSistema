@@ -58,7 +58,7 @@ export function usePDF() {
         doc.setTextColor(...darkEmerald);
         doc.setFontSize(22);
         const isSowing = order.items.some(i => i.productType === 'SEED');
-        doc.text(isSowing ? "ORDEN DE SIEMBRA" : "ORDEN DE CARGA", 61, 22, { align: 'left' });
+        doc.text(isSowing ? "ORDEN DE SIEMBRA" : "ORDEN DE TRABAJO", 61, 22, { align: 'left' });
 
         // Row 2: Antigravity text, Contact Info & Metadata
         doc.setFont("helvetica", "normal");
@@ -147,8 +147,7 @@ export function usePDF() {
                     ];
                 });
 
-                // Pad rows to look like a full form (minimum 4 rows)
-                while (seedRows.length < 4) seedRows.push(['', '', '', '']);
+
 
                 autoTable(doc, {
                     head: [seedColumns],
@@ -181,8 +180,7 @@ export function usePDF() {
                     ];
                 });
 
-                // Pad rows to look like a full form
-                while (otherRows.length < 8) otherRows.push(['', '', '', '', '']);
+
 
                 autoTable(doc, {
                     head: [otherColumns],
@@ -210,10 +208,7 @@ export function usePDF() {
                 formatCell(`${formatNumber(item.totalQuantity)} ${item.unit}`)
             ]);
 
-            // Add empty rows to match the look of the form
-            for (let i = tableRows.length; i < 8; i++) {
-                tableRows.push([formatCell("    "), formatCell("    "), formatCell("    "), formatCell("    "), formatCell("    ")]);
-            }
+
 
             autoTable(doc, {
                 head: [tableColumn],
@@ -293,27 +288,26 @@ export function usePDF() {
         doc.setDrawColor(0, 0, 0);
         doc.setFillColor(255, 255, 255);
         doc.setLineWidth(0.1);
-        doc.rect(14, lastY, respWidth, 28, 'FD');
+        doc.rect(14, lastY, respWidth, 16, 'FD');
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(0);
-        doc.text("RESPONSABLE TÉCNICO DE PRESCRIPCIÓN", 16, lastY + 6);
-
+        doc.text("RESPONSABLE TÉCNICO", 16, lastY + 6);
+ 
         doc.setFont("helvetica", "normal");
-        doc.text("NOMBRE:", 16, lastY + 12);
-        doc.text("REGISTRO:", 16, lastY + 18);
+        doc.text(order.technicalResponsible || '-', 48, lastY + 6);
 
         doc.setFont("helvetica", "bold");
-        doc.text("CONTRATISTA - CUIT:", 16, lastY + 24);
+        doc.text("CONTRATISTA - CUIT:", 16, lastY + 12);
 
         doc.setFont("helvetica", "normal");
-        const contractorText = `${order.applicatorName || '-'} ${applicatorCUIT ? `(${applicatorCUIT})` : ''}`;
-        doc.text(contractorText, 48, lastY + 24);
+        const contractorText = `${order.applicatorName || '-'}${applicatorCUIT ? ` - ${applicatorCUIT}` : ''}`;
+        doc.text(contractorText, 48, lastY + 12);
 
         // Signatures removed as per request
 
-        doc.save(`Orden_${isSowing ? 'Siembra' : 'Carga'}_${order.orderNumber || ''}.pdf`);
+        doc.save(`Orden_${isSowing ? 'Siembra' : 'Trabajo'}_${order.orderNumber || ''}.pdf`);
     };
 
     const generateInsumosPDF = async (order: Order, client: Client) => {

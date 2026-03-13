@@ -51,6 +51,9 @@ interface StockSalePanelProps {
     setSaleNote: (val: string) => void;
     saleFacturaFile: File | null;
     setSaleFacturaFile: (val: File | null) => void;
+    saleRemitoFile: File | null;
+    setSaleRemitoFile: (val: File | null) => void;
+    remitoUploading?: boolean;
 }
 
 export function StockSalePanel({
@@ -98,7 +101,10 @@ export function StockSalePanel({
     saleNote,
     setSaleNote,
     saleFacturaFile,
-    setSaleFacturaFile
+    setSaleFacturaFile,
+    saleRemitoFile,
+    setSaleRemitoFile,
+    remitoUploading
 }: StockSalePanelProps) {
     if (!stockItem) return null;
 
@@ -323,13 +329,43 @@ export function StockSalePanel({
                                 </button>
                             )}
                         </div>
+
+                        <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+                            <label htmlFor={`remito-upload-sale`} className="cursor-pointer text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 transition-colors">
+                                {saleRemitoFile ? (
+                                    <span className="text-emerald-700 underline underline-offset-4 truncate max-w-[150px] font-bold">{saleRemitoFile.name}</span>
+                                ) : (
+                                    "+ Adjuntar Remito"
+                                )}
+                            </label>
+                            <input
+                                id={`remito-upload-sale`}
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                        setSaleRemitoFile(e.target.files[0]);
+                                    }
+                                }}
+                                className="hidden"
+                            />
+                            {saleRemitoFile && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSaleRemitoFile(null)}
+                                    className="text-red-400 hover:text-red-600 font-bold px-1"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex justify-end">
                         <Button
                             type="submit"
                             size="sm"
-                            disabled={isSubmitting || facturaUploading}
+                            disabled={isSubmitting || facturaUploading || remitoUploading}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm h-9"
                         >
                             {isSubmitting ? 'Procesando...' : 'Confirmar Venta'}
