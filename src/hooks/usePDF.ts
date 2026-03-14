@@ -158,8 +158,8 @@ export function usePDF() {
                     margin: { left: 14, right: 14 },
                     headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
                     styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
-                    alternateRowStyles: { fillColor: [240, 248, 245] },
-                    bodyStyles: { fillColor: [220, 238, 230] },
+                    alternateRowStyles: { fillColor: [215, 235, 225] },
+                    bodyStyles: { fillColor: [235, 245, 240] },
                     columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 65 }, 2: { cellWidth: 52 }, 3: { cellWidth: 35 } }
                 });
                 lastY = (doc as any).lastAutoTable.finalY + 0;
@@ -191,8 +191,8 @@ export function usePDF() {
                     margin: { left: 14, right: 14 },
                     headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
                     styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
-                    alternateRowStyles: { fillColor: [240, 248, 245] },
-                    bodyStyles: { fillColor: [220, 238, 230] },
+                    alternateRowStyles: { fillColor: [215, 235, 225] },
+                    bodyStyles: { fillColor: [235, 245, 240] },
                     columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 45 }, 2: { cellWidth: 35 }, 3: { cellWidth: 30 }, 4: { cellWidth: 32 } }
                 });
                 lastY = (doc as any).lastAutoTable.finalY + 0;
@@ -241,8 +241,8 @@ export function usePDF() {
                 fontStyle: 'bold', 
                 textColor: 0, 
                 cellPadding: order.notes ? 2 : 1.2, 
-                lineColor: [150, 150, 150], 
-                lineWidth: 0.1 
+                lineColor: [0, 0, 0], 
+                lineWidth: 0.25 // Robust black border
             }
         });
         lastY = (doc as any).lastAutoTable.finalY + (order.notes ? 10 : 4);
@@ -289,24 +289,36 @@ export function usePDF() {
                 1: { cellWidth: 'auto' }
             },
             didParseCell: (data) => {
-                const isLotHeader = data.row.index === 1 && data.column.index === 0 && data.cell.text[0] === 'Lotes:';
-                const isLotRow = data.row.index > 0 && data.row.index <= lotRows.length;
-                
-                if (isLotRow && !isLotHeader) {
-                    data.cell.styles.fontStyle = 'normal';
-                }
-
-                if (isLotRow) {
+                if (data.section === 'body') {
                     const isFirstCol = data.column.index === 0;
                     const isLastCol = data.column.index === 1;
-                    const isLastLot = data.row.index === lotRows.length;
+                    const rowIndex = data.row.index;
+                    const rows = data.table.body;
+                    
+                    // Identify row by looking at the first cell of the current row
+                    const firstCellText = (rows[rowIndex].cells[0].text[0] || '').trim();
+                    const isCampoRow = firstCellText === 'Campo:';
+                    const isLotesHeader = firstCellText === 'Lotes:';
+                    const isTotalRow = firstCellText.includes('SUPERFICIE TOTAL');
+
+                    // Reset font for lot details
+                    if (!isCampoRow && !isLotesHeader && !isTotalRow) {
+                        data.cell.styles.fontStyle = 'normal';
+                    }
+
+                    // Border logic:
+                    // - top: on first row (below header), on 'Lotes:' row, and on 'SUPERFICIE TOTAL' row.
+                    // - bottom: on the very last row of the table.
+                    const needsTopLine = rowIndex === 0 || isLotesHeader || isTotalRow;
+                    const isLastRow = rowIndex === rows.length - 1;
 
                     data.cell.styles.lineWidth = {
-                        top: 0,
-                        bottom: isLastLot ? 0.1 : 0,
-                        left: isFirstCol ? 0.1 : 0,
-                        right: isLastCol ? 0.1 : 0
+                        top: needsTopLine ? 0.2 : 0, 
+                        bottom: isLastRow ? 0.2 : 0,
+                        left: isFirstCol ? 0.2 : 0,
+                        right: isLastCol ? 0.2 : 0
                     } as any;
+                    data.cell.styles.lineColor = [0, 0, 0];
                 }
             }
         });
@@ -459,7 +471,8 @@ export function usePDF() {
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
             styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
-            alternateRowStyles: { fillColor: [240, 248, 245] },
+            bodyStyles: { fillColor: [235, 245, 240] },
+            alternateRowStyles: { fillColor: [215, 235, 225] },
             columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 50 }, 2: { cellWidth: 60 }, 3: { cellWidth: 47 } }
         });
 
@@ -596,7 +609,8 @@ export function usePDF() {
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
             styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
-            alternateRowStyles: { fillColor: [240, 248, 245] }
+            bodyStyles: { fillColor: [235, 245, 240] },
+            alternateRowStyles: { fillColor: [215, 235, 225] }
         });
 
         // Signatures

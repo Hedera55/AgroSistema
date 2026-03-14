@@ -189,8 +189,8 @@ function WarehouseManagerInternal({
                                 <div className={`relative w-10 h-10 rounded-full flex items-center justify-center text-lg ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                     📦
                                     {defaultHarvestWarehouseId === w.id && (
-                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full p-0.5 shadow-sm" title="Galpón default de cosecha">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-normal shadow-sm" title="Galpón default de cosecha">
+                                            D
                                         </div>
                                     )}
                                 </div>

@@ -1117,10 +1117,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Inversión (USD)</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Monetario (USD)</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Asignada</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Retirada</th>
                             </tr>
@@ -1136,9 +1136,6 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${inv.isMain ? 'text-slate-900 border-l-4 border-emerald-500' : 'text-slate-400 pl-10'}`}>
                                             {inv.isMain ? inv.name : (idx > 0 && investorBreakdown[idx-1].name === inv.name ? '' : inv.name)}
                                         </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${inv.cropName === '-' ? 'text-slate-300' : 'text-slate-600 italic'}`}>
-                                            {inv.cropName}
-                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-600">
                                             {inv.isMain ? `${inv.percentage.toFixed(2)}%` : '-'}
                                         </td>
@@ -1147,6 +1144,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                         </td>
                                         <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold ${inv.shareValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                             {inv.isMain ? `${inv.shareValue < 0 ? '-USD ' : 'USD '}${Math.abs(inv.shareValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${inv.cropName === '-' ? 'text-slate-300' : 'text-slate-600 italic'}`}>
+                                            {inv.cropName}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-700">
                                             {inv.cropName !== '-' ? `${inv.assigned.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}

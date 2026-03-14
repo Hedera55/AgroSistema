@@ -264,6 +264,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         syncService.pushChanges();
     }, [client]);
 
+    // Auto-set "Acopio de Granos" as default if none set
+    useEffect(() => {
+        if (client && !client.defaultHarvestWarehouseId && warehouses.length > 0) {
+            const acopio = warehouses.find(w => w.name.trim().toLowerCase() === 'acopio de granos');
+            if (acopio) {
+                handleSetDefaultWarehouse(acopio.id);
+            }
+        }
+    }, [client, warehouses, handleSetDefaultWarehouse]);
+
     const handleAddWarehouse = React.useCallback(async (name: string) => {
         await addWarehouse(name);
     }, [addWarehouse]);
