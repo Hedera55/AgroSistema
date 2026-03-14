@@ -423,13 +423,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 <option value="SEMILLA">Semilla</option>
                             </select>
                         </div>
-                        {totalYieldNum > 0 && (
-                            <div className="flex items-end pb-2">
-                                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-100 px-2 py-1 rounded">
-                                    Rinde Estimado: {lot?.hectares ? Math.round(totalYieldNum / lot.hectares) : 'N/A'} kg/ha
-                                </span>
-                            </div>
-                        )}
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Contratista (Opcional)</label>
                             <select
@@ -750,6 +743,13 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
             {/* Footer Navigation */}
             <div className={`flex items-center mt-6 pt-3 border-t border-blue-100 ${step > 1 ? 'justify-between' : 'justify-end'}`}>
+                {step === 1 && totalYieldNum > 0 && (
+                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-100 px-2 py-1 rounded">
+                        Rinde Estimado: {lot?.hectares ? Math.round(totalYieldNum / lot.hectares) : 'N/A'} kg/ha
+                    </span>
+                )}
+
+                <div className="flex items-center gap-3 ml-auto">
                 <button
                     type="button"
                     onClick={() => {
@@ -782,6 +782,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                 >
                     {step < 4 ? 'Siguiente →' : isExecutingPlan ? 'Confirmar Cosecha' : 'Confirmar Cambios'}
                 </button>
+                </div>
             </div>
 
             </div>
