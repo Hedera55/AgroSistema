@@ -57,6 +57,7 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
   - Row 3: `Contratista / Chofer` | `Costo Labor / Flete` | `Pagado por`
 - **Label Colors**: Labels use `text-slate-400` while values use `text-slate-700` and `font-bold` for high contrast.
 - **Backgrounds**: Avoid full-section gray backgrounds (`bg-slate-50`) inside detail drawers to keep them integrated with the white floating panel look.
+- **Harvest Branding Convention**: For harvests marked as "Propia" (own seed/grain), the **Brand** (Marca) field MUST be set to the **Campaign Name** (e.g., "24 25"). This ensures that physical stock from different campaigns is correctly segregated and accounted for in the inventory without requiring separate product IDs.
 
 ### Stock Vender Box (`StockTable.tsx` / `StockSalePanel.tsx`)
 - **Square Buttons**: Fixed action buttons to `h-10 w-10` square format.
@@ -109,6 +110,15 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 
 ### Filtering Consistency
 - **Detailed Ledger Summary**: When filtering the detailed ledger by a specific partner, the summary boxes at the top (Expenditure/Income) MUST calculate based on that partner's **proportional stake** of the filtered rows, not the full row totals.
+
+### Grain Campaign Accounting (Physical Participation)
+- **Mixed-Mode Logic**: The accounting system supports two campaign modes: `MONEY` (monetary balance) and `GRAIN` (physical participation).
+- **Consolidated View**: When viewing "Todas las Campañas", the table displays:
+    - **Main Rows**: Aggregated monetary investment and "Saldo Monetario" (from `MONEY` campaigns).
+    - **Detailed Rows (per Crop)**: Physical totals of "Cosecha Asignada" and "Cosecha Retirada" (from `GRAIN` campaigns).
+- **Proportional Assignment**: In `GRAIN` mode, physical grain quantities are assigned to partners based on their **percentage stake in that specific campaign's investment**, not their global percentage.
+- **Withdrawals (Retiros)**: Physical withdrawals (`OUT` movements) are deducted from the partner's assigned grain balance for the specific crop and campaign.
+- **Revenue Attribution**: Sales revenue from grain is attributed to campaigns by matching the `campaignId` of the stock being sold.
 
 ### Pricing Logic & Fallbacks
 - **Actual Transactions**: Sales and Purchases use their specific confirmed invoice prices.

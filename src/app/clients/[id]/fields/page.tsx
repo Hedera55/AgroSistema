@@ -249,14 +249,20 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const handleMarkHarvested = async (lot: Lot, data: any) => {
         const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions } = data;
 
+        const campaign = campaigns.find(c => c.id === campaignId);
+        const campaignName = campaign?.name || 'Común'; // Fallback to 'Común' if no campaign name found
+        
         const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
         const productName = cropBaseName;
         const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
 
+        // Convention: Brand for Propia harvest is the Campaign Name
+        const propBrand = campaignName;
+
         let product = products.find(p =>
             p.name.toLowerCase() === productName.toLowerCase() &&
             p.type === productType &&
-            p.brandName === 'Propia' &&
+            p.brandName === propBrand &&
             p.clientId === id
         );
 
@@ -265,7 +271,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 clientId: id,
                 name: productName,
                 type: productType,
-                brandName: 'Propia',
+                brandName: propBrand,
                 commercialName: 'Propia',
                 unit: 'kg',
                 createdAt: new Date().toISOString(),
@@ -342,6 +348,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         warehouseId: dist.targetId,
                         campaignId: campaignId || undefined,
                         productId: product!.id,
+                        productBrand: propBrand, // Explicitly set campaign-based brand
                         quantity: currentQty + dist.amount,
                         lastUpdated: new Date().toISOString()
                     });
@@ -354,6 +361,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     warehouseId: dist.type === 'WAREHOUSE' ? dist.targetId : undefined,
                     productId: product!.id,
                     productName: product!.name,
+                    productBrand: propBrand, // Explicitly set campaign-based brand
                     type: 'HARVEST',
                     quantity: dist.amount,
                     unit: product!.unit,

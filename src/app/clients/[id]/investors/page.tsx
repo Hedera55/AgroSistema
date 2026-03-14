@@ -212,34 +212,47 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         let investedMovements = 0;
         let serviceCosts = 0;
         let sold = 0;
-        const perPartner: Record<string, number> = {};
+        
+        const perPartner: Record<string, number> = {}; // Monetary investment per partner (current view)
+        const perPartnerIncome: Record<string, number> = {}; // Monetary income (sales) per partner (current view)
+
+        // Tracking for grain logic
+        const investmentByCampaignPartner: Record<string, Record<string, number>> = {}; // [campaignId][partnerName] = USD
+        const totalInvestmentByCampaign: Record<string, number> = {}; // [campaignId] = USD
+        const harvestByCampaignCrop: Record<string, Record<string, number>> = {}; // [campaignId][crop] = KG
+        const withdrawalsByPartnerCrop: Record<string, Record<string, number>> = {}; // [partnerName][crop] = KG (physical OUT)
+
+        // Helper to normalize partner names
+        const getPartnerName = (name?: string) => {
+            if (!name) return 'Sin Asignar';
+            let pName = name;
+            if (pName.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(pName);
+                    if (parsed && parsed.name) pName = parsed.name;
+                } catch (e) { }
+            }
+            if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') return 'Sin Asignar';
+            return pName;
+        };
+
+        const currentCampaigns = campaigns.filter(c => viewCampaignId === 'all' || c.id === viewCampaignId);
 
         movements.forEach((m: InventoryMovement) => {
-            // Filter by campaign if selected
+            if (m.deleted) return;
             if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
 
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
 
-            // Normalize Name Helper
-            const getPartnerName = (name?: string) => {
-                if (!name) return 'Sin Asignar';
-                let pName = name;
-                if (pName.startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(pName);
-                        if (parsed && parsed.name) pName = parsed.name;
-                    } catch (e) { }
-                }
-                // Consolidate "Sin asignar" naming
-                if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') return 'Sin Asignar';
-                return pName;
-            };
+            const campaign = campaigns.find(c => c.id === m.campaignId);
+            const campaignMode = campaign?.mode || 'MONEY';
 
-            // Support both legacy (IN) and new types (PURCHASE/SALE/SERVICE)
-            if (m.type === 'IN' || m.type === 'PURCHASE') {
+            if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
                 let amount = 0;
-                if (m.productId === 'CONSOLIDATED' && m.items) {
+                if (m.type === 'SERVICE') {
+                    amount = m.amount || (m.quantity * (m.purchasePrice || 0));
+                } else if (m.productId === 'CONSOLIDATED' && m.items) {
                     amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                 } else {
                     amount = m.quantity * (m.purchasePrice || 0);
@@ -247,77 +260,91 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
                 if (amount > 0) {
                     investedMovements += amount;
-                    // Handle Splits
-                    if (m.investors && m.investors.length > 0) {
-                        m.investors.forEach((inv: { name: string; percentage: number }) => {
-                            const pName = getPartnerName(inv.name);
-                            const pAmount = amount * (inv.percentage / 100);
-                            perPartner[pName] = (perPartner[pName] || 0) + pAmount;
-                        });
-                    } else {
-                        const pName = getPartnerName(m.investorName);
-                        perPartner[pName] = (perPartner[pName] || 0) + amount;
-                    }
+                    const distributors = (m.investors && m.investors.length > 0) 
+                        ? m.investors.map(inv => ({ name: getPartnerName(inv.name), amount: amount * (inv.percentage / 100) }))
+                        : [{ name: getPartnerName(m.investorName), amount }];
+
+                    distributors.forEach(d => {
+                        perPartner[d.name] = (perPartner[d.name] || 0) + d.amount;
+                        if (m.campaignId) {
+                            if (!investmentByCampaignPartner[m.campaignId]) investmentByCampaignPartner[m.campaignId] = {};
+                            investmentByCampaignPartner[m.campaignId][d.name] = (investmentByCampaignPartner[m.campaignId][d.name] || 0) + d.amount;
+                            totalInvestmentByCampaign[m.campaignId] = (totalInvestmentByCampaign[m.campaignId] || 0) + d.amount;
+                        }
+                    });
                 }
             } else if (m.type === 'SALE') {
-                sold += (m.quantity * (m.salePrice || 0));
-            } else if (m.type === 'SERVICE') {
-                // Ad-hoc service payments (monetary)
-                const amount = m.amount || (m.quantity * (m.purchasePrice || 0));
-                if (amount > 0) {
-                    investedMovements += amount;
-                    // Handle Splits
-                    if (m.investors && m.investors.length > 0) {
-                        m.investors.forEach((inv: { name: string; percentage: number }) => {
-                            const pName = getPartnerName(inv.name);
-                            const pAmount = amount * (inv.percentage / 100);
-                            perPartner[pName] = (perPartner[pName] || 0) + pAmount;
-                        });
-                    } else {
-                        const pName = getPartnerName(m.investorName);
-                        perPartner[pName] = (perPartner[pName] || 0) + amount;
-                    }
+                const saleValue = (m.quantity * (m.salePrice || 0));
+                sold += saleValue;
+                
+                // Income distribution: Sales income is distributed proportionally to investment in that campaign
+                if (m.campaignId && totalInvestmentByCampaign[m.campaignId] > 0) {
+                    const campaignId = m.campaignId;
+                    const cInvestment = investmentByCampaignPartner[campaignId] || {};
+                    Object.entries(cInvestment).forEach(([pName, pInvested]) => {
+                        const ratio = pInvested / totalInvestmentByCampaign[campaignId];
+                        perPartnerIncome[pName] = (perPartnerIncome[pName] || 0) + (saleValue * ratio);
+                    });
+                } else {
+                    // Fallback to "Sin Asignar" if no campaign or no investment detected
+                    perPartnerIncome['Sin Asignar'] = (perPartnerIncome['Sin Asignar'] || 0) + saleValue;
                 }
+            } else if (m.type === 'OUT' && m.campaignId) {
+                // Physical withdrawal from a campaign
+                const pName = getPartnerName(m.receiverName || m.investorName);
+                const crop = m.productName || 'Granos';
+                if (!withdrawalsByPartnerCrop[pName]) withdrawalsByPartnerCrop[pName] = {};
+                withdrawalsByPartnerCrop[pName][crop] = (withdrawalsByPartnerCrop[pName][crop] || 0) + m.quantity;
+            } else if (m.type === 'HARVEST' && m.campaignId) {
+                // Tracking total harvest for grain allocation
+                const crop = m.productName || 'Granos';
+                if (!harvestByCampaignCrop[m.campaignId]) harvestByCampaignCrop[m.campaignId] = {};
+                harvestByCampaignCrop[m.campaignId][crop] = (harvestByCampaignCrop[m.campaignId][crop] || 0) + m.quantity;
             }
         });
 
         orders.forEach((o: Order) => {
-            // Filter by campaign if selected
+            if (o.deleted) return;
             if (viewCampaignId !== 'all' && o.campaignId !== viewCampaignId) return;
 
             if (o.servicePrice && o.servicePrice > 0) {
                 const amount = (o.servicePrice * o.treatedArea);
                 serviceCosts += amount;
 
-                // Handle Splits
-                if (o.investors && o.investors.length > 0) {
-                    o.investors.forEach((inv: { name: string; percentage: number }) => {
-                        let pName = inv.name || 'Sin Asignar';
-                        if (pName.startsWith('{')) {
-                            try {
-                                const parsed = JSON.parse(pName);
-                                if (parsed && parsed.name) pName = parsed.name;
-                            } catch (e) { }
-                        }
-                        if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') pName = 'Sin Asignar';
+                const distributors = (o.investors && o.investors.length > 0)
+                    ? o.investors.map(inv => ({ name: getPartnerName(inv.name), amount: amount * (inv.percentage / 100) }))
+                    : [{ name: getPartnerName(o.investorName), amount }];
 
-                        const pAmount = amount * (inv.percentage / 100);
-                        perPartner[pName] = (perPartner[pName] || 0) + pAmount;
-                    });
-                } else {
-                    // Legacy single name field
-                    let pName = o.investorName || 'Sin Asignar';
-                    if (pName.startsWith('{')) {
-                        try {
-                            const parsed = JSON.parse(pName);
-                            if (parsed && parsed.name) pName = parsed.name;
-                        } catch (e) { }
+                distributors.forEach(d => {
+                    perPartner[d.name] = (perPartner[d.name] || 0) + d.amount;
+                    if (o.campaignId) {
+                        if (!investmentByCampaignPartner[o.campaignId]) investmentByCampaignPartner[o.campaignId] = {};
+                        investmentByCampaignPartner[o.campaignId][d.name] = (investmentByCampaignPartner[o.campaignId][d.name] || 0) + d.amount;
+                        totalInvestmentByCampaign[o.campaignId] = (totalInvestmentByCampaign[o.campaignId] || 0) + d.amount;
                     }
-                    if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') pName = 'Sin Asignar';
-
-                    perPartner[pName] = (perPartner[pName] || 0) + amount;
-                }
+                });
             }
+        });
+
+        // Derive grain assignments per partner
+        const grainAssignments: Record<string, Record<string, number>> = {}; // [partner][crop] = KG
+        Object.keys(investmentByCampaignPartner).forEach(campId => {
+            const campaignInfo = campaigns.find(c => c.id === campId);
+            if (!campaignInfo || campaignInfo.mode !== 'GRAIN') return;
+
+            const cInvestments = investmentByCampaignPartner[campId];
+            const cTotalInvest = totalInvestmentByCampaign[campId];
+            const cHarvests = harvestByCampaignCrop[campId] || {};
+
+            if (cTotalInvest <= 0) return;
+
+            Object.entries(cHarvests).forEach(([crop, totalKg]) => {
+                Object.entries(cInvestments).forEach(([pName, pInvested]) => {
+                    const ratio = pInvested / cTotalInvest;
+                    if (!grainAssignments[pName]) grainAssignments[pName] = {};
+                    grainAssignments[pName][crop] = (grainAssignments[pName][crop] || 0) + (totalKg * ratio);
+                });
+            });
         });
 
         const totalInvested = investedMovements + serviceCosts;
@@ -329,28 +356,22 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             let cSold = 0;
 
             movements.forEach(m => {
+                if (m.deleted) return;
                 if (m.campaignId !== c.id) return;
                 const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
                 if (isTransfer) return;
 
                 if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
-                    if (m.type === 'SERVICE') {
-                        cInvested += m.amount || (m.quantity * (m.purchasePrice || 0));
-                    } else if (m.productId === 'CONSOLIDATED' && m.items) {
-                        cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
-                    } else {
-                        cInvested += m.quantity * (m.purchasePrice || 0);
-                    }
-                } else if (m.type === 'SALE') {
-                    cSold += (m.quantity * (m.salePrice || 0));
-                }
+                    if (m.type === 'SERVICE') cInvested += m.amount || (m.quantity * (m.purchasePrice || 0));
+                    else if (m.productId === 'CONSOLIDATED' && m.items) cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                    else cInvested += m.quantity * (m.purchasePrice || 0);
+                } else if (m.type === 'SALE') cSold += (m.quantity * (m.salePrice || 0));
             });
 
             orders.forEach(o => {
+                if (o.deleted) return;
                 if (o.campaignId !== c.id) return;
-                if (o.servicePrice && o.servicePrice > 0) {
-                    cInvested += (o.servicePrice * o.treatedArea);
-                }
+                if (o.servicePrice && o.servicePrice > 0) cInvested += (o.servicePrice * o.treatedArea);
             });
 
             perCampaign[c.id] = { invested: cInvested, sold: cSold, total: cSold - cInvested };
@@ -362,7 +383,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             totalInvested,
             sold,
             total: sold - totalInvested,
-            perPartner,
+            perPartner, // Total investment in current view
+            perPartnerIncome, // Total sales income in current view
+            grainAssignments,
+            withdrawalsByPartnerCrop,
             perCampaign
         };
     }, [movements, products, orders, viewCampaignId, campaigns]);
@@ -563,34 +587,72 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
     const investorBreakdown = useMemo(() => {
         const partnersMap = stats.perPartner;
+        const incomeMap = stats.perPartnerIncome;
         const totalInvested = stats.totalInvested || 0;
 
-        // Ensure all defined partners are shown
-        const breakdown = partners.map(p => {
-            const amount = partnersMap[p.name] || 0;
+        // Base rows: Main financial summary per partner
+        const constRows: any[] = [];
+        
+        // Detailed rows: Grain activity per crop
+        const grainRows: any[] = [];
+
+        // All potential partners
+        const allPartnerNames = new Set([
+            ...partners.map(p => p.name),
+            ...Object.keys(partnersMap),
+            ...Object.keys(stats.grainAssignments),
+            ...Object.keys(stats.withdrawalsByPartnerCrop)
+        ]);
+
+        allPartnerNames.forEach(pName => {
+            if (!pName) return;
+            const amount = partnersMap[pName] || 0;
+            const income = incomeMap[pName] || 0;
             const percentage = totalInvested > 0 ? (amount / totalInvested) * 100 : 0;
-            return {
-                name: p.name,
+            
+            // Add Main row
+            constRows.push({
+                name: pName,
+                cropName: '-', // Main row indicator
                 percentage,
-                shareValue: totalInvested > 0 ? (stats.total * percentage) / 100 : 0,
-                shareInvestment: amount
-            };
+                shareInvestment: amount,
+                shareValue: income - amount,
+                assigned: 0,
+                withdrawn: 0,
+                isMain: true
+            });
+
+            // Add Grain rows
+            const gAssigned = stats.grainAssignments[pName] || {};
+            const gWithdrawn = stats.withdrawalsByPartnerCrop[pName] || {};
+            const crops = new Set([...Object.keys(gAssigned), ...Object.keys(gWithdrawn)]);
+
+            crops.forEach(crop => {
+                grainRows.push({
+                    name: pName,
+                    cropName: crop,
+                    percentage: 0, // Individual crops don't show collective %
+                    shareInvestment: 0,
+                    shareValue: 0,
+                    assigned: gAssigned[crop] || 0,
+                    withdrawn: gWithdrawn[crop] || 0,
+                    isMain: false
+                });
+            });
         });
 
-        // Add "Sin Asignar" if it has balance and is not in partners
-        if (partnersMap['Sin Asignar']) {
-            const amount = partnersMap['Sin Asignar'];
-            const percentage = totalInvested > 0 ? (amount / totalInvested) * 100 : 0;
-            breakdown.push({
-                name: 'Sin Asignar',
-                percentage,
-                // Sin asignar doesn't participate in profit, only bears its specific expenses
-                shareValue: -amount,
-                shareInvestment: amount
-            });
-        }
+        // Merge and sort
+        // We want: Socio A (Main), Socio A (Crop 1), Socio A (Crop 2), Socio B (Main)...
+        const finalRows: any[] = [];
+        const sortedPartners = constRows.sort((a, b) => b.shareInvestment - a.shareInvestment);
+        
+        sortedPartners.forEach(pMain => {
+            finalRows.push(pMain);
+            const pGrains = grainRows.filter(gr => gr.name === pMain.name);
+            finalRows.push(...pGrains);
+        });
 
-        return breakdown.sort((a, b) => b.shareInvestment - a.shareInvestment);
+        return finalRows;
     }, [stats, partners]);
 
     if (loading || movementsLoading || productsLoading || ordersLoading) {
@@ -1050,42 +1112,54 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto" ref={partnersScrollRef}>
-                        <table className="min-w-full divide-y divide-slate-200">
-                            <thead className="bg-slate-50">
+                <div className="overflow-x-auto" ref={partnersScrollRef}>
+                    <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Inversión (USD)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Monetario (USD)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Asignada</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Retirada</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                            {investorBreakdown.length === 0 ? (
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación en la inversión</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación saldo de la empresa</th>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-slate-400 italic">No hay inversores registrados para esta empresa o campaña.</td>
                                 </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-slate-200">
-                                {investorBreakdown.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={3} className="px-6 py-8 text-center text-slate-400 italic">No hay inversores registrados para esta empresa.</td>
+                            ) : (
+                                investorBreakdown.map((inv, idx) => (
+                                    <tr key={idx} className={`hover:bg-slate-50 transition-colors ${inv.isMain ? 'bg-white' : 'bg-slate-50/20'}`}>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${inv.isMain ? 'text-slate-900 border-l-4 border-emerald-500' : 'text-slate-400 pl-10'}`}>
+                                            {inv.isMain ? inv.name : (idx > 0 && investorBreakdown[idx-1].name === inv.name ? '' : inv.name)}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${inv.cropName === '-' ? 'text-slate-300' : 'text-slate-600 italic'}`}>
+                                            {inv.cropName}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-600">
+                                            {inv.isMain ? `${inv.percentage.toFixed(2)}%` : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-red-600">
+                                            {inv.isMain ? `-USD ${inv.shareInvestment.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold ${inv.shareValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {inv.isMain ? `${inv.shareValue < 0 ? '-USD ' : 'USD '}${Math.abs(inv.shareValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-700">
+                                            {inv.cropName !== '-' ? `${inv.assigned.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-orange-600">
+                                            {inv.cropName !== '-' ? `${inv.withdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
+                                        </td>
                                     </tr>
-                                ) : (
-                                    investorBreakdown.map((inv, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                                                {inv.name}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-600">
-                                                {inv.percentage.toFixed(2)}%
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-red-600">
-                                                -USD {inv.shareInvestment.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                            <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold ${inv.shareValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                USD {inv.shareValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
                 )}
             </div>
 

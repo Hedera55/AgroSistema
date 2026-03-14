@@ -963,6 +963,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 date: new Date().toISOString().split('T')[0],
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 referenceId: `SALE-${generateId()}`,
+                campaignId: stockItem.campaignId, // Propagate campaign from stock
                 notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
                 facturaImageUrl: facturaUrl || undefined,
                 remitoImageUrl: remitoUrl || undefined,
@@ -1046,6 +1047,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 date: dateStr,
                 time: timeStr,
                 referenceId: `MOVE-${now.getTime()}`,
+                campaignId: stockRecord.campaignId, // Propagate campaign from stock
                 notes: `${action === 'WITHDRAW' ? 'Retiro de stock' : 'Traslado a ' + (warehouses.find(w => w.id === destinationWarehouseId)?.name || 'galpón')} - ${stockRecord.presentationLabel || ''} ${stockRecord.presentationContent || ''} - ${note || ''}`,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
@@ -1085,6 +1087,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     await updateStock({
                         ...existingDestItem,
                         quantity: existingDestItem.quantity + qtyToMove,
+                        campaignId: stockRecord.campaignId, // Ensure campaignId is preserved
                         lastUpdated: now.toISOString()
                     });
                 } else {
@@ -1098,6 +1101,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         presentationContent: stockRecord.presentationContent,
                         presentationAmount: 0, // Not relevant for moved items total
                         quantity: qtyToMove,
+                        campaignId: stockRecord.campaignId, // Propagate campaign from stock
                         lastUpdated: now.toISOString()
                     });
                 }
@@ -1117,6 +1121,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     date: dateStr,
                     time: timeStr,
                     referenceId: `MOVE-${now.getTime()}`,
+                    campaignId: stockRecord.campaignId, // Propagate campaign from stock
                     notes: `Transferencia desde ${warehouse?.name || 'Galpón'} - ${stockRecord.presentationLabel || ''} ${stockRecord.presentationContent || ''} - ${note || ''}`,
                     createdBy: displayName || 'Sistema',
                     createdAt: now.toISOString(),
