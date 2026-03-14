@@ -904,6 +904,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
             // Record Movement
             const movementId = generateId();
+            let facturaUrl = '';
             if (saleFacturaFile) {
                 setFacturaUploading(true);
                 const fileExt = saleFacturaFile.name.split('.').pop();

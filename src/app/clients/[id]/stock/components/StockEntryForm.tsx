@@ -160,6 +160,7 @@ interface StockEntryFormProps {
     selectedCampaignId?: string;
     setSelectedCampaignId?: (id: string) => void;
     isEditing?: boolean;
+    isSubmitting?: boolean;
 }
 
 const StockEntryFormInternal = memo(({
@@ -214,7 +215,8 @@ const StockEntryFormInternal = memo(({
     sellerInputValue,
     setSellerInputValue,
     handleAddSeller,
-    availableSellers
+    availableSellers,
+    isSubmitting
 }: StockEntryFormProps) => {
     // Visibility is now controlled by the parent conditional
 
