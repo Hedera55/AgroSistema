@@ -624,7 +624,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 onChange={e => updateLogistics(activeTabId, 'distanceKm', parseFloat(e.target.value))}
                             />
                             <Input
-                                label="Tarifa Flete ($)"
+                                label="Tarifa Flete (USD)"
                                 type="number"
                                 placeholder="0"
                                 value={getLogisticsValue(activeTabId, 'freightTariff')}

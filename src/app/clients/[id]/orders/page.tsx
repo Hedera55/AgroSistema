@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useMemo, useRef } from 'react';
+import React, { use, useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
@@ -50,18 +50,14 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     const [tempPrice, setTempPrice] = useState('');
     const [tempInvestor, setTempInvestor] = useState('');
     const [isApplyingFromStatus, setIsApplyingFromStatus] = useState(false);
-     const [selectedOrderDetailOrder, setSelectedOrderDetailOrder] = useState<Order | null>(null);
-     const detailsRef = useRef<HTMLDivElement>(null);
-     const wizardRef = useRef<HTMLDivElement>(null);
-     const [isCreatingOrder, setIsCreatingOrder] = useState(false);
-     const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    const detailsRef = useRef<HTMLDivElement>(null);
+    const wizardRef = useRef<HTMLDivElement>(null);
+    const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+    const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
 
-    useEffect(() => {
-        if (selectedOrderDetailOrder && detailsRef.current) {
-            detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }, [selectedOrderDetailOrder]);
+    // Simplified: No automatic scrolling to details
 
     useEffect(() => {
         if ((isCreatingOrder || editingOrderId) && wizardRef.current) {
@@ -145,6 +141,11 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             };
         }); // The hook already sorts by date
     }, [rawOrders, farms, lots, loading, role, profile]);
+
+    const selectedOrderDetailOrder = useMemo(() => {
+        if (!selectedOrderId) return null;
+        return orders.find(o => o.id === selectedOrderId) || null;
+    }, [orders, selectedOrderId]);
 
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
     const [statusPopupOrder, setStatusPopupOrder] = useState<Order | null>(null);
@@ -362,195 +363,238 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Nro de orden</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha Emisión</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha de aplicación efectiva</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Ubicación</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Tipo</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Estado</th>
-                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Costo de labor</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Fecha de aplicación planeada</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Autor</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Acciones</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Nro de orden</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Fecha Emisión</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold text-emerald-600">Fecha Efectiva</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Ubicación</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Tipo</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Insumos</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Estado</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Fecha Planeada</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Costo de labor</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Pagado por</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap font-bold">Autor</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase font-bold">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">
                                 {orders.slice(0, ordersLimit).map(order => (
-                                    <tr
-                                        key={order.id}
-                                        className={`hover:bg-slate-50 border-b border-slate-100 transition-colors group cursor-pointer ${selectedOrderDetailOrder?.id === order.id ? 'bg-emerald-50/50 hover:bg-emerald-50' : ''}`}
-                                        onClick={() => setSelectedOrderDetailOrder(order)}
-                                    >
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                                            {order.orderNumber || '---'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            <div>{formatDate(order.date)}</div>
-                                            <div className="text-xs text-slate-400 font-normal">{order.time || '--:--'}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
-                                            {formatDate(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                            <div className="font-medium text-slate-800">
-                                                {order.lotName} (
-                                                {order.treatedArea && order.treatedArea < (order as any).totalHectares 
-                                                    ? `${order.treatedArea}/${(order as any).totalHectares}` 
-                                                    : order.treatedArea || (order as any).totalHectares} ha)
-                                            </div>
-                                            <div className="text-xs text-slate-400">{order.farmName}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            {order.type === 'SOWING' ? (
-                                                <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
-                                            ) : order.type === 'HARVEST' ? (
-                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Cosecha</span>
-                                            ) : (
-                                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
-                                            <button
-                                                onClick={() => (!isReadOnly || role === 'CONTRATISTA') && handleToggleStatus(order.id)}
-                                                className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${(!isReadOnly || role === 'CONTRATISTA') ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
-                                         ${order.status === 'DONE' ? 'bg-green-100 text-green-800' :
-                                                        (order.status === 'PENDING' && isExpired(order.date)) ? 'bg-red-100 text-red-800' :
-                                                            order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                                                'bg-gray-100 text-gray-800'}`}
-                                                title={isReadOnly ? '' : "Click para cambiar estado"}
-                                            >
-                                                {order.status === 'DONE' ? (order.type === 'HARVEST' ? 'COSECHADA' : 'APLICADA') :
-                                                    (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
-                                                        order.status === 'PENDING' ? 'PENDIENTE' :
-                                                            order.status === 'CONFIRMED' ? 'PLANIFICADA' :
-                                                                order.status}
-                                            </button>
-                                        </td>
-                                        <td
-                                            className="px-6 py-4 whitespace-nowrap text-right font-mono cursor-pointer hover:bg-slate-100 transition-colors"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEditPrice(order.id, order.servicePrice);
-                                            }}
+                                    <React.Fragment key={order.id}>
+                                        <tr
+                                            className={`hover:bg-slate-50 border-b border-slate-100 transition-colors group cursor-pointer ${selectedOrderId === order.id ? 'bg-emerald-50/50 hover:bg-emerald-50' : ''}`}
+                                            onClick={() => setSelectedOrderId(prev => prev === order.id ? null : order.id)}
                                         >
-                                            {order.servicePrice && order.servicePrice > 0 ? (
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-slate-900 font-bold text-sm">
-                                                        USD {(order.servicePrice * (order.treatedArea || (order as any).totalHectares || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </span>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
+                                                {order.orderNumber || '---'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">
+                                                <div>{formatDate(order.date)}</div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-600 font-bold">
+                                                {formatDate(order.appliedAt) || <span className="text-slate-300 font-normal">---</span>}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                                                <div className="font-medium text-slate-800">
+                                                    {order.lotName} (
+                                                    {order.treatedArea && order.treatedArea < (order as any).totalHectares 
+                                                        ? `${order.treatedArea}/${(order as any).totalHectares}` 
+                                                        : order.treatedArea || (order as any).totalHectares} ha)
                                                 </div>
-                                            ) : order.status === 'DONE' ? (
-                                                <span className="text-red-500 italic text-[10px] font-bold hover:underline">Falta el costo</span>
-                                            ) : (
-                                                <span className="text-slate-300">---</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
-                                            <div className="text-slate-600 font-normal">
+                                                <div className="text-xs text-slate-400">{order.farmName}</div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                {order.type === 'SOWING' ? (
+                                                    <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Siembra</span>
+                                                ) : order.type === 'HARVEST' ? (
+                                                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Cosecha</span>
+                                                ) : (
+                                                    <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold uppercase">Pulverización</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                                                {order.items && order.items.length > 1 ? (
+                                                    <span>MÚLTIPLES</span>
+                                                ) : order.items && order.items.length === 1 ? (
+                                                    <span>{order.items[0].productName}</span>
+                                                ) : '---'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
+                                                <button
+                                                    onClick={() => (!isReadOnly || role === 'CONTRATISTA') && handleToggleStatus(order.id)}
+                                                    className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${(!isReadOnly || role === 'CONTRATISTA') ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default'}
+                                             ${order.status === 'DONE' ? 'bg-green-100 text-green-800' :
+                                                            (order.status === 'PENDING' && isExpired(order.date)) ? 'bg-red-100 text-red-800' :
+                                                                order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                                                    'bg-gray-100 text-gray-800'}`}
+                                                    title={isReadOnly ? '' : "Click para cambiar estado"}
+                                                >
+                                                    {order.status === 'DONE' ? (order.type === 'HARVEST' ? 'COSECHADA' : 'APLICADA') :
+                                                        (order.status === 'PENDING' && isExpired(order.date)) ? 'FECHA PASADA' :
+                                                            order.status === 'PENDING' ? 'PENDIENTE' :
+                                                                order.status === 'CONFIRMED' ? 'PLANIFICADA' :
+                                                                    order.status}
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
                                                 {order.isDateRange ? (
                                                     `${order.applicationStart?.split('-').reverse().join('/')} al ${order.applicationEnd?.split('-').reverse().join('/')}`
                                                 ) : (
-                                                    order.applicationDate?.split('-').reverse().join('/')
+                                                    order.applicationDate?.split('-').reverse().join('/') || '---'
                                                 )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
-                                            {order.createdBy || 'Sistema'}
-                                        </td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
-                                            <div className="grid grid-cols-3 gap-1 w-fit ml-auto">
-                                                <div className="relative group/tooltip">
-                                                    <button
-                                                        onClick={() => client && generateInsumosPDF(order, client)}
-                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
-                                                    >
-                                                        N
-                                                    </button>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Necesidad de Insumos
-                                                    </div>
+                                            </td>
+                                            <td
+                                                className="px-6 py-4 whitespace-nowrap text-center font-mono cursor-pointer hover:bg-slate-100 transition-colors"
+                                                onClick={(e) => { e.stopPropagation(); setPriceModalOrder(order); setTempPrice(order.servicePrice?.toString() || ''); setTempInvestor(order.investorName || ''); }}
+                                            >
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-slate-900 font-bold text-sm">
+                                                        {(order.servicePrice !== undefined) ? `USD ${(order.servicePrice * order.treatedArea).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '---'}
+                                                    </span>
                                                 </div>
-
-                                                <div className="relative group/tooltip">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (order.remitoImageUrl) {
-                                                                window.open(order.remitoImageUrl, '_blank');
-                                                            } else if (client) {
-                                                                generateRemitoPDF(order, client);
-                                                            }
-                                                        }}
-                                                        className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
-                                                    >
-                                                        R
-                                                    </button>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
-                                                    </div>
-                                                </div>
-
-                                                <div className="relative group/tooltip">
-                                                    <button
-                                                        onClick={() => handleDownload(order)}
-                                                        className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-slate-100 text-slate-500 hover:bg-slate-200"
-                                                    >
-                                                        O
-                                                    </button>
-                                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        Orden de Trabajo
-                                                    </div>
-                                                </div>
-
-                                                <div className="relative group/tooltip">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedOrderDetailOrder(order);
-                                                        }}
-                                                        className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
-                                                    >
-                                                        F
-                                                    </button>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                        {order.facturaImageUrl ? 'Ver Factura' : 'Cargar Factura'}
-                                                    </div>
-                                                </div>
-
-                                                {!isReadOnly && (
-                                                    <>
-                                                        <div className="relative group/tooltip">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setIsCreatingOrder(false);
-                                                                    setEditingOrderId(order.id);
-                                                                }}
-                                                                className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                                                            >
-                                                                ✎
-                                                            </button>
-                                                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                                Editar
-                                                            </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold uppercase tracking-tight text-[10px]">
+                                                {order.investorName && !(order.investors && order.investors.length > 1) ? order.investorName : (order.investors && order.investors.length > 1 ? (
+                                                    <span>MÚLTIPLES</span>
+                                                ) : order.investors && order.investors.length === 1 ? (
+                                                    <span>{order.investors[0].name}</span>
+                                                ) : '---')}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-slate-600">
+                                                {order.createdBy || '---'}
+                                            </td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
+                                                <div className="grid grid-cols-3 gap-1 w-fit ml-auto">
+                                                    <div className="relative group/tooltip">
+                                                        <button
+                                                            onClick={() => client && generateInsumosPDF(order, client)}
+                                                            className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200"
+                                                        >
+                                                            N
+                                                        </button>
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            Necesidad de Insumos
                                                         </div>
+                                                    </div>
 
-                                                        <div className="relative group/tooltip">
-                                                            <button
-                                                                onClick={() => handleDeleteOrder(order.id)}
-                                                                className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-700"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                                Eliminar
-                                                            </div>
+                                                    <div className="relative group/tooltip">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (order.remitoImageUrl) {
+                                                                    window.open(order.remitoImageUrl, '_blank');
+                                                                } else if (client) {
+                                                                    generateRemitoPDF(order, client);
+                                                                }
+                                                            }}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
+                                                        >
+                                                            R
+                                                        </button>
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
                                                         </div>
-                                                    </>
+                                                    </div>
+
+                                                    <div className="relative group/tooltip">
+                                                        <button
+                                                            onClick={() => handleDownload(order)}
+                                                            className="w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                                        >
+                                                            O
+                                                        </button>
+                                                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            Orden de Trabajo
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="relative group/tooltip">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedOrderId(prev => prev === order.id ? null : order.id);
+                                                            }}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
+                                                        >
+                                                            F
+                                                        </button>
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                            {order.facturaImageUrl ? 'Ver Factura' : 'Cargar Factura'}
+                                                        </div>
+                                                    </div>
+
+                                                    {!isReadOnly && (
+                                                        <>
+                                                            <div className="relative group/tooltip">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setIsCreatingOrder(false);
+                                                                        setEditingOrderId(order.id);
+                                                                    }}
+                                                                    className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                                                                >
+                                                                    ✎
+                                                                </button>
+                                                                <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                                    Editar
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="relative group/tooltip">
+                                                                <button
+                                                                    onClick={() => handleDeleteOrder(order.id)}
+                                                                    className="w-6 h-6 flex items-center justify-center rounded-md text-xs transition-colors bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-700"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                                <div className="absolute bottom-full right-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
+                                                                    Eliminar
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {selectedOrderId === order.id && (
+                                            <>
+                                                {/* Insumos Breakdown */}
+                                                {order.items && order.items.length > 1 && (
+                                                    <tr className="bg-emerald-50/40 text-[11px] border-b border-emerald-100/50">
+                                                        <td colSpan={5} className="py-2 bg-emerald-50/40"></td>
+                                                        <td colSpan={7} className="px-6 py-4 bg-emerald-50/40">
+                                                            <div className="flex flex-col gap-1.5 border-l-2 border-emerald-500/40 pl-4">
+                                                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desglose de Insumos</div>
+                                                                {order.items.map((item, i) => (
+                                                                    <div key={i} className="flex justify-between items-center text-slate-700 min-w-[200px]">
+                                                                        <span className="font-bold">{item.productName}</span>
+                                                                        <span className="font-mono text-emerald-600 font-bold ml-6 lowercase">{item.dosage} {item.unit}/ha</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
                                                 )}
-                                            </div>
-                                        </td>
-                                    </tr>
+                                                {/* Payors Breakdown */}
+                                                {order.investors && order.investors.length > 1 && (
+                                                    <tr className="bg-emerald-50/40 text-[11px] border-b border-emerald-100/50">
+                                                        <td colSpan={9} className="py-2 bg-emerald-50/40"></td>
+                                                        <td colSpan={3} className="px-6 py-4 bg-emerald-50/40">
+                                                            <div className="flex flex-col gap-1.5 border-l-2 border-emerald-500/40 pl-4 max-w-[180px]">
+                                                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desglose de Pago</div>
+                                                                {order.investors.map((inv, i) => (
+                                                                    <div key={i} className="flex justify-between items-center text-slate-700">
+                                                                        <span className="font-bold">{inv.name}</span>
+                                                                        <span className="font-mono text-emerald-600 font-bold ml-6">{inv.percentage}%</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
@@ -594,13 +638,13 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fadeIn">
                     <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-sm w-full border border-slate-100 flex flex-col gap-4">
                         <div className="space-y-1">
-                            <h3 className="text-lg font-black text-slate-800 tracking-tight">Confirmar Aplicación</h3>
+                            <h3 className="text-lg font-black text-slate-800 tracking-tight">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</h3>
                             <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                                Seleccione la fecha real en la que se realizó la labor para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
+                                Seleccione la fecha real en la que se realizó la {statusPopupOrder.type === 'SOWING' ? 'siembra' : 'aplicación'} para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
                             </p>
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de Aplicación</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</label>
                             <input
                                 type="date"
                                 className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-3 text-sm shadow-sm"
@@ -610,7 +654,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         </div>
                         <div className="flex gap-2 pt-1">
                             <Button variant="outline" size="sm" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>
-                            <Button size="sm" onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar</Button>
+                            <Button size="sm" onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</Button>
                         </div>
                     </div>
                 </div>
@@ -672,9 +716,9 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     <OrderDetailView
                         order={selectedOrderDetailOrder as any}
                         client={client}
-                        onClose={() => setSelectedOrderDetailOrder(null)}
+                        onClose={() => setSelectedOrderId(null)}
                         onEdit={(orderId) => {
-                            setSelectedOrderDetailOrder(null);
+                            setSelectedOrderId(null);
                             setEditingOrderId(orderId);
                             setIsCreatingOrder(false);
                         }}

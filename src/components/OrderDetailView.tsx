@@ -88,7 +88,10 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
                         <div className="relative group/tooltip">
                             <button
-                                onClick={() => generateOrderPDF(order, client, lots)}
+                                onClick={() => {
+                                    const cName = campaigns?.find(c => c.id === order.campaignId)?.name;
+                                    generateOrderPDF({ ...order, campaignName: cName }, client, lots);
+                                }}
                                 className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center"
                             >
                                 O
@@ -199,13 +202,13 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                             {order.type === 'HARVEST' && order.expectedYield && (
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Esperado</label>
-                                    <p className="text-sm font-bold text-slate-700">{order.expectedYield.toLocaleString()} kg</p>
+                                    <p className="text-sm font-bold text-slate-700">{order.expectedYield.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg</p>
                                 </div>
                             )}
                             {order.type === 'SOWING' && order.expectedYield && (
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde Esperado</label>
-                                    <p className="text-sm font-bold text-emerald-700">{order.expectedYield.toLocaleString()} kg/ha</p>
+                                    <p className="text-sm font-bold text-emerald-700">{order.expectedYield.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg/ha</p>
                                 </div>
                             )}
                             {order.campaignId && (
@@ -220,7 +223,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
                 {/* 3. Location (Bottom) */}
                 <div className="space-y-4">
-                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-1">Locación</h4>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-1">Ubicación</h4>
                     <div className="px-5 py-2">
                         <div className="grid grid-cols-12 gap-4 border-b border-slate-100 pb-2 mb-2">
                             <div className="col-span-4 text-[10px] font-bold text-slate-400 uppercase">Campo</div>
@@ -273,16 +276,16 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                                             </div>
                                             <div className="col-span-3 text-right">
                                                 {idx === 0 && (
-                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">
-                                                        {isPartial ? `${order.treatedArea}/${totalHectaresOrder}` : order.treatedArea || totalHectaresOrder}
+                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                                                        {isPartial ? `${order.treatedArea}/${totalHectaresOrder}` : order.treatedArea || totalHectaresOrder} ha
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
                                     ))}
                                     <div className="flex justify-end mt-4">
-                                        <span className="text-sm font-black text-emerald-600 uppercase tracking-tight">
-                                            {order.treatedArea || totalHectaresOrder} HA
+                                        <span className="text-sm font-black text-emerald-600 uppercase tracking-wider">
+                                            {order.treatedArea || totalHectaresOrder} ha
                                         </span>
                                     </div>
                                 </>
@@ -322,7 +325,16 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                             <span className="ml-2 text-xs font-bold text-slate-900">(USD {(order.servicePrice || 0).toLocaleString()} / ha)</span>
                         </p>
                     </div>
-                    {order.investorName && (
+                    {(order.investors && order.investors.length > 0) ? (
+                        <div className="flex flex-col items-end text-right">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</label>
+                            {order.investors.map((inv, i) => (
+                                <p key={i} className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                                    {inv.name} <span className="text-slate-400 font-medium">({inv.percentage}%)</span>
+                                </p>
+                            ))}
+                        </div>
+                    ) : order.investorName && (
                         <div className="flex flex-col items-end text-right">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</label>
                             <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{order.investorName}</p>

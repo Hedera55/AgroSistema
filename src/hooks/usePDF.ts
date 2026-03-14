@@ -19,10 +19,10 @@ declare module 'jspdf' {
 export function usePDF() {
 
     // Helper for Argentine number formatting
-    const formatNumber = (num: number, decimals: number = 2) => {
+    const formatNumber = (num: number, maxDecimals: number = 2) => {
         return num.toLocaleString('es-AR', {
-            minimumFractionDigits: decimals,
-            maximumFractionDigits: decimals
+            minimumFractionDigits: 0,
+            maximumFractionDigits: maxDecimals
         });
     };
 
@@ -33,7 +33,7 @@ export function usePDF() {
         return d.toLocaleDateString('es-AR');
     };
 
-    const generateOrderPDF = async (order: Order & { farmName?: string; lotName?: string }, client: Client, lots: Lot[] = []) => {
+    const generateOrderPDF = async (order: Order & { farmName?: string; lotName?: string; campaignName?: string }, client: Client, lots: Lot[] = []) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const emeraldGreen: [number, number, number] = [4, 120, 87];
@@ -58,7 +58,7 @@ export function usePDF() {
         doc.setTextColor(...darkEmerald);
         doc.setFontSize(22);
         const isSowing = order.items.some(i => i.productType === 'SEED');
-        doc.text(isSowing ? "ORDEN DE SIEMBRA" : "ORDEN DE TRABAJO", 61, 22, { align: 'left' });
+        doc.text(isSowing ? `ORDEN DE SIEMBRA #${order.orderNumber || '-'}` : `ORDEN DE TRABAJO #${order.orderNumber || '-'}`, 61, 22, { align: 'left' });
 
         // Row 2: Antigravity text, Contact Info & Metadata
         doc.setFont("helvetica", "normal");
@@ -83,8 +83,8 @@ export function usePDF() {
         autoTable(doc, {
             body: [
                 [`FECHA EMISIÓN:`, `${formatDate(order.date)}`],
-                [order.isDateRange ? `VENTANA DE APLICACIÓN:` : `FECHA DE APLICACIÓN:`, `${appDateDisplay}`],
-                [`ORDEN NRO:`, `${order.orderNumber || '-'}`],
+                [order.isDateRange ? `VENTANA DE APLICACIÓN:` : `FECHA PLANEADA:`, `${appDateDisplay}`],
+                [`CAMPAÑA:`, `${order.campaignName || '-'}`],
                 [`EMPRESA:`, `${client.name}`]
             ],
             startY: 32,
@@ -134,7 +134,7 @@ export function usePDF() {
                 const seedColumns = ["CULTIVO", "NOMBRE COMERCIAL (MARCA)", "DISTRIBUCIÓN", "TOTAL"];
                 const seedRows = seedItems.map(item => {
                     const isMaiz = item.productName.toUpperCase().includes('MAIZ');
-                    const bags = isMaiz && item.dosage ? (item.dosage / 80000).toFixed(2) : null;
+                    const bags = isMaiz && item.dosage ? formatNumber(item.dosage / 80000) : null;
                     let distrib = `${formatNumber(item.dosage)} ${item.unit}/ha`;
                     if (bags) distrib += ` (${bags} bolsas)`;
                     if (item.plantingSpacing) distrib += `\nEspaciamiento: ${formatNumber(item.plantingSpacing)} cm`;
@@ -230,21 +230,46 @@ export function usePDF() {
         // Observaciones box (attached closely below table)
         autoTable(doc, {
             body: [
-                [`OBSERVACIONES / INSTRUCCIONES ESPECIALES\n\n${order.notes || ''}`]
+                [`OBSERVACIONES / INSTRUCCIONES ESPECIALES${order.notes ? `\n\n${order.notes}` : ''}`]
             ],
             startY: lastY,
             theme: 'grid',
             tableWidth: pageWidth - 28,
             margin: { left: 14, right: 14 },
-            styles: { fontSize: 7, fontStyle: 'bold', textColor: 0, cellPadding: 2, lineColor: [150, 150, 150], lineWidth: 0.1 }
+            styles: { 
+                fontSize: 7, 
+                fontStyle: 'bold', 
+                textColor: 0, 
+                cellPadding: order.notes ? 2 : 1.2, 
+                lineColor: [150, 150, 150], 
+                lineWidth: 0.1 
+            }
         });
-        lastY = (doc as any).lastAutoTable.finalY + 10;
+        lastY = (doc as any).lastAutoTable.finalY + (order.notes ? 10 : 4);
 
         // Gather lot info
-        const lotRows = (order.lotIds || []).map(id => {
+        const lotRows: [string, string][] = [];
+        (order.lotIds || []).forEach((id, index) => {
             const l = lots.find(x => x.id === id);
-            return [`${l ? l.name : id}`, `${l?.hectares || 0} ha`];
+            const lotName = l ? l.name : id;
+            const partialHa = order.lotHectares?.[id];
+            const totalHa = l?.hectares;
+            let haStr = `${formatNumber(totalHa || 0)} ha`;
+
+            if (partialHa && partialHa < (totalHa || 0)) {
+                haStr = `${formatNumber(partialHa)} / ${formatNumber(totalHa || 0)} ha`;
+            } else if (partialHa) {
+                haStr = `${formatNumber(partialHa)} ha`;
+            }
+
+            if (index === 0) {
+                lotRows.push(['Lotes:', '']);
+            }
+            lotRows.push([lotName, haStr]);
         });
+
+        const totalAreaValue = (order as any).totalHectares || (order as any).hectares || order.treatedArea || 0;
+        lotRows.push([`SUPERFICIE TOTAL (HA):`, `${formatNumber(totalAreaValue)}`]);
 
         autoTable(doc, {
             head: [
@@ -252,8 +277,7 @@ export function usePDF() {
             ],
             body: [
                 ["Campo:", `${order.farmName || '-'}`],
-                ...lotRows,
-                ["SUPERFICIE TOTAL (HA):", `${formatNumber(order.treatedArea || 0, 1)}`]
+                ...lotRows
             ],
             startY: lastY,
             theme: 'grid',
@@ -265,9 +289,14 @@ export function usePDF() {
                 1: { cellWidth: 'auto' }
             },
             didParseCell: (data) => {
+                const isLotHeader = data.row.index === 1 && data.column.index === 0 && data.cell.text[0] === 'Lotes:';
                 const isLotRow = data.row.index > 0 && data.row.index <= lotRows.length;
-                if (isLotRow) {
+                
+                if (isLotRow && !isLotHeader) {
                     data.cell.styles.fontStyle = 'normal';
+                }
+
+                if (isLotRow) {
                     const isFirstCol = data.column.index === 0;
                     const isLastCol = data.column.index === 1;
                     const isLastLot = data.row.index === lotRows.length;
@@ -293,17 +322,17 @@ export function usePDF() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(0);
-        doc.text("RESPONSABLE TÉCNICO", 16, lastY + 6);
+        doc.text("RESPONSABLE TÉCNICO: ", 16, lastY + 6);
  
         doc.setFont("helvetica", "normal");
-        doc.text(order.technicalResponsible || '-', 48, lastY + 6);
+        doc.text(order.technicalResponsible || '-', 58, lastY + 6);
 
         doc.setFont("helvetica", "bold");
         doc.text("CONTRATISTA - CUIT:", 16, lastY + 12);
 
         doc.setFont("helvetica", "normal");
         const contractorText = `${order.applicatorName || '-'}${applicatorCUIT ? ` - ${applicatorCUIT}` : ''}`;
-        doc.text(contractorText, 48, lastY + 12);
+        doc.text(contractorText, 58, lastY + 12);
 
         // Signatures removed as per request
 
@@ -345,7 +374,7 @@ export function usePDF() {
         autoTable(doc, {
             body: [
                 [`FECHA EMISIÓN:`, `${formatDate(order.date)}`],
-                [`ORDEN REF NRO:`, `${order.orderNumber || '-'}`],
+                [`${order.type === 'SOWING' ? 'ORDEN DE SIEMBRA:' : 'ORDEN DE TRABAJO:'}`, `${order.orderNumber || '-'}`],
                 [`CLIENTE:`, `${client.name}`]
             ],
             startY: 32,
@@ -362,23 +391,61 @@ export function usePDF() {
         if (lastY < 68) lastY = 68; // ensure clearance
 
         // --- Table ---
-        const tableColumn = ["GALPÓN", "PRODUCTO", "PRESENTACIÓN", "CANTIDAD REQUERIDA"];
+        const tableColumn = ["GALPÓN", "PRODUCTO", "PRESENTACIÓN - CANTIDAD", "CANTIDAD TOTAL"];
         const tableRows: any[] = [];
         const formatCell = (val: string | number) => `${val}`;
+
+        // Summary structure
+        const productSummaries: Record<string, {
+            name: string;
+            required: number;
+            loaded: number;
+            unit: string;
+        }> = {};
 
         const warehouses = Array.from(new Set(order.items.map(i => i.warehouseName || 'S/G')));
         warehouses.forEach(wh => {
             const whItems = order.items.filter(i => (i.warehouseName || 'S/G') === wh);
             whItems.forEach((item, idx) => {
-                const nameDisplay = item.productType === 'SEED'
-                    ? `${item.productName}${item.brandName ? ` (${item.brandName})` : ''}`
-                    : (item.commercialName || item.productName);
+                let nameDisplay = '';
+                if (item.productType === 'SEED') {
+                    const parts = [item.commercialName, item.brandName].filter(Boolean);
+                    const parentheses = parts.length > 0 ? ` (${parts.join(' - ')})` : '';
+                    nameDisplay = `${item.productName}${parentheses}`;
+                } else {
+                    nameDisplay = `${item.commercialName || item.productName}${item.activeIngredient ? ` (${item.activeIngredient})` : ''}`;
+                }
+
+                // Update summary
+                const key = `${item.productName}_${item.unit}`;
+                if (!productSummaries[key]) {
+                    productSummaries[key] = {
+                        name: item.productName,
+                        required: (item.dosage || 0) * (order.treatedArea || (order as any).hectares || 0),
+                        loaded: 0,
+                        unit: item.unit
+                    };
+                }
+                if (!item.isVirtualDéficit) {
+                    productSummaries[key].loaded += item.totalQuantity;
+                }
+
+                const basePres = item.isVirtualDéficit ? 'SIN ELEGIR' : (`${item.presentationLabel || `A granel`} ${item.presentationContent ? `(${item.presentationContent}${item.unit})` : ''}`);
+                const cantPres = item.isVirtualDéficit 
+                    ? '' 
+                    : (item.multiplier ? ` x ${formatNumber(item.multiplier)}` : '');
+
+                const combinedPres = item.isVirtualDéficit ? 'SIN ELEGIR' : `${basePres}${cantPres}`;
+
+                const totalStr = item.isVirtualDéficit 
+                    ? `---`
+                    : `${formatNumber(item.totalQuantity)} ${item.unit}`;
 
                 tableRows.push([
                     formatCell(idx === 0 ? wh : ''),
                     formatCell(nameDisplay),
-                    formatCell(item.isVirtualDéficit ? 'FALTANTE' : (`${item.presentationLabel || `A granel (${item.unit})`} ${item.presentationContent ? `(${item.presentationContent}${item.unit})` : ''}`)),
-                    formatCell(item.isVirtualDéficit ? `Faltan ${formatNumber(item.totalQuantity, 1)}` : (item.multiplier ? formatNumber(item.multiplier, 1) : '-'))
+                    formatCell(combinedPres),
+                    formatCell(totalStr)
                 ]);
             });
         });
@@ -392,7 +459,53 @@ export function usePDF() {
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
             styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
-            alternateRowStyles: { fillColor: [240, 248, 245] }
+            alternateRowStyles: { fillColor: [240, 248, 245] },
+            columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 50 }, 2: { cellWidth: 60 }, 3: { cellWidth: 47 } }
+        });
+
+        lastY = (doc as any).lastAutoTable.finalY + 12;
+
+        // --- Summary Tables per Product ---
+        Object.values(productSummaries).forEach(summary => {
+            // Product Title
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            doc.text(summary.name.toUpperCase(), 14, lastY);
+            lastY += 4;
+
+            const diff = summary.loaded - summary.required;
+            const absDiff = Math.abs(diff);
+            const plural = absDiff > 1 ? 'n' : '';
+            let statusText = '';
+            // Match exactly with user request: "Faltan/Sobran XX kg" (plural if > 1)
+            if (absDiff < 0.01) {
+                statusText = 'Carga exacta';
+            } else if (diff > 0) {
+                statusText = `Sobra${plural} ${formatNumber(absDiff)} ${summary.unit}`;
+            } else {
+                statusText = `Falta${plural} ${formatNumber(absDiff)} ${summary.unit}`;
+            }
+
+            autoTable(doc, {
+                body: [
+                    [`Cantidad requerida para el trabajo: ${formatNumber(summary.required)} ${summary.unit}`],
+                    [statusText]
+                ],
+                startY: lastY,
+                theme: 'grid',
+                tableWidth: 100, // Compact table
+                margin: { left: 14 },
+                styles: { fontSize: 8, cellPadding: 2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.1 },
+                columnStyles: { 0: { fontStyle: 'bold' } },
+                didParseCell: (data) => {
+                    if (data.row.index === 1) {
+                         data.cell.styles.textColor = diff < -0.01 ? [200, 0, 0] : [0, 100, 0];
+                    }
+                }
+            });
+
+            lastY = (doc as any).lastAutoTable.finalY + 10;
         });
 
         doc.save(`Insumos_Orden_${order.orderNumber || ''}.pdf`);
@@ -462,15 +575,15 @@ export function usePDF() {
                 formatCell(item.commercialName || item.productName || item.productCommercialName || '-'),
                 formatCell(item.presentationLabel || `A granel (${item.unit})`),
                 formatCell(item.multiplier
-                    ? `${formatNumber(item.multiplier, 1)} ${item.presentationLabel ? 'uds' : item.unit}`
-                    : (item.quantity ? `${formatNumber(item.quantity, 1)} ${item.unit}` : `${formatNumber(item.totalQuantity || 0, 1)} ${item.unit}`))
+                    ? `${formatNumber(item.multiplier)} ${item.presentationLabel ? 'uds' : item.unit}`
+                    : (item.quantity ? `${formatNumber(item.quantity)} ${item.unit}` : `${formatNumber(item.totalQuantity || 0)} ${item.unit}`))
             ]);
         } else {
             const m = source as InventoryMovement;
             itemsForTable = [[
                 formatCell(m.productCommercialName || m.productName),
                 formatCell((m as any).presentationLabel || `A granel (${m.unit})`),
-                formatCell(`${formatNumber(m.quantity, 1)} ${m.unit}`)
+                formatCell(`${formatNumber(m.quantity)} ${m.unit}`)
             ]];
         }
 

@@ -3,6 +3,8 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Pattern**: `src/app/clients/[id]/[page]/components/` contains local modules.
 - **Goal**: Keep `page.tsx` under 800-1000 lines as an "orchestrator" of state and handlers.
 - **Shared Components**: Move to `src/components/` only when used by 2+ distinct routes.
+- **Inline Multistep Wizards**: Complex creation flows (like "New Order" or "New Harvest") must be implemented as inline, conditionally rendered components (e.g., `OrderWizard` or `HarvestWizard`) at the bottom of the main list view (`page.tsx`). Avoid routing to a separate `/new/page.tsx` to maintain context and speed up the user flow.
+    - **Smooth Scrolling**: When an inline wizard or detail view is opened, the system should ideally only auto-scroll if it's a creation flow. Detailed views (like `OrderDetailView`) should avoid forced scrolls to prevent user disorientation during row browsing.
 
 ## 🎨 Global UI Standard
 - **Typography**: Headers must use `slate-900` (Black) and `font-semibold`. Avoid `slate-800` for titles to maintain consistency.
@@ -28,6 +30,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Horizontal Scrolling Standard**: All large tables MUST use the `useHorizontalScroll` React hook attached to their container. 
     - **Behavior**: This ensures that horizontal scrolling with the mouse wheel is correctly captured without causing undesired vertical page jumping (scroll leakage).
     - **Implementation**: The container should have `overflow-x-auto` and the `ref` from the hook.
+- **Table Cell Alignment**: 
+    - **Centered**: Numerical columns (Labor Cost, USD totals), counts, and Status badges must be centered (`text-center`) for visual balance.
+    - **Right-Aligned**: Only weights (Kg/Tons) should remain right-aligned for digit alignment.
 
 - **Numerical Notation (Spanish/Argentine)**:
     - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator.
@@ -45,17 +50,13 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Vender**: Emerald theme (`bg-emerald-600`).
     - **Mover**: Orange theme (`bg-orange-600`).
 
-### Harvest Details UI (`HarvestDetailsView.tsx`)
+### Movement & Harvest Details UI
 - **Grid Layout**: Uses a 3-row grid for better data hierarchy:
-  - Row 1: `Fecha de cosecha` | `Campaña` (New)
-  - Row 2: `Cultivo - Nombre Comercial` | `Rinde total`
-  - Row 3: `Contratista` | `Costo Labor Total` | `Pagado por`
-- **Component Props**: Added `campaigns?: any[]` to resolve campaign names from IDs.
-- **Section Titles**: Added "Distribución de Cosecha" section header with `text-[10px] uppercase tracking-[0.2em]`.
-
-### Movement Details UI (`MovementDetailsView.tsx`)
-- **"Free" Styling**: Removed the gray `bg-slate-50` background from the general information section to align with the Harvest details look.
+  - Row 1: `Fecha de cosecha/movimiento` | `Campaña`
+  - Row 2: `Insumo - Nombre Comercial` | `Rinde total / Cantidad`
+  - Row 3: `Contratista / Chofer` | `Costo Labor / Flete` | `Pagado por`
 - **Label Colors**: Labels use `text-slate-400` while values use `text-slate-700` and `font-bold` for high contrast.
+- **Backgrounds**: Avoid full-section gray backgrounds (`bg-slate-50`) inside detail drawers to keep them integrated with the white floating panel look.
 
 ### Stock Vender Box (`StockTable.tsx` / `StockSalePanel.tsx`)
 - **Square Buttons**: Fixed action buttons to `h-10 w-10` square format.
@@ -93,8 +94,12 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Consumption (Internal Orders)**: Uses **Weighted Average Purchase Price (PPP)** of the *Product* across all brands.
 
 ### Investor Split Handling (Splits)
-- **Core Requirement**: All financial summaries must process the `investors` array within movements and orders to distribute amounts proportionally.
+- **Core Requirement**: All financial summaries and stock deductions must process the `investors` array within movements and orders to distribute amounts proportionally.
 - **Logic**: If an item has multiple investors (e.g., 95% Pichetto / 5% Tornado), the total amount must be multiplied by each percentage before being attributed to the partner's balance.
+- **UI Representation**: 
+    - **"MÚLTIPLES"**: Use this label in table columns when more than one investor/item is involved. 
+    - **Styling**: Same font size as normal text, dark slate color (`text-slate-600`), and centered if within a numerical column.
+    - **Sub-rows**: Provide an expandable sub-row to show individual distributions (Names + Percentages).
 - **Fallback**: If the `investors` array is missing or empty, the system must fallback to the legacy single `investorName` field (Defaulting to 100% share).
 
 ### "Sin Asignar" (Unassigned) Logic
@@ -112,6 +117,7 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **True PPP per Presentation**: Stock valuation uses a **Weighted Average Purchase Price (PPP)** computed per specific presentation (`presentationLabel` + `presentationContent`). 
     - **Normalization**: All PPP values are calculated and stored as **USD per Unit (Kg/L)**. This ensures that a 1KG bag's overhead/price doesn't disproportionately affect the valuation of bulk stock.
     - **Valuation Rule**: Purchases dictate PPP. Only own harvest (Propia brand grains/seeds) use Sales averages (WASP).
+- **Global Terminology**: **"Producto"** is deprecated and replaced by **"Insumo"** in all user-facing labels and component documentation to better reflect agricultural data usage.
 - **Obsolescence**: "Catalog Price" (`product.price`) is deprecated and removed.
 
 ## 📦 Campaign Snapshots & Integrity
@@ -133,6 +139,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Registration Schema Integrity**: The database schema MUST align with the fields used in registration triggers and frontend forms.
 - **Timestamp Normalization & Sorting**: 
     - **Standard**: All dates must be normalized to `YYYY-MM-DD` and all times to `24h` format (`HH:mm`) before sorting. This ensures robust string comparison (`date + 'T' + time`).
+- **Orphan Handling & RLS**: 
+    - **Sync Strategy**: When local records reference IDs that no longer exist (e.g., a Lot deleted on the server), the sync service must catch the `fkey` violation error, log a warning, and skip the specific invalid record instead of stopping the entire sync process.
+    - **Self-Healing**: Ideally, the system should flag these orphans for review or mark them as "Archived" rather than allowing hard crashes in the React state lifecycle.
 
 ## 📦 Stock & Inventory System
 - **ID-Based Deduction**: Movements now target specific stock records (presentations) instead of using a generic product-level FIFO.
@@ -161,6 +170,15 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - Uses a **service-role Supabase client** (`SUPABASE_SERVICE_KEY` in `.env.local`) to bypass RLS.
     - Returns the KML file directly with `Content-Disposition: attachment`.
     - **Note**: Supabase columns are snake_case (`kml_data`), not camelCase.
+
+### PDF & Report Generation Standards
+- **Header Labels**: 
+    - **Order PDF**: Use "FECHA PLANEADA:" instead of "FECHA DE APLICACIÓN:".
+    - **Document ID**: Include the Order/Remito ID in the document title at the top right.
+- **Table Layouts**: 
+    - **Consolidated Locations**: Use a two-column "Lotes" layout where the left column specifies the label and the right column contains a merged string of all lots (e.g., "Lot A, Lot B") to save vertical space.
+    - ** Agricultural Responsibility**: Merge the location info and technical responsibility into a single, cohesive layout block to improve whitespace management.
+- **Currency Standard**: Use **"USD"** consistently across all reports and UI labels instead of the generic "$" symbol to avoid region-specific confusion.
 
 ## 📖 Documentation
 - **Technical Context**: Located in `.gemini/antigravity/brain/` (this file).
