@@ -247,7 +247,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     };
 
     const handleMarkHarvested = async (lot: Lot, data: any) => {
-        const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions } = data;
+        const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
 
         const campaign = campaigns.find(c => c.id === campaignId);
         const campaignName = campaign?.name || 'Común'; // Fallback to 'Común' if no campaign name found
@@ -355,6 +355,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 }
 
                 // Record Movement for this distribution
+                const distSheets = (sheets || []).filter((s: any) => !s.distributionId || s.distributionId === dist.id);
                 await db.put('movements', {
                     id: generateId(),
                     clientId: id,
@@ -378,6 +379,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     createdBy: displayName || 'Sistema',
                     createdAt: new Date().toISOString(),
                     synced: false,
+                    transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
                     ...dist.logistics
                 });
             }

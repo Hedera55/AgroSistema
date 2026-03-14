@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { InventoryMovement, Client, Warehouse } from '@/types';
+import React, { useState } from 'react';
+import { InventoryMovement, Client, Warehouse, TransportSheet } from '@/types';
 import { Button } from '@/components/ui/Button';
 
 interface HarvestDetailsViewProps {
@@ -31,6 +31,8 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
     onSelectMovement,
     isReadOnly = false
 }) => {
+    const [showSheets, setShowSheets] = useState(false);
+
     // Smart name resolution
     const lotId = harvestMovement.referenceId?.split('_')[0];
     const resolvedLot = lots.find(l => l.id === lotId);
@@ -39,6 +41,19 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
     const farmName = resolvedFarm?.name || (harvestMovement as any).farmName;
     const lotName = resolvedLot?.name || (harvestMovement as any).lotName;
     const campaignName = campaigns?.find(c => c.id === harvestMovement.campaignId)?.name || harvestMovement.campaignId || '-';
+
+    // Collect all transport sheets from all distributions
+    const allSheets: TransportSheet[] = harvestMovements.reduce((acc: TransportSheet[], m) => {
+        if (m.transportSheets && m.transportSheets.length > 0) {
+            // Deduplicate by id
+            m.transportSheets.forEach(s => {
+                if (!acc.find(existing => existing.id === s.id)) {
+                    acc.push(s);
+                }
+            });
+        }
+        return acc;
+    }, []);
 
     return (
         <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 border-t-blue-500">
@@ -57,6 +72,15 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     )}
                 </div>
                 <div className="flex gap-2">
+                    {allSheets.length > 0 && (
+                        <button
+                            onClick={() => setShowSheets(!showSheets)}
+                            className={`p-1.5 rounded-lg transition-all text-xs font-bold px-3 py-1 border ${showSheets ? 'bg-blue-600 text-white border-blue-600' : 'text-blue-600 hover:bg-blue-50 border-blue-200'}`}
+                            title="Ver Fichas de Transporte"
+                        >
+                            🚛 Fichas ({allSheets.length})
+                        </button>
+                    )}
                     {onEdit && (
                         <button
                             onClick={onEdit}
@@ -74,6 +98,50 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     </button>
                 </div>
             </div>
+
+            {/* Transport Sheets Panel */}
+            {showSheets && allSheets.length > 0 && (
+                <div className="border-b border-slate-200 bg-blue-50/30 animate-fadeIn">
+                    <div className="px-8 py-4">
+                        <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em] mb-3">Fichas de Transporte</h3>
+                        <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                            {allSheets.map((sheet, idx) => {
+                                const net = (sheet.grossWeight || 0) - (sheet.tareWeight || 0);
+                                return (
+                                    <div key={sheet.id || idx} className="bg-white rounded-lg border border-slate-200 p-3">
+                                        <div className="flex items-center gap-4 mb-2">
+                                            <span className="text-sm font-black text-blue-600">Nro {sheet.dischargeNumber || '—'}</span>
+                                            <span className="text-sm text-slate-600">{sheet.driverName || 'Sin chofer'}</span>
+                                            <span className="text-sm text-slate-500">{sheet.destinationCompany || 'Sin destino'}</span>
+                                            {net > 0 && <span className="text-xs font-bold text-emerald-600 ml-auto">{net.toLocaleString()} kg neto</span>}
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                                            {sheet.truckPlate && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Patente:</span> <span className="text-slate-600">{sheet.truckPlate}</span></div>
+                                            )}
+                                            {sheet.trailerPlate && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Acoplado:</span> <span className="text-slate-600">{sheet.trailerPlate}</span></div>
+                                            )}
+                                            {sheet.transportCompany && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Transporte:</span> <span className="text-slate-600">{sheet.transportCompany}</span></div>
+                                            )}
+                                            {sheet.humidity !== undefined && sheet.humidity !== 0 && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Humedad:</span> <span className="text-slate-600">{sheet.humidity}%</span></div>
+                                            )}
+                                            {sheet.grossWeight !== undefined && sheet.grossWeight !== 0 && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Bruto:</span> <span className="text-slate-600">{(sheet.grossWeight as number).toLocaleString()} kg</span></div>
+                                            )}
+                                            {sheet.tareWeight !== undefined && sheet.tareWeight !== 0 && (
+                                                <div><span className="font-bold text-slate-400 uppercase">Tara:</span> <span className="text-slate-600">{(sheet.tareWeight as number).toLocaleString()} kg</span></div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div>
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8 px-8 pt-8 pb-10">

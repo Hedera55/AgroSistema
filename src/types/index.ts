@@ -206,6 +206,28 @@ export interface MovementItem {
     presentationAmount?: number;
 }
 
+export interface TransportSheet {
+    id: string;
+    dischargeNumber?: string;
+    originAddress?: string;
+    primarySaleCuit?: string;
+    transportCompany?: string;
+    truckPlate?: string;
+    trailerPlate?: string;
+    driverName?: string;
+    humidity?: number;
+    hectoliterWeight?: number;
+    grossWeight?: number;
+    tareWeight?: number;
+    destinationCompany?: string;
+    destinationAddress?: string;
+    departureDateTime?: string;
+    distanceKm?: number;
+    freightTariff?: number;
+    distributionId?: string; // Links to a specific distribution from Step 2
+    profileName?: string; // Which profile this sheet was created from
+}
+
 export interface InventoryMovement {
     id: string;
     clientId: string;
@@ -272,6 +294,7 @@ export interface InventoryMovement {
     driverCuit?: string;
     truckPlate?: string;
     warehouseName?: string;
+    transportSheets?: TransportSheet[];
 }
 
 export interface Order {

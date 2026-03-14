@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
-import { Warehouse, Campaign, Lot, Farm, InventoryMovement } from '@/types';
+import { Warehouse, Campaign, Lot, Farm, InventoryMovement, TransportSheet } from '@/types';
 import { InvestorSelector } from '@/components/InvestorSelector';
 
 interface HarvestData {
@@ -20,6 +20,7 @@ interface HarvestData {
         amount: number;
         logistics: any;
     }>;
+    transportSheets: TransportSheet[];
 }
 
 interface HarvestWizardProps {
@@ -59,7 +60,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     isExecutingPlan,
     initialDistributions
 }) => {
-    const [step, setStep] = useState<1 | 2 | 3>(1);
+    const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
     // Step 1 State
     const [harvestDate, setHarvestDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
@@ -83,9 +84,27 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     }>>(initialDistributions || []);
     const [selectedDistribOption, setSelectedDistribOption] = useState('');
 
-    // Step 3 State
-    const [activeTabId, setActiveTabId] = useState('general');
-    const [generalLogistics, setGeneralLogistics] = useState<any>({});
+    // Step 3 State — Transport Sheets (start with one sheet pre-created)
+    const [transportSheets, setTransportSheets] = useState<TransportSheet[]>([
+        { id: `sheet_${Date.now()}`, dischargeNumber: '1' }
+    ]);
+    const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+    const [selectedProfileId, setSelectedProfileId] = useState('general');
+    const [customProfiles, setCustomProfiles] = useState<Array<{ id: string; name: string; data: Partial<TransportSheet> }>>([]);
+
+    // Step 3 — Profile options derived from distributions
+    const profileOptions = useMemo(() => {
+        const opts: Array<{ id: string; label: string }> = [
+            { id: 'general', label: 'GENERAL (Aplica a todos)' }
+        ];
+        distributions.forEach(d => {
+            opts.push({ id: d.id, label: `${d.targetName} (${d.amount.toLocaleString()} kg)` });
+        });
+        customProfiles.forEach(p => {
+            opts.push({ id: p.id, label: p.name });
+        });
+        return opts;
+    }, [distributions, customProfiles]);
 
     const totalYieldNum = parseFloat(observedYield) || 0;
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
@@ -98,21 +117,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         const investor = investors.find(i => i.name === partnerName);
         if (!investor) return null;
 
-        // 1. Total Harvested in this campaign so far (excluding current yield being entered)
-        // Note: m.referenceId !== lot.id is used to exclude the current lot's PREVIOUS harvest (if editing)
-        // or we just look for all HARVEST movements in this campaign.
-        // Actually, let's keep it simple: Total Campaign Yield = previously recorded + current yield
         const previousHarvested = movements
             .filter(m => m.campaignId === selectedHarvestCampaignId && m.type === 'HARVEST' && m.referenceId !== lot.id)
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
         const totalCampaignYield = previousHarvested + totalYieldNum;
 
-        // 2. Already Retired by this partner in this campaign
-        // We look for:
-        // - HARVEST movements directly to partner (receiverName)
-        // - OUT movements to partner (receiverName)
-        // We EXCLUDE movements linked to the current lot (m.referenceId !== lot.id) to calculate "previously taken"
         const previousRetired = movements
             .filter(m =>
                 m.campaignId === selectedHarvestCampaignId &&
@@ -226,50 +236,101 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
     const handleDeleteDistribution = (id: string) => {
         setDistributions(prev => prev.filter(d => d.id !== id));
-        if (activeTabId === id) setActiveTabId('general');
     };
 
-    const updateLogistics = (distId: string, field: keyof InventoryMovement, value: any) => {
-        if (distId === 'general') {
-            setGeneralLogistics((prev: any) => ({ ...prev, [field]: value }));
-        } else {
-            setDistributions((prev: any[]) => prev.map(d => {
-                if (d.id === distId) {
-                    return { ...d, logistics: { ...d.logistics, [field]: value } };
-                }
-                return d;
-            }));
-        }
+    // --- Step 3: Transport Sheet Helpers ---
+    const activeSheet = transportSheets[activeSheetIndex] || null;
+
+    const updateSheetField = (field: keyof TransportSheet, value: any) => {
+        setTransportSheets(prev => prev.map((s, i) => {
+            if (i === activeSheetIndex) {
+                return { ...s, [field]: value };
+            }
+            return s;
+        }));
     };
 
-    const getLogisticsValue = (distId: string, field: keyof InventoryMovement): string | number => {
-        if (distId === 'general') {
-            // Include farm defaults if not set in general
-            if (field === 'originAddress' && (generalLogistics[field] === undefined || generalLogistics[field] === '')) return farm?.address || '';
-            if (field === 'departureDateTime' && (generalLogistics[field] === undefined || generalLogistics[field] === '')) return harvestDate;
-            const val = generalLogistics[field];
-            if (typeof val === 'string' || typeof val === 'number') return val;
-            return '';
-        }
-        const dist = distributions.find(d => d.id === distId);
-        if (!dist) return '';
-        // If dist has the field explicitly set, use it. Otherwise fall back to general.
-        const distVal = dist.logistics[field];
-        if (distVal !== undefined && distVal !== '') {
-            if (typeof distVal === 'string' || typeof distVal === 'number') return distVal;
-        }
-
-        const genVal = generalLogistics[field];
-        if (genVal !== undefined && genVal !== '') {
-            if (typeof genVal === 'string' || typeof genVal === 'number') return genVal;
-        }
-
-        // Farm Fallbacks
-        if (field === 'originAddress') return farm?.address || '';
-        if (field === 'departureDateTime') return harvestDate;
-
+    const getSheetValue = (field: keyof TransportSheet): string | number => {
+        if (!activeSheet) return '';
+        const val = activeSheet[field];
+        if (typeof val === 'string' || typeof val === 'number') return val;
         return '';
     };
+
+    const getNextDischargeNumber = (): string => {
+        if (transportSheets.length === 0) return '1';
+        const lastSheet = transportSheets[transportSheets.length - 1];
+        const lastNum = parseInt(lastSheet.dischargeNumber || '0', 10);
+        return isNaN(lastNum) ? '1' : String(lastNum + 1);
+    };
+
+    const handleAddSheet = () => {
+        // Start from the selected profile's data
+        let templateData: Partial<TransportSheet> = {};
+
+        if (selectedProfileId !== 'general') {
+            // Check custom profiles first
+            const customProfile = customProfiles.find(p => p.id === selectedProfileId);
+            if (customProfile) {
+                templateData = { ...customProfile.data };
+            } else {
+                // It's a distribution-based profile — pre-fill destination
+                const dist = distributions.find(d => d.id === selectedProfileId);
+                if (dist) {
+                    templateData = {
+                        distributionId: dist.id,
+                        destinationCompany: dist.targetName
+                    };
+                }
+            }
+        }
+
+        // Pre-fill farm origin if available
+        if (!templateData.originAddress && farm?.address) {
+            templateData.originAddress = farm.address;
+        }
+
+        const newSheet: TransportSheet = {
+            id: `sheet_${Date.now()}`,
+            dischargeNumber: getNextDischargeNumber(),
+            profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL',
+            ...templateData
+        };
+
+        setTransportSheets(prev => [...prev, newSheet]);
+        setActiveSheetIndex(transportSheets.length); // Navigate to new sheet
+    };
+
+    const handleDeleteSheet = () => {
+        if (transportSheets.length === 0) return;
+        setTransportSheets(prev => prev.filter((_, i) => i !== activeSheetIndex));
+        setActiveSheetIndex(prev => Math.max(0, prev - 1));
+    };
+
+    const handleSaveProfile = () => {
+        if (!activeSheet) {
+            alert('No hay ficha activa para guardar como perfil.');
+            return;
+        }
+        const name = prompt('Nombre del perfil:');
+        if (!name) return;
+
+        const { id, ...data } = activeSheet;
+        setCustomProfiles(prev => [...prev, {
+            id: `profile_${Date.now()}`,
+            name,
+            data: data as Partial<TransportSheet>
+        }]);
+    };
+
+    // --- Step 4: Summary Calculations ---
+    const totalNetWeight = transportSheets.reduce((sum, s) => {
+        const gross = s.grossWeight || 0;
+        const tare = s.tareWeight || 0;
+        return sum + (gross - tare);
+    }, 0);
+
+    const weightDifference = totalNetWeight - totalYieldNum;
 
     const handleFinalSubmit = () => {
         if (distributions.length === 0 && totalYieldNum > 0) {
@@ -283,27 +344,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
         // Apply general logistics as fallbacks to all distributions
         const finalDistributions = distributions.map(d => {
-            const finalLogistics: Partial<InventoryMovement> = { ...d.logistics };
-            const fields: (keyof InventoryMovement)[] = [
-                'originAddress', 'primarySaleCuit', 'destinationCompany', 'destinationAddress',
-                'departureDateTime', 'distanceKm', 'freightTariff', 'trailerPlate',
-                'humidity', 'dischargeNumber', 'transportCompany', 'hectoliterWeight',
-                'grossWeight', 'tareWeight'
-            ];
-
-            fields.forEach(f => {
-                if (finalLogistics[f] === undefined) {
-                    if (generalLogistics[f] !== undefined) {
-                        (finalLogistics as any)[f] = generalLogistics[f];
-                    } else if (f === 'originAddress' && farm?.address) {
-                        (finalLogistics as any)[f] = farm.address;
-                    } else if (f === 'departureDateTime' && harvestDate) {
-                        (finalLogistics as any)[f] = harvestDate;
-                    }
-                }
-            });
-
-            return { ...d, logistics: finalLogistics };
+            return { ...d, logistics: { ...d.logistics } };
         });
 
         onComplete({
@@ -315,20 +356,30 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             investors: selectedHarvestInvestors,
             harvestType,
             totalYield: totalYieldNum,
-            distributions: finalDistributions
+            distributions: finalDistributions,
+            transportSheets
         });
     };
 
     return (
+        <>
         <div className="mt-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100 shadow-sm animate-fadeIn cursor-default overflow-visible" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between mb-4 border-b border-blue-100 pb-2">
                 <h4 className="text-sm font-black text-blue-800 uppercase tracking-wide flex items-center gap-2">
-                    {isExecutingPlan ? 'Registrar Cosecha' : 'Editar Cosecha'} <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px]">Paso {step} de 3</span>
+                    {isExecutingPlan ? 'Registrar Cosecha' : 'Editar Cosecha'} <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px]">Paso {step} de 4</span>
                 </h4>
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 transition-colors"
+                    title="Cancelar cosecha"
+                >
+                    ✕
+                </button>
             </div>
 
-            {/* STEP 1: YIELD EXCEPTS */}
+            {/* STEP 1: YIELD */}
             {step === 1 && (
                 <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -500,137 +551,199 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                 </div>
             )}
 
-            {/* STEP 3: LOGISTICS */}
+            {/* STEP 3: TRANSPORT SHEETS (CARROUSEL) */}
             {step === 3 && (
                 <div className="space-y-4 animate-fadeIn relative z-40">
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible">
-                        {/* Selector de Destino */}
+                        {/* Profile Selector */}
                         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl sticky top-0 z-30">
-                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Detalles de Destino</label>
-                            <select
-                                className="w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-                                value={activeTabId}
-                                onChange={e => setActiveTabId(e.target.value)}
-                            >
-                                <option value="general">GENERAL (Aplica a todos)</option>
-                                <option disabled>──────────</option>
-                                {distributions.map(d => (
-                                    <option key={d.id} value={d.id}>
-                                        {d.targetName} ({d.amount}kg)
-                                    </option>
-                                ))}
-                            </select>
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Perfil de Carga</label>
+                            <div className="flex gap-2">
+                                <select
+                                    className="flex-1 px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+                                    value={selectedProfileId}
+                                    onChange={e => setSelectedProfileId(e.target.value)}
+                                >
+                                    {profileOptions.map(opt => (
+                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveProfile}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-lg flex items-center justify-center shadow-sm transition-colors flex-shrink-0"
+                                    title="Guardar ficha actual como perfil"
+                                >
+                                    <span className="italic text-sm" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>P</span>
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Campos de Logística */}
+                        {/* Sheet Form Fields — always visible */}
                         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white rounded-b-xl max-h-[40vh] overflow-y-auto">
+                            <Input
+                                label="Nro de Descarga"
+                                placeholder="..."
+                                value={getSheetValue('dischargeNumber')}
+                                onChange={e => updateSheetField('dischargeNumber', e.target.value)}
+                            />
                             <Input
                                 label="Dirección / Origen"
                                 placeholder="Ruta, Localidad..."
-                                value={getLogisticsValue(activeTabId, 'originAddress')}
-                                onChange={e => updateLogistics(activeTabId, 'originAddress', e.target.value)}
+                                value={getSheetValue('originAddress')}
+                                onChange={e => updateSheetField('originAddress', e.target.value)}
                             />
                             <Input
                                 label="CUIT Corredor / Venta Primaria"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'primarySaleCuit')}
-                                onChange={e => updateLogistics(activeTabId, 'primarySaleCuit', e.target.value)}
+                                value={getSheetValue('primarySaleCuit')}
+                                onChange={e => updateSheetField('primarySaleCuit', e.target.value)}
                             />
                             <Input
                                 label="Empresa Transporte"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'transportCompany')}
-                                onChange={e => updateLogistics(activeTabId, 'transportCompany', e.target.value)}
+                                value={getSheetValue('transportCompany')}
+                                onChange={e => updateSheetField('transportCompany', e.target.value)}
                             />
                             <Input
                                 label="Patente Camión"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'plateNumber')}
-                                onChange={e => updateLogistics(activeTabId, 'plateNumber', e.target.value)}
+                                value={getSheetValue('truckPlate')}
+                                onChange={e => updateSheetField('truckPlate', e.target.value)}
                             />
                             <Input
                                 label="Patente Acoplado"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'trailerPlate')}
-                                onChange={e => updateLogistics(activeTabId, 'trailerPlate', e.target.value)}
+                                value={getSheetValue('trailerPlate')}
+                                onChange={e => updateSheetField('trailerPlate', e.target.value)}
                             />
                             <Input
                                 label="Chofer"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'truckDriver')}
-                                onChange={e => updateLogistics(activeTabId, 'truckDriver', e.target.value)}
+                                value={getSheetValue('driverName')}
+                                onChange={e => updateSheetField('driverName', e.target.value)}
                             />
                             <Input
                                 label="Humedad (%)"
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'humidity')}
-                                onChange={e => updateLogistics(activeTabId, 'humidity', e.target.value.replace(',', '.'))}
-                            />
-                            <Input
-                                label="Nro de Descarga"
-                                placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'dischargeNumber')}
-                                onChange={e => updateLogistics(activeTabId, 'dischargeNumber', e.target.value)}
+                                value={getSheetValue('humidity')}
+                                onChange={e => updateSheetField('humidity', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Hectolítrico"
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'hectoliterWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'hectoliterWeight', e.target.value.replace(',', '.'))}
+                                value={getSheetValue('hectoliterWeight')}
+                                onChange={e => updateSheetField('hectoliterWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Bruto (kg)"
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'grossWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'grossWeight', e.target.value.replace(',', '.'))}
+                                value={getSheetValue('grossWeight')}
+                                onChange={e => updateSheetField('grossWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Tara (kg)"
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'tareWeight')}
-                                onChange={e => updateLogistics(activeTabId, 'tareWeight', e.target.value.replace(',', '.'))}
+                                value={getSheetValue('tareWeight')}
+                                onChange={e => updateSheetField('tareWeight', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Empresa de Destino"
                                 placeholder="Planta / Acopio..."
-                                value={getLogisticsValue(activeTabId, 'destinationCompany')}
-                                onChange={e => updateLogistics(activeTabId, 'destinationCompany', e.target.value)}
+                                value={getSheetValue('destinationCompany')}
+                                onChange={e => updateSheetField('destinationCompany', e.target.value)}
                             />
                             <Input
                                 label="Dirección / Localidad Destino"
                                 placeholder="..."
-                                value={getLogisticsValue(activeTabId, 'destinationAddress')}
-                                onChange={e => updateLogistics(activeTabId, 'destinationAddress', e.target.value)}
+                                value={getSheetValue('destinationAddress')}
+                                onChange={e => updateSheetField('destinationAddress', e.target.value)}
                             />
                             <Input
                                 label="Fecha y Horario Partida"
                                 type="datetime-local"
-                                value={getLogisticsValue(activeTabId, 'departureDateTime')}
-                                onChange={e => updateLogistics(activeTabId, 'departureDateTime', e.target.value.replace('T', ' '))}
+                                value={getSheetValue('departureDateTime')}
+                                onChange={e => updateSheetField('departureDateTime', e.target.value.replace('T', ' '))}
                             />
                             <Input
                                 label="Km a recorrer"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'distanceKm')}
-                                onChange={e => updateLogistics(activeTabId, 'distanceKm', parseFloat(e.target.value))}
+                                value={getSheetValue('distanceKm')}
+                                onChange={e => updateSheetField('distanceKm', e.target.value.replace(',', '.'))}
                             />
                             <Input
                                 label="Tarifa Flete (USD)"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder="0"
-                                value={getLogisticsValue(activeTabId, 'freightTariff')}
-                                onChange={e => updateLogistics(activeTabId, 'freightTariff', parseFloat(e.target.value))}
+                                value={getSheetValue('freightTariff')}
+                                onChange={e => updateSheetField('freightTariff', e.target.value.replace(',', '.'))}
                             />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* STEP 4: SUMMARY */}
+            {step === 4 && (
+                <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 text-sm">Fichas de Transporte</h3>
+                            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+                                {transportSheets.length} ficha{transportSheets.length !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+
+                        <div className="max-h-[50vh] overflow-y-auto">
+                            {transportSheets.length === 0 ? (
+                                <div className="p-8 text-center text-sm text-slate-400 italic">
+                                    No se cargaron fichas de transporte.
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {transportSheets.map((sheet, idx) => {
+                                        const net = (sheet.grossWeight || 0) - (sheet.tareWeight || 0);
+                                        return (
+                                            <div
+                                                key={sheet.id}
+                                                className="flex items-center gap-4 px-4 py-3 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                                                onClick={() => { setActiveSheetIndex(idx); setStep(3); }}
+                                            >
+                                                <span className="text-sm font-black text-blue-600 min-w-[60px]">
+                                                    Nro {sheet.dischargeNumber || '—'}
+                                                </span>
+                                                <span className="text-sm text-slate-600 flex-1 truncate">
+                                                    {sheet.driverName || 'Sin chofer'}
+                                                </span>
+                                                <span className="text-sm text-slate-500 truncate">
+                                                    {sheet.destinationCompany || 'Sin destino'}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Weight Validation Warning */}
+                        {transportSheets.length > 0 && Math.abs(weightDifference) > 10 && (
+                            <div className="mx-4 mb-4 mt-2 p-2 bg-amber-100 rounded-lg border border-amber-300">
+                                <p className="text-xs font-bold text-amber-800">
+                                    ⚠️ Hay {weightDifference > 0 ? 'más' : 'menos'} grano cargado ({totalNetWeight.toLocaleString()} kg) que el cosechado ({totalYieldNum.toLocaleString()} kg).
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -641,7 +754,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                     type="button"
                     onClick={() => {
                         if (step > 1) {
-                            setStep(step - 1 as 1 | 2);
+                            setStep((step - 1) as 1 | 2 | 3);
                         } else {
                             onCancel();
                         }
@@ -659,15 +772,60 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             setStep(2);
                         } else if (step === 2) {
                             setStep(3);
+                        } else if (step === 3) {
+                            setStep(4);
                         } else {
                             handleFinalSubmit();
                         }
                     }}
                     className="px-6 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 text-xs font-bold uppercase tracking-wider shadow-sm transition-all"
                 >
-                    {step < 3 ? 'Siguiente →' : isExecutingPlan ? 'Confirmar Cosecha' : 'Confirmar Cambios'}
+                    {step < 4 ? 'Siguiente →' : isExecutingPlan ? 'Confirmar Cosecha' : 'Confirmar Cambios'}
                 </button>
             </div>
-        </div>
+
+            </div>
+
+            {/* Step 3: Floating Navigation Buttons (outside wizard container) */}
+            {step === 3 && (
+                <div className="flex justify-center gap-4 mt-6">
+                    <button
+                        type="button"
+                        onClick={() => setActiveSheetIndex(prev => Math.max(0, prev - 1))}
+                        disabled={activeSheetIndex <= 0}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white w-14 h-14 rounded-xl flex items-center justify-center font-bold text-2xl shadow-lg transition-colors"
+                        title="Ficha anterior"
+                    >
+                        ‹
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveSheetIndex(prev => Math.min(transportSheets.length - 1, prev + 1))}
+                        disabled={activeSheetIndex >= transportSheets.length - 1}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white w-14 h-14 rounded-xl flex items-center justify-center font-bold text-2xl shadow-lg transition-colors"
+                        title="Ficha siguiente"
+                    >
+                        ›
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleAddSheet}
+                        className="bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-xl flex items-center justify-center font-bold text-3xl shadow-lg transition-colors"
+                        title="Agregar ficha"
+                    >
+                        +
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleDeleteSheet}
+                        disabled={transportSheets.length <= 1}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white w-14 h-14 rounded-xl flex items-center justify-center font-bold text-3xl shadow-lg transition-colors"
+                        title="Eliminar ficha actual"
+                    >
+                        −
+                    </button>
+                </div>
+            )}
+        </>
     );
 };
