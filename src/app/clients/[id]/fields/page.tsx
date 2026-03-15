@@ -64,7 +64,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [lotYield, setLotYield] = useState('');
     const [isHarvesting, setIsHarvesting] = useState(false);
     const [observedYield, setObservedYield] = useState('');
-    const [confirmStep, setConfirmStep] = useState(false);
     const [harvestLaborPrice, setHarvestLaborPrice] = useState('');
     const [harvestContractor, setHarvestContractor] = useState('');
     const [harvestDate, setHarvestDate] = useState('');
@@ -284,6 +283,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             return;
         }
 
+        const pricePerHa = parseFloat(laborPricePerHa) || 0;
+        const totalCost = pricePerHa * lot.hectares;
+
         try {
             // --- MOVEMENT TRACING (REVERSAL) ---
             if (isEditingHarvestPanel && harvestPlanOrder) {
@@ -317,13 +319,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             const movementDate = date || new Date().toISOString().split('T')[0];
             const farm = farms.find(f => f.id === lot.farmId);
             const pricePerHa = laborPricePerHa || 0;
-            const totalCost = pricePerHa * lot.hectares;
-
             // --- AUTO-ASSIGN REMAINDER ---
             const assignedAmount = distributions.reduce((sum: number, d: any) => sum + d.amount, 0);
             const remaining = totalYield - assignedAmount;
             const finalDistributions = [...distributions];
-
             if (remaining > 5 && client?.defaultHarvestWarehouseId) {
                 const defWarehouse = warehouses.find(w => w.id === client.defaultHarvestWarehouseId);
                 finalDistributions.push({
@@ -331,7 +330,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     targetId: client.defaultHarvestWarehouseId,
                     targetName: defWarehouse?.name || 'Acopio por Defecto',
                     amount: remaining,
-                    logistics: { notes: 'Asignación automática por remanente' } as any
+                    logistics: { notes: 'Cosecha: asignación automática' } as any
                 });
             }
 
@@ -440,7 +439,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             await refreshOrders();
             syncService.pushChanges();
             setIsHarvesting(false);
-            setConfirmStep(false);
             setObservedYield('');
             setHarvestLaborPrice('');
             setHarvestContractor('');
@@ -1491,17 +1489,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     )}
                                 </div>
 
-                                {confirmStep && isHarvesting && (
-                                    <div className="mt-4 bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-3 animate-fadeIn shadow-sm border-l-4 border-l-amber-500">
-                                        <span className="text-xl">⚠️</span>
-                                        <div>
-                                            <p className="text-xs font-black text-amber-900 uppercase tracking-widest leading-none mb-1">Confirmar Distribución y Logística</p>
-                                            <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight mt-1">
-                                                Revisó los destinos asignados y los datos logísticos? Click en Confirmar Cosecha nuevamente para asentar la operación.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
+
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
@@ -1932,14 +1920,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             movements={movements}
                             onCancel={() => {
                                 setIsHarvesting(false);
-                                setConfirmStep(false);
                             }}
                             onComplete={(data) => {
-                                if (!confirmStep) {
-                                    setConfirmStep(true);
-                                } else {
-                                    handleMarkHarvested(lots.find(l => l.id === selectedLotId)!, data);
-                                }
+                                handleMarkHarvested(lots.find(l => l.id === selectedLotId)!, data);
                             }}
                             initialDate={harvestDate}
                             initialContractor={harvestContractor}

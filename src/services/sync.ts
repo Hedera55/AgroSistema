@@ -123,10 +123,6 @@ const mappers = {
         technical_responsible: o.technicalResponsible || null
     }),
     movement: (m: InventoryMovement) => {
-        let mappedType = m.type;
-        if (m.type === 'HARVEST') mappedType = 'IN';
-        if (m.type === 'SALE') mappedType = 'OUT';
-
         return {
             id: m.id,
             client_id: m.clientId,
@@ -134,7 +130,7 @@ const mappers = {
             product_id: m.productId,
             product_name: m.productName,
             product_brand: m.productBrand,
-            type: mappedType,
+            type: m.type,
             quantity: m.quantity,
             unit: m.unit,
             date: m.date,

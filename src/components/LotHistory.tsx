@@ -126,14 +126,6 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                                         {event.type === 'SOWING' ? 'Siembra' :
                                             event.type === 'HARVEST' ? 'Cosecha' : 'Aplic.'}
                                     </span>
-                                    {event.status && (
-                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border
-                                        ${event.status === 'CONFIRMED' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                                                'bg-slate-50 text-slate-400 border-slate-100'
-                                            }`}>
-                                            {event.status === 'CONFIRMED' ? 'Asignado' : 'Realizado'}
-                                        </span>
-                                    )}
                                 </div>
                             </td>
                             <td className="px-4 py-3 align-top">

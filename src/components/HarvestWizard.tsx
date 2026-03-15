@@ -71,7 +71,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>(
         initialDistributions?.[0]?.logistics?.investors || (initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : [])
     );
-    const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(initialDistributions?.[0]?.logistics?.type === 'GRANO' ? 'GRANO' : 'GRANO'); // Default to Grano, will refine mapping if needed 
+    const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(initialDistributions?.[0]?.logistics?.type === 'GRANO' ? 'GRANO' : 'GRANO'); // Default to Grano, will refine mapping if needed
+
+    const [isConfirming, setIsConfirming] = useState(false);
 
     // Step 2 State
     const [distributions, setDistributions] = useState<Array<{
@@ -85,9 +87,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const [selectedDistribOption, setSelectedDistribOption] = useState('');
 
     // Step 3 State — Transport Sheets (start with one sheet pre-created)
-    const [transportSheets, setTransportSheets] = useState<TransportSheet[]>([
-        { id: `sheet_${Date.now()}`, dischargeNumber: '1' }
-    ]);
+    const [transportSheets, setTransportSheets] = useState<TransportSheet[]>(() => {
+        const firstSheet: TransportSheet = { id: `sheet_${Date.now()}`, dischargeNumber: '1' };
+        if (farm?.address) firstSheet.originAddress = farm.address;
+        return [firstSheet];
+    });
     const [activeSheetIndex, setActiveSheetIndex] = useState(0);
     const [selectedProfileId, setSelectedProfileId] = useState('general');
     const [customProfiles, setCustomProfiles] = useState<Array<{ id: string; name: string; data: Partial<TransportSheet> }>>([]);
@@ -101,10 +105,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             opts.push({ id: d.id, label: `${d.targetName} (${d.amount.toLocaleString()} kg)` });
         });
         customProfiles.forEach(p => {
-            opts.push({ id: p.id, label: p.name });
+            if (!opts.some(o => o.id === p.id)) {
+                opts.push({ id: p.id, label: p.name });
+            }
         });
+
+        opts.push({ id: 'ACTION_ADD', label: '+ Nuevo Perfil' });
+        if (selectedProfileId !== 'general' && !distributions.find(d => d.id === selectedProfileId)) {
+            opts.push({ id: 'ACTION_DELETE', label: '- Eliminar Perfil' });
+        }
+
         return opts;
-    }, [distributions, customProfiles]);
+    }, [distributions, customProfiles, selectedProfileId]);
 
     const totalYieldNum = parseFloat(observedYield) || 0;
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
@@ -268,20 +280,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         // Start from the selected profile's data
         let templateData: Partial<TransportSheet> = {};
 
-        if (selectedProfileId !== 'general') {
-            // Check custom profiles first
-            const customProfile = customProfiles.find(p => p.id === selectedProfileId);
-            if (customProfile) {
-                templateData = { ...customProfile.data };
-            } else {
-                // It's a distribution-based profile — pre-fill destination
-                const dist = distributions.find(d => d.id === selectedProfileId);
-                if (dist) {
-                    templateData = {
-                        distributionId: dist.id,
-                        destinationCompany: dist.targetName
-                    };
-                }
+        // Check custom profiles first (includes 'general' if the user saved over it)
+        const customProfile = customProfiles.find(p => p.id === selectedProfileId);
+        if (customProfile) {
+            templateData = { ...customProfile.data };
+        } else {
+            // It's a distribution-based profile — pre-fill destination
+            const dist = distributions.find(d => d.id === selectedProfileId);
+            if (dist) {
+                templateData = {
+                    distributionId: dist.id,
+                    destinationCompany: dist.targetName
+                };
             }
         }
 
@@ -291,10 +301,10 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         }
 
         const newSheet: TransportSheet = {
+            ...templateData,
             id: `sheet_${Date.now()}`,
             dischargeNumber: getNextDischargeNumber(),
-            profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL',
-            ...templateData
+            profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL'
         };
 
         setTransportSheets(prev => [...prev, newSheet]);
@@ -312,15 +322,39 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             alert('No hay ficha activa para guardar como perfil.');
             return;
         }
-        const name = prompt('Nombre del perfil:');
-        if (!name) return;
 
-        const { id, ...data } = activeSheet;
-        setCustomProfiles(prev => [...prev, {
-            id: `profile_${Date.now()}`,
-            name,
-            data: data as Partial<TransportSheet>
-        }]);
+        const existingCustom = customProfiles.find(p => p.id === selectedProfileId);
+
+        if (existingCustom) {
+            const { id, ...data } = activeSheet;
+            setCustomProfiles(prev => prev.map(p =>
+                p.id === selectedProfileId ? { ...p, data: data as Partial<TransportSheet> } : p
+            ));
+            alert(`Perfil "${existingCustom.name}" actualizado.`);
+        } else {
+            const presetOption = profileOptions.find(o => o.id === selectedProfileId);
+            if (presetOption) {
+                const { id, ...data } = activeSheet;
+                setCustomProfiles(prev => [...prev, {
+                    id: selectedProfileId,
+                    name: presetOption.label,
+                    data: data as Partial<TransportSheet>
+                }]);
+                alert(`Perfil de carga actualizado.`);
+            } else {
+                const name = prompt('Nombre del nuevo perfil:');
+                if (!name) return;
+
+                const { id, ...data } = activeSheet;
+                const newId = `profile_${Date.now()}`;
+                setCustomProfiles(prev => [...prev, {
+                    id: newId,
+                    name,
+                    data: data as Partial<TransportSheet>
+                }]);
+                setSelectedProfileId(newId);
+            }
+        }
     };
 
     // --- Step 4: Summary Calculations ---
@@ -555,7 +589,29 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 <select
                                     className="flex-1 px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
                                     value={selectedProfileId}
-                                    onChange={e => setSelectedProfileId(e.target.value)}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === 'ACTION_ADD') {
+                                            const name = prompt('Nombre del nuevo perfil:');
+                                            if (name) {
+                                                const { id, ...data } = activeSheet || {};
+                                                const newId = `profile_${Date.now()}`;
+                                                setCustomProfiles(prev => [...prev, {
+                                                    id: newId,
+                                                    name,
+                                                    data: (data || {}) as Partial<TransportSheet>
+                                                }]);
+                                                setSelectedProfileId(newId);
+                                            }
+                                        } else if (val === 'ACTION_DELETE') {
+                                            if (confirm(`¿Desea eliminar el perfil seleccionado?`)) {
+                                                setCustomProfiles(prev => prev.filter(p => p.id !== selectedProfileId));
+                                                setSelectedProfileId('general');
+                                            }
+                                        } else {
+                                            setSelectedProfileId(val);
+                                        }
+                                    }}
                                 >
                                     {profileOptions.map(opt => (
                                         <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -565,9 +621,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     type="button"
                                     onClick={handleSaveProfile}
                                     className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-lg flex items-center justify-center shadow-sm transition-colors flex-shrink-0"
-                                    title="Guardar ficha actual como perfil"
+                                    title="Guardar ficha actual en el perfil"
                                 >
-                                    <span className="italic text-sm" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>P</span>
+                                    <span className="italic text-sm font-serif">P</span>
                                 </button>
                             </div>
                         </div>
@@ -587,7 +643,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 onChange={e => updateSheetField('originAddress', e.target.value)}
                             />
                             <Input
-                                label="CUIT Corredor / Venta Primaria"
+                                label="CUIT Corredor"
                                 placeholder="..."
                                 value={getSheetValue('primarySaleCuit')}
                                 onChange={e => updateSheetField('primarySaleCuit', e.target.value)}
@@ -722,6 +778,10 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                 <span className="text-sm text-slate-500 truncate">
                                                     {sheet.destinationCompany || 'Sin destino'}
                                                 </span>
+                                                <div className="flex flex-col items-end min-w-[80px]">
+                                                    <span className="text-xs font-black text-slate-700">{net.toLocaleString()} kg</span>
+                                                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">Peso Neto</span>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -775,12 +835,20 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         } else if (step === 3) {
                             setStep(4);
                         } else {
-                            handleFinalSubmit();
+                            if (!isConfirming) {
+                                setIsConfirming(true);
+                                // Auto-reset after 3 seconds for safety
+                                setTimeout(() => setIsConfirming(false), 3000);
+                            } else {
+                                handleFinalSubmit();
+                            }
                         }
                     }}
-                    className="px-6 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 text-xs font-bold uppercase tracking-wider shadow-sm transition-all"
+                    className={`px-6 py-2 rounded-lg text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all ${
+                        isConfirming && step === 4 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
                 >
-                    {step < 4 ? 'Siguiente →' : isExecutingPlan ? 'Confirmar Cosecha' : 'Confirmar Cambios'}
+                    {step < 4 ? 'Siguiente →' : isConfirming ? '¿Confirmar Cosecha?' : (isExecutingPlan ? 'Confirmar Cosecha' : 'Confirmar Cambios')}
                 </button>
                 </div>
             </div>

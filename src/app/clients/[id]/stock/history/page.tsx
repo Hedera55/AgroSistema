@@ -793,7 +793,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         else if (label === 'E-VENTA' || label === 'E-RETIRO') labelClass = 'bg-lime-100 text-lime-800';
                                         else if (label === 'E-SIEMBRA') labelClass = 'bg-emerald-100 text-emerald-800';
 
-                                        let showValue = (m.type === 'IN' && !m.isTransfer) || (m.type === 'SALE');
+                                        let showValue = (m.type === 'IN' && !m.isTransfer && m.type !== 'HARVEST') || (m.type === 'SALE');
                                         let totalValue = 0, unitPrice = 0;
                                         if (showValue) {
                                             if (isConsolidated) {
@@ -868,7 +868,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                         !isReadOnly && (
                                                                             <div className="relative ml-1" onClick={e => e.stopPropagation()}>
                                                                                 <input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileUpload(e, m.id, 'remito')} disabled={uploadingId === m.id} />
-                                                                                <button className="w-7 h-7 border border-blue-500 text-blue-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'R'}</button>
+                                                                                <button className="w-7 h-7 border border-red-500 text-red-500 rounded-md text-[11px] font-black flex items-center justify-center">{uploadingId === m.id ? '...' : 'R'}</button>
                                                                             </div>
                                                                         )
                                                                     )}
