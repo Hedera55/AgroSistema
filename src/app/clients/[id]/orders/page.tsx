@@ -137,7 +137,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 farmName: farm?.name || 'Unknown Farm',
                 lotName: o.lotIds?.map(lid => lots.find(l => l.id === lid)?.name).join(', ') || lot?.name || 'Unknown Lot',
                 totalHectares: totalHectares,
-                contractorName: o.contractorName || o.applicatorName || contractors.find(c => c.id === o.applicatorId)?.username
+                contractorName: o.contractorName || o.applicatorName || contractors.find(c => c.id === o.applicatorId)?.username,
+                campaignName: campaigns.find(c => c.id === o.campaignId)?.name
             };
         }); // The hook already sorts by date
     }, [rawOrders, farms, lots, loading, role, profile]);

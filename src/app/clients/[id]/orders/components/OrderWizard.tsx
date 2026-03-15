@@ -73,7 +73,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
     // Current Item Input
     const [currProdId, setCurrProdId] = useState('');
     const [currDosage, setCurrDosage] = useState('');
-    const [subQuantities, setSubQuantities] = useState<Record<string, number>>({});
+    const [subQuantities, setSubQuantities] = useState<Record<string, string | number>>({});
 
     // Contractors
     const [contractors, setContractors] = useState<{ id: string, username: string, assigned_clients?: string[] }[]>([]);
@@ -206,16 +206,16 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
             brandName: product?.brandName,
             commercialName: product?.commercialName,
             activeIngredient: product?.activeIngredient,
-            dosage: isMechanicalLabor ? 1 : parseFloat(currDosage || '0'),
+            dosage: isMechanicalLabor ? 1 : parseFloat((currDosage || '0').replace(',', '.')),
             unit: product?.unit || 'ha',
             totalQuantity: isMechanicalLabor
                 ? totalTreatedArea
-                : parseFloat(currDosage || '0') * totalTreatedArea,
+                : parseFloat((currDosage || '0').replace(',', '.')) * totalTreatedArea,
             loadingOrder: requestedOrder,
-            plantingDensity: product?.type === 'SEED' ? (currDosage ? parseFloat(currDosage) : undefined) : undefined,
+            plantingDensity: product?.type === 'SEED' ? (currDosage ? parseFloat(currDosage.replace(',', '.')) : undefined) : undefined,
             plantingDensityUnit: product?.type === 'SEED' ? 'KG_HA' : undefined,
-            plantingSpacing: product?.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing) : undefined) : undefined,
-            expectedYield: product?.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield) : undefined) : undefined,
+            plantingSpacing: product?.type === 'SEED' ? (plantingSpacing ? parseFloat(plantingSpacing.replace(',', '.')) : undefined) : undefined,
+            expectedYield: product?.type === 'SEED' ? (expectedYield ? parseFloat(expectedYield.replace(',', '.')) : undefined) : undefined,
             warehouseId: isMechanicalLabor ? undefined : currWarehouseId,
             warehouseName: isMechanicalLabor ? undefined : warehouses.find(w => w.id === currWarehouseId)?.name,
             productType: product?.type,
@@ -228,7 +228,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
         if (isMechanicalLabor) {
             newItems.push({ ...item, groupId: newItemGroupId });
         } else {
-            const selectedStockIds = Object.entries(subQuantities).filter(([_, qty]) => qty > 0);
+            const selectedStockIds = Object.entries(subQuantities).filter(([_, val]) => (typeof val === 'string' ? parseFloat(val) : val) > 0);
             if (selectedStockIds.length > 0) {
                 let selectedTotalFromSubQuantities = 0;
                 selectedStockIds.forEach(([stockId, multiplier]) => {
@@ -236,7 +236,8 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                     if (!stockItem) return;
 
                     const wh = warehouses.find(w => w.id === stockItem.warehouseId);
-                    const absoluteQty = multiplier * (stockItem.presentationContent || 1);
+                    const multiplierNum = typeof multiplier === 'string' ? (parseFloat(multiplier.replace(',', '.')) || 0) : multiplier;
+                    const absoluteQty = multiplierNum * (stockItem.presentationContent || 1);
                     selectedTotalFromSubQuantities += absoluteQty;
 
                     newItems.push({
@@ -247,7 +248,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                         warehouseName: wh?.name || 'Desconocido',
                         presentationLabel: stockItem.presentationLabel,
                         presentationContent: stockItem.presentationContent,
-                        multiplier: multiplier,
+                        multiplier: multiplierNum,
                         totalQuantity: absoluteQty
                     });
                 });
@@ -312,7 +313,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
         setExpectedYield(first.expectedYield ? String(first.expectedYield) : '');
         setCurrLoadingOrder(first.loadingOrder ? String(first.loadingOrder) : '');
 
-        const newSubQs: Record<string, number> = {};
+        const newSubQs: Record<string, string | number> = {};
         groupItems.forEach(i => {
             const s = stock.find(st =>
                 st.productId === i.productId &&
@@ -491,7 +492,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                 lotObservations,
                 applicatorId: selectedApplicatorId,
                 applicatorName: contractors.find(c => c.id === selectedApplicatorId)?.username,
-                servicePrice: servicePrice ? parseFloat(servicePrice) : 0,
+                servicePrice: servicePrice ? parseFloat(servicePrice.replace(',', '.')) : 0,
                 expectedYield: items.find(i => i.expectedYield)?.expectedYield,
                 treatedArea: totalTreatedArea,
                 items,
@@ -592,20 +593,20 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                         currProdId={currProdId}
                         setCurrProdId={setCurrProdId}
                         currDosage={currDosage}
-                        setCurrDosage={(val) => setCurrDosage(val.replace(',', '.'))}
+                        setCurrDosage={setCurrDosage}
                         mechanicalLaborName={mechanicalLaborName}
                         setMechanicalLaborName={setMechanicalLaborName}
                         plantingSpacing={plantingSpacing}
-                        setPlantingSpacing={(val) => setPlantingSpacing(val.replace(',', '.'))}
+                        setPlantingSpacing={setPlantingSpacing}
                         expectedYield={expectedYield}
-                        setExpectedYield={(val) => setExpectedYield(val.replace(',', '.'))}
+                        setExpectedYield={setExpectedYield}
                         fertilizerPlacement={fertilizerPlacement}
                         setFertilizerPlacement={setFertilizerPlacement}
                         editingItemId={editingItemId}
                         selectedApplicatorId={selectedApplicatorId}
                         setSelectedApplicatorId={setSelectedApplicatorId}
                         servicePrice={servicePrice}
-                        setServicePrice={(val) => setServicePrice(val.replace(',', '.'))}
+                        setServicePrice={setServicePrice}
                         selectedPartnerName={selectedPartnerName}
                         selectedInvestors={selectedInvestors}
                         setSelectedInvestors={setSelectedInvestors}

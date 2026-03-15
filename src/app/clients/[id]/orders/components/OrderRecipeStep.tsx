@@ -54,8 +54,8 @@ interface OrderRecipeStepProps {
     selectedCampaignId?: string;
     setSelectedCampaignId?: (val: string) => void;
     campaigns?: any[];
-    subQuantities: Record<string, number>;
-    setSubQuantities: (val: Record<string, number>) => void;
+    subQuantities: Record<string, string | number>;
+    setSubQuantities: (val: Record<string, string | number>) => void;
     stock: any[];
     handleAddItem: () => void;
     handleEditItem: (item: OrderItem) => void;
@@ -142,11 +142,14 @@ export function OrderRecipeStep({
         items: productStock.filter(s => s.warehouseId === w.id)
     })).filter(w => w.items.length > 0);
 
-    const requiredTotal = (parseFloat(currDosage) || 0) * (selectedLot.hectares || 0);
+    const normalizedDosage = currDosage.replace(',', '.');
+    const requiredTotal = (parseFloat(normalizedDosage) || 0) * (selectedLot.hectares || 0);
 
-    const selectedTotal = Object.entries(subQuantities).reduce((acc, [stockId, multiplier]) => {
+    const selectedTotal = Object.entries(subQuantities).reduce((acc, [stockId, val]) => {
         const s = productStock.find(item => item.id === stockId);
         if (!s) return acc;
+        const multiplierStr = typeof val === 'string' ? val.replace(',', '.') : String(val);
+        const multiplier = parseFloat(multiplierStr) || 0;
         return acc + (multiplier * (s.presentationContent || 1));
     }, 0);
 
@@ -158,13 +161,21 @@ export function OrderRecipeStep({
     const showLoadingOrder = !isSowingOrder && !isMechanicalLabor;
 
     const handleMultiplierChange = (stockId: string, val: string) => {
-        const normalized = val.replace(',', '.');
-        const num = parseFloat(normalized) || 0;
-        setSubQuantities({ ...subQuantities, [stockId]: num });
+        // Allow only one separator
+        let cleaned = val.replace(/[^\d.,]/g, '');
+        const match = cleaned.match(/[.,]/);
+        if (match) {
+            const sep = match[0];
+            const firstIndex = cleaned.indexOf(sep);
+            const before = cleaned.substring(0, firstIndex + 1);
+            const after = cleaned.substring(firstIndex + 1).replace(/[.,]/g, '');
+            cleaned = before + after;
+        }
+        setSubQuantities({ ...subQuantities, [stockId]: cleaned });
     };
 
     const isMaiz = selectedProduct?.name.toUpperCase().includes('MAIZ');
-    const bagsCount = isMaiz && currDosage ? (parseFloat(currDosage) / 80000).toFixed(2) : null;
+    const bagsCount = isMaiz && currDosage ? (parseFloat(currDosage.replace(',', '.')) / 80000).toFixed(2) : null;
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -181,7 +192,6 @@ export function OrderRecipeStep({
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Orden</label>
                                 <Input
                                     type="text"
-                                    inputMode="numeric"
                                     placeholder=""
                                     value={currLoadingOrder}
                                     onChange={e => {
@@ -232,10 +242,18 @@ export function OrderRecipeStep({
                                     <div className="relative flex items-center h-[46px]">
                                         <Input
                                             type="text"
-                                            inputMode="decimal"
                                             placeholder={selectedProduct?.type === 'SEED' ? "ej. 80" : "0.00"}
                                             value={currDosage}
-                                            onChange={e => setCurrDosage(e.target.value.replace(',', '.'))}
+                                            onChange={e => {
+                                                let cleaned = e.target.value.replace(/[^\d.,]/g, '');
+                                                const match = cleaned.match(/[.,]/);
+                                                if (match) {
+                                                    const sep = match[0];
+                                                    const firstIdx = cleaned.indexOf(sep);
+                                                    cleaned = cleaned.substring(0, firstIdx + 1) + cleaned.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                                }
+                                                setCurrDosage(cleaned);
+                                            }}
                                             className="h-[46px] pr-12"
                                         />
                                         {(currProdId) && (
@@ -311,8 +329,7 @@ export function OrderRecipeStep({
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">x</span>
                                                             <input
                                                                 type="text"
-                                                                inputMode="decimal"
-                                                                className="w-16 h-8 rounded-md border-slate-200 text-sm font-bold text-center focus:border-emerald-500 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                className="w-16 h-8 rounded-md border-slate-200 text-sm font-bold text-center focus:border-emerald-500 focus:ring-emerald-500"
                                                                 value={subQuantities[s.id] || ''}
                                                                 onChange={e => handleMultiplierChange(s.id, e.target.value)}
                                                                 placeholder="0"
@@ -353,11 +370,29 @@ export function OrderRecipeStep({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Espaciamiento (cm)</label>
-                                <Input type="text" inputMode="decimal" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => setPlantingSpacing(e.target.value.replace(',', '.'))} className="h-[46px]" />
+                                <Input type="text" placeholder="ej. 52.5" value={plantingSpacing} onChange={e => {
+                                    let cleaned = e.target.value.replace(/[^\d.,]/g, '');
+                                    const match = cleaned.match(/[.,]/);
+                                    if (match) {
+                                        const sep = match[0];
+                                        const firstIdx = cleaned.indexOf(sep);
+                                        cleaned = cleaned.substring(0, firstIdx + 1) + cleaned.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                    }
+                                    setPlantingSpacing(cleaned);
+                                }} className="h-[46px]" />
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Rinde esperado (kg/ha)</label>
-                                <Input type="text" inputMode="decimal" placeholder="ej. 3500" value={expectedYield} onChange={e => setExpectedYield(e.target.value.replace(',', '.'))} className="h-[46px]" />
+                                <Input type="text" placeholder="ej. 3500" value={expectedYield} onChange={e => {
+                                    let cleaned = e.target.value.replace(/[^\d.,]/g, '');
+                                    const match = cleaned.match(/[.,]/);
+                                    if (match) {
+                                        const sep = match[0];
+                                        const firstIdx = cleaned.indexOf(sep);
+                                        cleaned = cleaned.substring(0, firstIdx + 1) + cleaned.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                    }
+                                    setExpectedYield(cleaned);
+                                }} className="h-[46px]" />
                             </div>
                         </div>
                     )}
@@ -481,10 +516,18 @@ export function OrderRecipeStep({
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
                         <Input
                             type="text"
-                            inputMode="decimal"
                             placeholder="0.00"
                             value={servicePrice}
-                            onChange={e => setServicePrice(e.target.value.replace(',', '.'))}
+                            onChange={e => {
+                                let cleaned = e.target.value.replace(/[^\d.,]/g, '');
+                                const match = cleaned.match(/[.,]/);
+                                if (match) {
+                                    const sep = match[0];
+                                    const firstIdx = cleaned.indexOf(sep);
+                                    cleaned = cleaned.substring(0, firstIdx + 1) + cleaned.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                }
+                                setServicePrice(cleaned);
+                            }}
                             className="h-[46px]"
                         />
                     </div>

@@ -74,6 +74,7 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 ### Stock Entry Form Logic
 - **Auto-Calculation**: The form must automatically update the `Total Quantity` based on the formula: `Presentation Content` × `Physical Amount`.
 - **Filtering**: `availableProducts` in the stock entry form must be filtered by the current `clientId` to prevent cross-client data selection.
+- **Autocomplete (Presentations)**: The "Presentación" field must provide an autocomplete dropdown suggesting `standardPresentations` from the product catalog. Selecting an option automatically populates both the label and content fields.
 
 ## Navigation & Order Logic
 
@@ -158,6 +159,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Unit Multipliers**: Input fields in the movement panel act as multipliers for presentation contents (e.g., 2 units of a 100L tank = 200L).
 - **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
 - **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
+- **Standard Presentations & Dynamic Learning**:
+    - **Catalog Management**: Users can define a list of `standardPresentations` (Label + Content) within the Product Catalog.
+    - **Dynamic Learning**: Any new presentation (Label + Content) used during a purchase is automatically "learned" by the system and saved to the product's catalog for future suggestions.
 
 ## 👥 User Roles & Permissions
 - **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.

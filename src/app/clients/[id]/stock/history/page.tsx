@@ -747,7 +747,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Insumo</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Marca</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Comercial</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">N. Comercial</th>
                                     <th className="px-6 py-2 text-center text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Tipo</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase">Cantidad</th>
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">P. Unit.</th>
@@ -880,7 +880,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </tr>
                                                 {isSelected && (
                                                     <>
-                                                        {m.items && m.items.length > 0 && (
+                                                        {m.items && m.items.length > 1 && (
                                                             <>
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
                                                                     <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
@@ -888,7 +888,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 {m.items.map((it: any, i: number) => (
                                                                     <tr key={`${m.id}-item-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
                                                                         <td colSpan={1} className="px-6 py-1"></td>
-                                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10">↳ {it.productName}</td>
+                                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {it.productName}</td>
                                                                         <td className="px-6 py-1 text-slate-400">{it.productBrand || '-'}</td>
                                                                         <td className="px-6 py-1 text-slate-500">{it.productCommercialName || '-'}</td>
                                                                         <td colSpan={1}></td>
@@ -900,7 +900,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 ))}
                                                             </>
                                                         )}
-                                                        {m.investors && m.investors.length > 0 && (
+                                                        {m.investors && m.investors.length > 1 && (
                                                             <>
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
                                                                     <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
@@ -958,6 +958,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             client={client}
                             order={selectedMovement.order}
                             typeLabel={selectedMovement.typeLabel}
+                            originName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.warehouseId || ''] : undefined}
+                            destName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.partnerId || ''] : warehousesKey[selectedMovement.movement.warehouseId || '']}
                             onClose={() => setSelectedMovement(null)}
                         />
                     )}
@@ -971,6 +973,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         client={client}
                         order={selectedSubMovement.order}
                         typeLabel={selectedSubMovement.typeLabel}
+                        originName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.warehouseId || ''] : undefined}
+                        destName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.partnerId || ''] : warehousesKey[selectedSubMovement.movement.warehouseId || '']}
                         onClose={() => setSelectedSubMovement(null)}
                     />
                 </div>

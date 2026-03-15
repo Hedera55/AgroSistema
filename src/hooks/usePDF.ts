@@ -92,7 +92,7 @@ export function usePDF() {
             theme: 'grid',
             styles: {
                 fontSize: 8,
-                cellPadding: 0.8,
+                cellPadding: 1.2,
                 textColor: 0,
                 lineColor: [0, 0, 0],
                 lineWidth: 0.2
@@ -157,7 +157,7 @@ export function usePDF() {
                     tableWidth: pageWidth - 28,
                     margin: { left: 14, right: 14 },
                     headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
-                    styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
+                    styles: { fontSize: 8, cellPadding: 1.2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
                     alternateRowStyles: { fillColor: [215, 235, 225] },
                     bodyStyles: { fillColor: [235, 245, 240] },
                     columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 65 }, 2: { cellWidth: 52 }, 3: { cellWidth: 35 } }
@@ -190,7 +190,7 @@ export function usePDF() {
                     tableWidth: pageWidth - 28,
                     margin: { left: 14, right: 14 },
                     headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
-                    styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
+                    styles: { fontSize: 8, cellPadding: 1.2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
                     alternateRowStyles: { fillColor: [215, 235, 225] },
                     bodyStyles: { fillColor: [235, 245, 240] },
                     columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 45 }, 2: { cellWidth: 35 }, 3: { cellWidth: 30 }, 4: { cellWidth: 32 } }
@@ -218,7 +218,7 @@ export function usePDF() {
                 tableWidth: pageWidth - 28,
                 margin: { left: 14, right: 14 },
                 headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
-                styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
+                styles: { fontSize: 8, cellPadding: 1.2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
                 bodyStyles: { fillColor: [235, 245, 240] },
                 alternateRowStyles: { fillColor: [215, 235, 225] },
                 columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 45 }, 2: { cellWidth: 35 }, 3: { cellWidth: 30 }, 4: { cellWidth: 32 } }
@@ -283,7 +283,7 @@ export function usePDF() {
             theme: 'grid',
             tableWidth: pageWidth - 28,
             margin: { left: 14, right: 14 },
-            styles: { fontSize: 8, cellPadding: 2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.1 },
+            styles: { fontSize: 8, cellPadding: 1.2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.1 },
             columnStyles: {
                 0: { fontStyle: 'bold', cellWidth: 45 },
                 1: { cellWidth: 'auto' }
@@ -318,7 +318,12 @@ export function usePDF() {
                         left: isFirstCol ? 0.2 : 0,
                         right: isLastCol ? 0.2 : 0
                     } as any;
-                    data.cell.styles.lineColor = [0, 0, 0];
+                    // Reduce vertical spacing between lot rows and header
+                    if (isLotesHeader) {
+                        data.cell.styles.cellPadding = { top: 1.2, bottom: 0, left: 1.2, right: 1.2 };
+                    } else if (!isCampoRow && !isTotalRow) {
+                        data.cell.styles.cellPadding = { top: 0, bottom: 0, left: 1.2, right: 1.2 };
+                    }
                 }
             }
         });
@@ -392,7 +397,7 @@ export function usePDF() {
             startY: 32,
             margin: { left: 61 },
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 0.8, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
+            styles: { fontSize: 8, cellPadding: 1.2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
             columnStyles: {
                 0: { fontStyle: 'bold', fillColor: [230, 245, 240], cellWidth: 35 },
                 1: { cellWidth: 50 }
@@ -470,7 +475,7 @@ export function usePDF() {
             tableWidth: pageWidth - 28,
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
-            styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
+            styles: { fontSize: 8, cellPadding: 1.2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
             bodyStyles: { fillColor: [235, 245, 240] },
             alternateRowStyles: { fillColor: [215, 235, 225] },
             columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 50 }, 2: { cellWidth: 60 }, 3: { cellWidth: 47 } }
@@ -507,9 +512,9 @@ export function usePDF() {
                 ],
                 startY: lastY,
                 theme: 'grid',
-                tableWidth: 100, // Compact table
+                tableWidth: pageWidth - 28, // Full width
                 margin: { left: 14 },
-                styles: { fontSize: 8, cellPadding: 2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.1 },
+                styles: { fontSize: 8, cellPadding: 1.2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.1 },
                 columnStyles: { 0: { fontStyle: 'bold' } },
                 didParseCell: (data) => {
                     if (data.row.index === 1) {
@@ -568,7 +573,7 @@ export function usePDF() {
             startY: 32,
             margin: { left: 61 },
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 0.8, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
+            styles: { fontSize: 8, cellPadding: 1.2, textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
             columnStyles: {
                 0: { fontStyle: 'bold', fillColor: [230, 245, 240], cellWidth: 35 },
                 1: { cellWidth: 55 }
@@ -608,7 +613,7 @@ export function usePDF() {
             tableWidth: pageWidth - 28,
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: darkEmerald, textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.1 },
-            styles: { fontSize: 8, cellPadding: 2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
+            styles: { fontSize: 8, cellPadding: 1.2, textColor: 60, lineColor: [0, 0, 0], lineWidth: 0.1, valign: 'middle' },
             bodyStyles: { fillColor: [235, 245, 240] },
             alternateRowStyles: { fillColor: [215, 235, 225] }
         });

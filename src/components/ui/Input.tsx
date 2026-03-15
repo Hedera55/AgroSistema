@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                         <select
                             ref={ref as any}
                             className={`
-                block w-full rounded-lg border-slate-300 shadow-sm 
+                block w-full rounded-lg border border-slate-200 shadow-sm 
                 focus:border-emerald-500 focus:ring-emerald-500 
                 disabled:bg-slate-50 disabled:text-slate-500
                 transition-colors duration-200 h-10 px-3
@@ -37,12 +37,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                             <input
                                 ref={ref}
                                 className={`
-                  block w-full rounded-lg border-slate-300 shadow-sm 
+                  block w-full rounded-lg border border-slate-200 shadow-sm 
                   focus:border-emerald-500 focus:ring-emerald-500 
                   disabled:bg-slate-50 disabled:text-slate-500
                   placeholder:text-slate-400
                   transition-colors duration-200
-                  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
                   ${prefix ? 'pl-7' : ''}
                   ${suffix ? 'pr-10' : ''}
                   ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}

@@ -29,6 +29,8 @@ interface ProductCatalogProps {
     setNewProductBrand: (val: string) => void;
     newProductUnit: Unit;
     setNewProductUnit: (val: Unit) => void;
+    newProductPresentations: { label: string; content: number }[];
+    setNewProductPresentations: (val: { label: string; content: number }[]) => void;
     availableUnits: string[];
     setAvailableUnits: (val: string[]) => void;
     saveClientUnits: (units: string[]) => void;
@@ -71,6 +73,8 @@ function ProductCatalogInternal({
     setNewProductBrand,
     newProductUnit,
     setNewProductUnit,
+    newProductPresentations,
+    setNewProductPresentations,
     availableUnits,
     setAvailableUnits,
     saveClientUnits,
@@ -261,6 +265,7 @@ function ProductCatalogInternal({
                                                             setNewProductPA(p.activeIngredient || '');
                                                             setNewProductType(p.type);
                                                             setNewProductUnit(p.unit);
+                                                            setNewProductPresentations(p.standardPresentations || []);
                                                             setShowProductForm(true);
                                                             window.scrollTo({ top: 0, behavior: 'smooth' });
                                                         }}
@@ -316,7 +321,7 @@ function ProductCatalogInternal({
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
                                 <select
                                     ref={firstInputRef}
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    className="block w-full rounded-lg border border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
                                     value={newProductType}
                                     onChange={e => setNewProductType(e.target.value as ProductType)}
                                     onKeyDown={(e) => {
@@ -375,7 +380,7 @@ function ProductCatalogInternal({
                             <div className="w-full relative">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
                                 <select
-                                    className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                    className="block w-full rounded-lg border border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
                                     value={newProductUnit}
                                     onChange={e => {
                                         if (e.target.value === 'ADD_NEW') {
@@ -418,11 +423,8 @@ function ProductCatalogInternal({
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                setShowUnitInput(false);
-                                                setUnitInputValue('');
-                                            }}
-                                            className="text-slate-400 p-1 hover:text-slate-600"
+                                            onClick={() => setShowUnitInput(false)}
+                                            className="bg-slate-100 text-slate-500 rounded px-2 py-1 text-xs font-bold hover:bg-slate-200"
                                         >
                                             ✕
                                         </button>
@@ -461,6 +463,82 @@ function ProductCatalogInternal({
                                     </div>
                                 )}
                             </div>
+                            <div className="md:col-span-3">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Presentaciones</label>
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <input
+                                                type="text"
+                                                id="pres-label"
+                                                placeholder="Envase (ej. Bidón)"
+                                                className="block w-full rounded-lg border border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const label = (e.currentTarget as HTMLInputElement).value;
+                                                        const content = (document.getElementById('pres-content') as HTMLInputElement).value;
+                                                        if (label && content) {
+                                                            setNewProductPresentations([...newProductPresentations, { label, content: parseFloat(content) }]);
+                                                            (e.currentTarget as HTMLInputElement).value = '';
+                                                            (document.getElementById('pres-content') as HTMLInputElement).value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="w-32">
+                                            <input
+                                                type="text"
+                                                id="pres-content"
+                                                placeholder={`Cant. (${newProductUnit})`}
+                                                className="block w-full rounded-lg border border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const label = (document.getElementById('pres-label') as HTMLInputElement).value;
+                                                        const content = (e.currentTarget as HTMLInputElement).value;
+                                                        if (label && content) {
+                                                            setNewProductPresentations([...newProductPresentations, { label, content: parseFloat(content) }]);
+                                                            (document.getElementById('pres-label') as HTMLInputElement).value = '';
+                                                            (e.currentTarget as HTMLInputElement).value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const labelInput = document.getElementById('pres-label') as HTMLInputElement;
+                                                const contentInput = document.getElementById('pres-content') as HTMLInputElement;
+                                                if (labelInput.value && contentInput.value) {
+                                                    setNewProductPresentations([...newProductPresentations, { label: labelInput.value, content: parseFloat(contentInput.value) }]);
+                                                    labelInput.value = '';
+                                                    contentInput.value = '';
+                                                }
+                                            }}
+                                            className="bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg px-3 hover:bg-emerald-100 transition-colors"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {newProductPresentations.map((pres, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 bg-white border border-emerald-500 text-emerald-700 px-1 py-0.5 rounded-none text-sm font-bold shadow-sm animate-fadeIn">
+                                                <span>{pres.label} x {pres.content}{newProductUnit}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewProductPresentations(newProductPresentations.filter((_, i) => i !== idx))}
+                                                    className="text-emerald-500 hover:text-emerald-700 ml-1"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-4 border-t pt-4">
                             {isDuplicate && (
@@ -472,7 +550,7 @@ function ProductCatalogInternal({
                             )}
                             <div className="flex gap-3">
                                 <Button type="submit" isLoading={isSubmitting} disabled={isDuplicate}>
-                                    {editingProductId ? 'Actualizar en Catálogo' : 'Guardar en Catálogo'}
+                                    {editingProductId ? 'Actualizar' : 'Guardar'}
                                 </Button>
                             </div>
                         </div>

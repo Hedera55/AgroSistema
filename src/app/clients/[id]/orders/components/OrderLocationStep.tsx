@@ -236,11 +236,19 @@ export function OrderLocationStep({
                                             <div className="flex items-center gap-1 animate-fadeIn">
                                                 <input
                                                     type="text"
-                                                    inputMode="decimal"
                                                     className="w-20 h-8 text-xs px-2 border-slate-200 rounded-lg focus:border-emerald-500 focus:ring-emerald-500 bg-white font-bold text-emerald-600"
                                                     placeholder="ha..."
                                                     value={tempHectares}
-                                                    onChange={e => setTempHectares(e.target.value)}
+                                                    onChange={e => {
+                                                        let val = e.target.value.replace(/[^\d.,]/g, '');
+                                                        const match = val.match(/[.,]/);
+                                                        if (match) {
+                                                            const sep = match[0];
+                                                            const firstIdx = val.indexOf(sep);
+                                                            val = val.substring(0, firstIdx + 1) + val.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                                        }
+                                                        setTempHectares(val);
+                                                    }}
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();

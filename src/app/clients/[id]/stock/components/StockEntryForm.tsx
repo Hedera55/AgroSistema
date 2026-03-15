@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, memo, useMemo } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Warehouse, Product, Client, Campaign, MovementItem } from '@/types';
@@ -232,10 +232,7 @@ const StockEntryFormInternal = memo(({
         const targetWId = selectedWarehouseId || activeWarehouseIds[0];
         const targetW = warehouses.find(w => w.id === targetWId);
 
-        return sorted.filter((p: Product) => {
-            if (targetW?.name === 'Acopio de Granos') return p.type === 'SEED';
-            return true;
-        });
+        return sorted;
     }, [availableProducts, selectedWarehouseId, activeWarehouseIds, warehouses]);
 
     const activeProduct = useMemo(() =>
@@ -394,15 +391,32 @@ const StockEntryFormInternal = memo(({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end mb-4 border-b border-slate-100 pb-6">
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-3 relative">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Presentación</label>
                         <input
                             type="text"
+                            list={`pres-list-${activeProduct?.id || 'default'}`}
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={activeStockItem.presentationLabel || ''}
-                            onChange={e => updateActiveStockItem('presentationLabel', e.target.value)}
+                            onChange={e => {
+                                const val = e.target.value;
+                                updateActiveStockItem('presentationLabel', val);
+
+                                // Find if this value matches a standard presentation to auto-populate content
+                                const found = activeProduct?.standardPresentations?.find(p => p.label === val);
+                                if (found) {
+                                    updateActiveStockItem('presentationContent', found.content.toString());
+                                }
+                            }}
                             placeholder="Ej: Bidón, Caja"
                         />
+                        <datalist id={`pres-list-${activeProduct?.id || 'default'}`}>
+                            {activeProduct?.standardPresentations?.map((p, i) => (
+                                <option key={i} value={p.label}>
+                                    {p.label} x {p.content}{activeProduct.unit}
+                                </option>
+                            ))}
+                        </datalist>
                     </div>
 
                     <div className="md:col-span-2">

@@ -100,6 +100,11 @@ export interface Environment { // Ambiente (within a lot)
 export type ProductType = 'HERBICIDE' | 'FERTILIZER' | 'SEED' | 'FUNGICIDE' | 'INSECTICIDE' | 'COADYUVANTE' | 'INOCULANTE' | 'GRAIN' | 'OTHER';
 export type Unit = string;
 
+export interface StandardPresentation {
+    label: string;
+    content: number;
+}
+
 export interface Product {
     id: string;
     clientId?: string; // Optional: if missing, it's global; if present, it's client-specific
@@ -110,8 +115,10 @@ export interface Product {
     activeIngredient?: string;
     commercialName?: string;
     concentration?: string; // e.g., "30%"
+    standardPresentations?: StandardPresentation[];
     synced?: boolean;
     createdAt?: string;
+    updatedAt?: string;
     deleted?: boolean;
     deletedBy?: string;
     deletedAt?: string;
@@ -236,6 +243,9 @@ export interface InventoryMovement {
     productName: string;
     productBrand?: string;
     productCommercialName?: string;
+    presentationLabel?: string;
+    presentationContent?: number;
+    presentationAmount?: number;
     type: 'IN' | 'OUT' | 'SALE' | 'HARVEST' | 'PURCHASE' | 'SERVICE';
     quantity: number;
     unit: Unit;

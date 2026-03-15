@@ -102,6 +102,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [isDuplicate, setIsDuplicate] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
+    const [newProductPresentations, setNewProductPresentations] = useState<{ label: string; content: number }[]>([]);
 
     // Multi-product entry state
     const [activeStockItem, setActiveStockItem] = useState({
@@ -528,9 +529,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
         movements.forEach(m => {
             if (m.type === 'IN') {
-                if (m.productId === 'CONSOLIDATED' && m.items) {
+                // Determine if we should process root or items
+                // Rule: If items exist, they are the source of truth for presentation + price
+                if (m.items && m.items.length > 0) {
                     m.items.forEach((item: any) => {
-                        const cost = item.quantity * (item.price || 0); // USD per Unit * Unit Qty = Total USD
+                        const cost = (item.quantity || 0) * (item.price || 0);
                         
                         // 1. Specific ID + Presentation
                         const pKeySpecific = getPresentKey(item.productId, item);
@@ -543,26 +546,21 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         }
                     });
                 } else {
-                    const cost = m.quantity * (m.purchasePrice || m.price || 0);
-                    
-                    // 1. Specific ID + Presentation
+                    // Fallback for older movements without items array
+                    const cost = (m.quantity || 0) * (m.purchasePrice || m.price || 0);
                     const pKeySpecific = getPresentKey(m.productId, m);
                     updateStats(purchasePricing, pKeySpecific, m.quantity, cost);
                     
-                    // 2. Generic Name + Presentation
                     if (m.productName) {
                          const pKeyGeneric = getPresentKey(m.productName.toLowerCase().trim(), m);
                          updateStats(purchasePricing, pKeyGeneric, m.quantity, cost);
                     }
                 }
             } else if (m.type === 'SALE') {
-                const cost = m.quantity * (m.salePrice || 0);
-                
-                // 1. Specific ID + Presentation
+                const cost = (m.quantity || 0) * (m.salePrice || 0);
                 const pKeySpecific = getPresentKey(m.productId, m);
                 updateStats(salePricing, pKeySpecific, m.quantity, cost);
                 
-                // 2. Generic Name + Presentation
                 const nameKey = (m.crop || m.productName || '').toLowerCase().trim();
                 const pKeyGeneric = getPresentKey(nameKey, m);
                 updateStats(salePricing, pKeyGeneric, m.quantity, cost);
@@ -594,23 +592,25 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             let specificAvgPrice = 0;
             
             if (isPropia) {
-                 const saleDataSpecific = salePricing.get(pKeySpecific) || salePricing.get(`${item.productId}__0`);
-                 const saleDataGeneric = salePricing.get(pKeyGeneric) || salePricing.get(`${normalizedName}__0`);
+                 const d1 = salePricing.get(pKeySpecific);
+                 const d2 = salePricing.get(`${item.productId}__0`);
+                 const d3 = salePricing.get(pKeyGeneric);
+                 const d4 = salePricing.get(`${normalizedName}__0`);
                  
-                 if (saleDataSpecific && saleDataSpecific.totalQty > 0) {
-                     specificAvgPrice = saleDataSpecific.totalVal / saleDataSpecific.totalQty;
-                 } else if (saleDataGeneric && saleDataGeneric.totalQty > 0) {
-                     specificAvgPrice = saleDataGeneric.totalVal / saleDataGeneric.totalQty;
-                 }
+                 const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
+                 const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
+                 
+                 if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
             } else {
-                 const purchaseDataSpecific = purchasePricing.get(pKeySpecific) || purchasePricing.get(`${item.productId}__0`);
-                 const purchaseDataGeneric = purchasePricing.get(pKeyGeneric) || purchasePricing.get(`${normalizedName}__0`);
+                 const d1 = purchasePricing.get(pKeySpecific);
+                 const d2 = purchasePricing.get(`${item.productId}__0`);
+                 const d3 = purchasePricing.get(pKeyGeneric);
+                 const d4 = purchasePricing.get(`${normalizedName}__0`);
 
-                 if (purchaseDataSpecific && purchaseDataSpecific.totalQty > 0) {
-                     specificAvgPrice = purchaseDataSpecific.totalVal / purchaseDataSpecific.totalQty;
-                 } else if (purchaseDataGeneric && purchaseDataGeneric.totalQty > 0) {
-                     specificAvgPrice = purchaseDataGeneric.totalVal / purchaseDataGeneric.totalQty;
-                 }
+                 const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
+                 const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
+
+                 if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
             }
 
             // Temporarily piggyback the specific PPP onto the breakdown item for rendering
@@ -705,6 +705,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
+                    standardPresentations: newProductPresentations,
                     clientId: id
                 });
             } else {
@@ -716,6 +717,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     activeIngredient: newProductPA,
                     type: newProductType,
                     unit: newProductUnit,
+                    standardPresentations: newProductPresentations,
                     clientId: id
                 });
             }
@@ -724,6 +726,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             setNewProductBrand('');
             setNewProductCommercialName('');
             setNewProductPA('');
+            setNewProductPresentations([]);
             setEditingProductId(null);
             setIsEditingProduct(false);
             setShowProductForm(false);
@@ -732,7 +735,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         } finally {
             setIsSubmitting(false);
         }
-    }, [newProductName, newProductBrand, newProductCommercialName, newProductPA, editingProductId, newProductType, newProductUnit, id, updateProduct, addProduct]);
+    }, [newProductName, newProductBrand, newProductCommercialName, newProductPA, editingProductId, newProductType, newProductUnit, newProductPresentations, id, updateProduct, addProduct]);
 
     const handleStockSubmit = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -813,6 +816,31 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 }
 
                 await updateStock(newItem);
+
+                // --- Dynamic Presentation Learning ---
+                if (pLabel && pContent > 0 && product) {
+                    const existingPresentations = product.standardPresentations || [];
+                    const alreadyExists = existingPresentations.some(
+                        pres => pres.label.toLowerCase().trim() === pLabel.toLowerCase().trim() &&
+                                pres.content === pContent
+                    );
+
+                    if (!alreadyExists) {
+                        const updatedPresentations = [
+                            ...existingPresentations,
+                            { label: pLabel, content: pContent }
+                        ];
+                        // Silent update of the product in background
+                        db.put('products', {
+                            ...product,
+                            standardPresentations: updatedPresentations,
+                            synced: false,
+                            updatedAt: new Date().toISOString()
+                        });
+                        // Also update availableProducts in memory if needed (though it will refresh on next render/sync)
+                    }
+                }
+                // ------------------------------------
 
                 movementItems.push({
                     id: generateId(),
@@ -1597,6 +1625,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 showProductForm={showProductForm}
                 editingProductId={editingProductId}
                 handleProductSubmit={handleProductSubmit}
+                newProductPresentations={newProductPresentations}
+                setNewProductPresentations={setNewProductPresentations}
                 newProductType={newProductType}
                 setNewProductType={setNewProductType}
                 productTypes={productTypes}

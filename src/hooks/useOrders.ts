@@ -25,6 +25,8 @@ export function useOrders(clientId: string) {
 
     useEffect(() => {
         refreshOrders();
+        window.addEventListener('ordersUpdated', refreshOrders);
+        return () => window.removeEventListener('ordersUpdated', refreshOrders);
     }, [refreshOrders]);
 
     const addOrder = async (
@@ -197,6 +199,7 @@ export function useOrders(clientId: string) {
 
             // Sync all changes
             await syncService.pushChanges();
+            window.dispatchEvent(new CustomEvent('ordersUpdated'));
             await refreshOrders();
             return true;
         } catch (error) {
@@ -258,6 +261,7 @@ export function useOrders(clientId: string) {
             });
 
             await syncService.pushChanges();
+            window.dispatchEvent(new CustomEvent('ordersUpdated'));
             await refreshOrders();
         } catch (error) {
             console.error('Error updating order status:', error);
@@ -302,6 +306,7 @@ export function useOrders(clientId: string) {
             });
 
             await syncService.pushChanges();
+            window.dispatchEvent(new CustomEvent('ordersUpdated'));
             await refreshOrders();
         } catch (error) {
             console.error('Error deleting order:', error);

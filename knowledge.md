@@ -96,6 +96,8 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
   > The problem is that the summary logic on the main page was ignoring the "splits" array and only looking at the single "Socio" name field. Since the system often leaves that main field empty when a split exists, the code was defaulting the entire amount to "Sin Asignar".
 
 
+- ** stlying: ** In general, I prefer using browser's native elements, like <select>, with its default styles
+
 
 
 + . + . + . + . + . + . +

@@ -50,13 +50,10 @@ export function MovementDetailsView({ movement, client, order, originName, destN
         <div className={`bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 ${getBorderColor()}`}>
             {/* Header */}
             <div className="bg-slate-50 px-8 py-4 border-b border-slate-200 flex justify-between items-center">
-                <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-                    <h3 className="font-bold text-slate-800 text-lg flex-shrink-0">
-                        Detalles
+                <div className="flex flex-col">
+                    <h3 className="font-black text-slate-900 text-xl tracking-tight">
+                        Detalles de {typeLabel.replace('I-', '').replace('E-', '').toLowerCase()}
                     </h3>
-                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border flex-shrink-0 ${getBadgeColors()}`}>
-                        {typeLabel.replace('I-', '').replace('E-', '')}
-                    </span>
                 </div>
                 <button
                     onClick={onClose}
@@ -89,20 +86,20 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                     <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">
                                         {movement.type === 'IN' ? 'Galpón de destino' : 'Galpón'}
                                     </span>
-                                    <span className="text-sm font-bold text-slate-700">{destName || originName || 'Desconocido'}</span>
+                                    <span className="text-sm font-bold text-slate-700">{destName || originName || 'Galpón'}</span>
                                 </div>
                             )}
 
                             {movement.sellerName && (
                                 <div>
-                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Comercial / Vendedor</span>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Vendedor</span>
                                     <span className="text-sm font-bold text-blue-600">{movement.sellerName}</span>
                                 </div>
                             )}
 
                             {movement.investors && movement.investors.length > 0 && (
                                 <div className="sm:col-span-2 lg:col-span-3">
-                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Socios Involucrados</span>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Pagado Por</span>
                                     <div className="flex flex-wrap gap-2">
                                         {movement.investors.map(inv => (
                                             <span key={inv.name} className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-lg border border-indigo-100 uppercase">
@@ -123,6 +120,57 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                             )}
                         </div>
                     </div>
+                    
+                    {/* Section: Product List (Detalles de compra/venta) */}
+                    {(movement.items && movement.items.length > 0) && (
+                        <div>
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                                {typeLabel.includes('COMPRA') ? 'Insumos Comprados' : 
+                                 typeLabel.includes('VENTA') ? 'Productos Vendidos' : 'Detalle de Items'}
+                            </h3>
+                            <div className="bg-slate-50/50 rounded-2xl border border-slate-100 overflow-hidden">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Insumo / Marca</th>
+                                            <th className="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Presentación</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Cantidad</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Precio Unit.</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {movement.items.map((it, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm font-bold text-slate-800">{it.productName}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase">{it.productBrand || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {it.presentationLabel && it.presentationContent ? (
+                                                        <span className="text-xs font-medium text-slate-600">
+                                                            {it.presentationLabel} {it.presentationContent}{it.unit || movement.unit} x {it.presentationAmount}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400 italic">Sin detalle</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-bold text-slate-700">
+                                                    {Math.abs(it.quantity)} {it.unit || movement.unit}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-mono text-slate-500">
+                                                    USD {it.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-mono font-bold text-slate-900">
+                                                    USD {(it.quantity * (it.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Section 2: Logistics Info */}
                     {movement.type !== 'IN' && (

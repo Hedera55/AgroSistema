@@ -100,6 +100,7 @@ export function useInventory() {
                 ...client,
                 deleted: true,
                 deletedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 synced: false
             });
             await refresh();
@@ -114,6 +115,7 @@ export function useInventory() {
                 ...product,
                 deleted: true,
                 deletedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 synced: false
             });
             await refresh();
