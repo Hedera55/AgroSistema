@@ -549,7 +549,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             // 5. Update Lot Rinde if applicable
             await updateLot({
                 ...lot,
-                observedYield: quantity.toString(),
+                observedYield: quantity,
                 lastUpdatedBy: displayName || 'Sistema'
             });
 

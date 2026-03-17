@@ -78,7 +78,7 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                             className={`p-1.5 rounded-lg transition-all text-xs font-bold px-3 py-1 border ${showSheets ? 'bg-blue-600 text-white border-blue-600' : 'text-blue-600 hover:bg-blue-50 border-blue-200'}`}
                             title="Ver Fichas de Transporte"
                         >
-                            🚛 Fichas ({allSheets.length})
+                            Fichas ({allSheets.length})
                         </button>
                     )}
                     {onEdit && (
