@@ -12,7 +12,7 @@ They cannot change things in orders. Those are just managed by the admin.
 
 And... a client only sees their own client dashboard. Different from an admin, who can see various clients dashboards.
 
-
++
 . . . . . .. 
 
 Retroactively changing how much an expenditure cost or who paid for it.
