@@ -183,7 +183,16 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Costo Labor Total</label>
                         <p className="text-sm font-bold text-slate-700">
-                            {harvestMovement.harvestLaborCost ? `USD ${harvestMovement.harvestLaborCost.toLocaleString()}` : '-'}
+                            {(() => {
+                                const totalCost = harvestMovements.reduce((sum, m) => sum + (m.harvestLaborCost || 0), 0);
+                                const pricePerHa = harvestMovements.find(m => m.harvestLaborPricePerHa)?.harvestLaborPricePerHa;
+                                return (
+                                    <>
+                                        {totalCost > 0 ? `USD ${totalCost.toLocaleString()}` : '-'}
+                                        {pricePerHa && <span className="ml-2 text-xs font-bold text-slate-400">(USD {pricePerHa.toLocaleString()} / ha)</span>}
+                                    </>
+                                );
+                            })()}
                         </p>
                     </div>
                     <div>

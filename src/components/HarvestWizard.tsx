@@ -40,6 +40,8 @@ interface HarvestWizardProps {
     initialYield: string;
     isExecutingPlan: boolean;
     initialDistributions?: any[];
+    initialTransportSheets?: TransportSheet[];
+    defaultWhId?: string;
 }
 
 export const HarvestWizard: React.FC<HarvestWizardProps> = ({
@@ -58,20 +60,27 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     initialLaborPrice,
     initialYield,
     isExecutingPlan,
-    initialDistributions
+    initialDistributions,
+    initialTransportSheets,
+    defaultWhId
 }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
     // Step 1 State
     const [harvestDate, setHarvestDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
     const [harvestContractor, setHarvestContractor] = useState(initialContractor || '');
-    const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(initialDistributions?.[0]?.logistics?.campaignId || '');
+    const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(initialDistributions?.[0]?.campaignId || initialDistributions?.[0]?.logistics?.campaignId || '');
     const [observedYield, setObservedYield] = useState(initialYield || '');
     const [harvestLaborPrice, setHarvestLaborPrice] = useState(initialLaborPrice || '');
     const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>(
-        initialDistributions?.[0]?.logistics?.investors || (initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : [])
+        initialDistributions?.[0]?.investors || 
+        initialDistributions?.[0]?.logistics?.investors || 
+        (initialDistributions?.[0]?.investorName ? [{ name: initialDistributions?.[0]?.investorName, percentage: 100 }] : 
+         initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : [])
     );
-    const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(initialDistributions?.[0]?.logistics?.type === 'GRANO' ? 'GRANO' : 'GRANO'); // Default to Grano, will refine mapping if needed
+    const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(
+        (initialDistributions?.[0]?.type === 'SEMILLA' || initialDistributions?.[0]?.logistics?.type === 'SEMILLA') ? 'SEMILLA' : 'GRANO'
+    );
 
     const [isConfirming, setIsConfirming] = useState(false);
 
@@ -86,13 +95,16 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     }>>(initialDistributions || []);
     const [selectedDistribOption, setSelectedDistribOption] = useState('');
 
-    // Step 3 State — Transport Sheets (start with one sheet pre-created)
+    // Step 3 State — Transport Sheets (use initial if provided, otherwise start with one blank)
     const [transportSheets, setTransportSheets] = useState<TransportSheet[]>(() => {
+        if (initialTransportSheets && initialTransportSheets.length > 0) {
+            return initialTransportSheets;
+        }
         const firstSheet: TransportSheet = { id: `sheet_${Date.now()}`, dischargeNumber: '1' };
         if (farm?.address) firstSheet.originAddress = farm.address;
         return [firstSheet];
     });
-    const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+    const [activeSheetIndex, setActiveSheetIndex] = useState(initialTransportSheets && initialTransportSheets.length > 0 ? initialTransportSheets.length - 1 : 0);
     const [selectedProfileId, setSelectedProfileId] = useState('general');
     const [customProfiles, setCustomProfiles] = useState<Array<{ id: string; name: string; data: Partial<TransportSheet> }>>([]);
 
@@ -118,7 +130,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         return opts;
     }, [distributions, customProfiles, selectedProfileId]);
 
-    const totalYieldNum = parseFloat(observedYield) || 0;
+    const totalYieldNum = (typeof observedYield === 'number' ? observedYield : parseFloat(observedYield.toString().replace(/\./g, '').replace(',', '.'))) || 0;
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
     const availableYield = totalYieldNum - assignedYield;
 
@@ -241,7 +253,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     };
 
     const handleUpdateDistributionAmountString = (id: string, val: string) => {
-        const normalized = val.replace(',', '.');
+        const normalized = val.replace(/\./g, '').replace(',', '.');
         const num = parseFloat(normalized) || 0;
         handleUpdateDistributionAmount(id, num);
     };
@@ -330,7 +342,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             setCustomProfiles(prev => prev.map(p =>
                 p.id === selectedProfileId ? { ...p, data: data as Partial<TransportSheet> } : p
             ));
-            alert(`Perfil "${existingCustom.name}" actualizado.`);
         } else {
             const presetOption = profileOptions.find(o => o.id === selectedProfileId);
             if (presetOption) {
@@ -340,7 +351,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                     name: presetOption.label,
                     data: data as Partial<TransportSheet>
                 }]);
-                alert(`Perfil de carga actualizado.`);
             } else {
                 const name = prompt('Nombre del nuevo perfil:');
                 if (!name) return;
@@ -367,9 +377,24 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const weightDifference = totalNetWeight - totalYieldNum;
 
     const handleFinalSubmit = () => {
-        if (distributions.length === 0 && totalYieldNum > 0) {
-            alert('Debe asignar al menos un destino para el grano (Depósito o Socio).');
-            return;
+        let finalDistributions = [...distributions];
+        
+        if (finalDistributions.length === 0 && totalYieldNum > 0) {
+            // Auto-assign to default warehouse/first available
+            const targetWh = warehouses.find(w => w.id === defaultWhId) || warehouses[0];
+            if (targetWh) {
+                finalDistributions = [{
+                    id: `auto_${Date.now()}`,
+                    type: 'WAREHOUSE',
+                    targetId: targetWh.id,
+                    targetName: targetWh.name,
+                    amount: totalYieldNum,
+                    logistics: {}
+                }];
+            } else {
+                alert('No hay depósitos disponibles para asignar la cosecha.');
+                return;
+            }
         }
         if (assignedYield > totalYieldNum + 1) { // 1kg margin
             alert('Ha asignado más kilos de los cosechados.');
@@ -377,7 +402,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         }
 
         // Apply general logistics as fallbacks to all distributions
-        const finalDistributions = distributions.map(d => {
+        const processedDistributions = finalDistributions.map(d => {
             return { ...d, logistics: { ...d.logistics } };
         });
 
@@ -385,12 +410,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             date: harvestDate,
             contractor: harvestContractor,
             campaignId: selectedHarvestCampaignId,
-            laborPricePerHa: parseFloat(harvestLaborPrice) || 0,
+            laborPricePerHa: typeof harvestLaborPrice === 'number' ? harvestLaborPrice : (parseFloat(harvestLaborPrice.toString().replace(/\./g, '').replace(',', '.')) || 0),
             investor: selectedHarvestInvestors.length > 0 ? selectedHarvestInvestors[0].name : '',
             investors: selectedHarvestInvestors,
             harvestType,
             totalYield: totalYieldNum,
-            distributions: finalDistributions,
+            distributions: processedDistributions,
             transportSheets
         });
     };
@@ -442,7 +467,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             inputMode="decimal"
                             placeholder="Ej. 65000"
                             value={observedYield}
-                            onChange={e => setObservedYield(e.target.value.replace(',', '.'))}
+                            onChange={e => setObservedYield(e.target.value.replace(/\./g, '').replace(',', '.'))}
                             className="bg-white border-blue-300 focus:ring-blue-500"
                             labelClassName="block text-[10px] uppercase font-bold text-blue-600 mb-1"
                         />
@@ -473,7 +498,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             type="text"
                             inputMode="decimal"
                             value={harvestLaborPrice}
-                            onChange={e => setHarvestLaborPrice(e.target.value.replace(',', '.'))}
+                            onChange={e => setHarvestLaborPrice(e.target.value.replace(/\./g, '').replace(',', '.'))}
                             className="bg-white"
                             labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                         />
@@ -678,7 +703,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('humidity')}
-                                onChange={e => updateSheetField('humidity', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('humidity', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Hectolítrico"
@@ -686,7 +711,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('hectoliterWeight')}
-                                onChange={e => updateSheetField('hectoliterWeight', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('hectoliterWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Bruto (kg)"
@@ -694,7 +719,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('grossWeight')}
-                                onChange={e => updateSheetField('grossWeight', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('grossWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                             <Input
                                 label="Peso Tara (kg)"
@@ -702,7 +727,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('tareWeight')}
-                                onChange={e => updateSheetField('tareWeight', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('tareWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                             <Input
                                 label="Empresa de Destino"
@@ -728,7 +753,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('distanceKm')}
-                                onChange={e => updateSheetField('distanceKm', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('distanceKm', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                             <Input
                                 label="Tarifa Flete (USD)"
@@ -736,7 +761,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('freightTariff')}
-                                onChange={e => updateSheetField('freightTariff', e.target.value.replace(',', '.'))}
+                                onChange={e => updateSheetField('freightTariff', e.target.value.replace(/\./g, '').replace(',', '.'))}
                             />
                         </div>
                     </div>

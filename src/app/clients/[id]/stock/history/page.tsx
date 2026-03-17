@@ -754,7 +754,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     <th className="px-6 py-2 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Total</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Vendedor</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Pagado por</th>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Galpón</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase min-w-[140px] whitespace-nowrap">Galpón</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Emisión</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">F. Venc.</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Notas</th>
@@ -851,7 +851,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className="px-6 py-2 text-right font-mono text-slate-900 font-bold">{showValue ? <span className={m.type === 'IN' ? 'text-red-500' : 'text-emerald-600'}>USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.sellerName || '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.investorName || (m.investors ? m.investors.map((i: any) => i.name).join(', ') : '-')}</td>
-                                                    <td className="px-6 py-2 text-[11px] font-medium text-slate-600">{m.isTransfer ? `${warehousesKey[m.warehouseId || '']} → ${warehousesKey[m.partnerId || '']}` : warehousesKey[m.warehouseId || '']}</td>
+                                                    <td className="px-6 py-2 text-[11px] font-medium text-slate-600 min-w-[140px] whitespace-nowrap">{m.isTransfer ? `${warehousesKey[m.warehouseId || '']} → ${warehousesKey[m.partnerId || '']}` : warehousesKey[m.warehouseId || '']}</td>
                                                     <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">{m.facturaDate ? formatDate(m.facturaDate).date : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">{m.dueDate ? formatDate(m.dueDate).date : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 max-w-xs truncate text-[11px]">{m.notes || '-'}</td>

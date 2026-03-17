@@ -7,11 +7,12 @@ import { Order, Client, Warehouse } from '@/types';
 interface LotHistoryProps {
     clientId: string;
     lotId: string;
+    refreshKey?: number;
     onSelectEvent?: (event: any) => void;
     onEditEvent?: (event: any) => void;
 }
 
-export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotHistoryProps) {
+export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onEditEvent }: LotHistoryProps) {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -38,7 +39,7 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
 
                 // 2. Fetch Harvest Movements and group them
                 const allMovements = await db.getAll('movements');
-                const movementsForLot = allMovements.filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha');
+                const movementsForLot = allMovements.filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha' && !m.deleted);
 
                 // Grouping by date and time
                 const groups: Record<string, any> = {};
@@ -51,6 +52,8 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                             time: m.time,
                             type: 'HARVEST',
                             observedYield: 0,
+                            harvestLaborCost: 0,
+                            harvestLaborPricePerHa: m.harvestLaborPricePerHa,
                             crop: m.productName,
                             contractorName: m.contractorName,
                             author: m.createdBy || 'Sistema',
@@ -58,9 +61,14 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                             movements: []
                         };
                     }
-                    groups[key].observedYield += m.quantity;
-                    groups[key].movements.push(m);
-                });
+                        groups[key].observedYield += m.quantity;
+                        groups[key].harvestLaborCost += m.harvestLaborCost || 0;
+                        if (m.harvestLaborPricePerHa) groups[key].harvestLaborPricePerHa = m.harvestLaborPricePerHa;
+                        if (m.contractorName && !groups[key].contractorName) groups[key].contractorName = m.contractorName;
+                        if (m.investorName && !groups[key].investorName) groups[key].investorName = m.investorName;
+                        if (m.campaignId && !groups[key].campaignId) groups[key].campaignId = m.campaignId;
+                        groups[key].movements.push(m);
+                    });
 
                 const harvestEvents = Object.values(groups);
 
@@ -79,7 +87,7 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
         }
 
         loadHistory();
-    }, [lotId]);
+    }, [lotId, refreshKey]);
 
     if (loading) return <div className="text-xs text-slate-400 p-4">Cargando historial...</div>;
 
@@ -115,7 +123,6 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                                 <div className="font-mono text-slate-600 font-bold">
                                     {isNaN(event.timestamp) ? event.date : new Date(event.timestamp).toLocaleDateString()}
                                 </div>
-                                <div className="text-[10px] text-slate-400">{event.time}</div>
                             </td>
                             <td className="px-4 py-3 align-top text-center">
                                 <div className="flex flex-col gap-1 items-start">
@@ -132,9 +139,6 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                                 {event.type === 'HARVEST' ? (
                                     <div>
                                         <div className="font-bold text-slate-800">Cosecha de {event.crop}</div>
-                                        {event.contractorName && (
-                                            <div className="text-xs text-slate-500 mt-0.5">Contratista: {event.contractorName}</div>
-                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-1">
@@ -149,16 +153,24 @@ export function LotHistory({ clientId, lotId, onSelectEvent, onEditEvent }: LotH
                                     </div>
                                 )}
                             </td>
-                            <td className="px-4 py-3 align-top text-right">
+                            <td className="px-4 py-3 align-top text-right truncate">
                                 {event.type === 'HARVEST' ? (
-                                    <div>
-                                        <div className="font-mono font-bold text-blue-700">{event.observedYield?.toLocaleString()} kg</div>
+                                    <div className="font-mono font-bold text-slate-800">
+                                        {(event.harvestLaborCost > 0 || event.harvestLaborPricePerHa > 0) ? (
+                                            <span>
+                                                ${(event.harvestLaborCost || 0).toLocaleString()} 
+                                                <span className="text-slate-400 font-normal mx-1">/</span> 
+                                                {event.observedYield?.toLocaleString()} kg
+                                            </span>
+                                        ) : (
+                                            <span>{event.observedYield?.toLocaleString()} kg</span>
+                                        )}
                                     </div>
                                 ) : (
                                     <div>
                                         {event.serviceCost > 0 ? (
-                                            <div className="text-xs font-mono text-slate-500">
-                                                Costo de Labor: ${event.serviceCost.toLocaleString()}
+                                            <div className="font-mono font-bold text-slate-800">
+                                                ${event.serviceCost.toLocaleString()}
                                             </div>
                                         ) : (
                                             <div className="text-slate-400 text-xs">-</div>

@@ -159,9 +159,12 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Unit Multipliers**: Input fields in the movement panel act as multipliers for presentation contents (e.g., 2 units of a 100L tank = 200L).
 - **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
 - **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
-- **Standard Presentations & Dynamic Learning**:
-    - **Catalog Management**: Users can define a list of `standardPresentations` (Label + Content) within the Product Catalog.
-    - **Dynamic Learning**: Any new presentation (Label + Content) used during a purchase is automatically "learned" by the system and saved to the product's catalog for future suggestions.
+## 🌾 Harvest Data Integrity & Persistence
+- **State Shadowing**: Avoid creating "lite" versions of the Harvest Wizard (e.g., side-panel forms). Always use the full `HarvestWizard` component to ensure all metadata (transport sheets, contractors) is correctly managed and aggregated.
+- **Aggregation Pattern**: When editing an event composed of multiple movements (like a multi-destination harvest), ALWAYS aggregate all sub-items (e.g., `transportSheets`) before populating the edit wizard. Failure to do so leads to data loss for all but the first movement.
+- **Save Priority (The Spread Rule)**: When updating historical movements that contain a `logistics` object, always spread the legacy logistics **FIRST**, and then apply updated metadata (Contractor, Price, Sheets). Spreading logistics last will clobber any fresh user input with stale data.
+- **Locale-Aware Parsing**: All agricultural labor prices MUST be parsed using a utility that handles both `.` and `,` as decimal separators to support the Spanish/Argentine standard. Prefer `val.replace(/\./g, '').replace(',', '.')` before calling `parseFloat`.
+- **Sync Parity**: Every harvest-related field added to the database must have a corresponding mapping in *both* directions within `sync.ts` (forward and reverse mappers) to prevent "flickering" or data loss upon page reload.
 
 ## 👥 User Roles & Permissions
 - **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.

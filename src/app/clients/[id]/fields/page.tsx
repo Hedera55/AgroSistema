@@ -82,6 +82,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [tempFarmBoundary, setTempFarmBoundary] = useState<any>(null);
     const [tempLotKmlData, setTempLotKmlData] = useState<string | null>(null);
     const [tempLotBoundary, setTempLotBoundary] = useState<any>(null);
+    const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+    const refreshMovements = useClientMovements(id).refresh;
 
     const getSowingTooltip = (lotId: string) => {
         if (!orders) return 'Sembrado';
@@ -245,48 +248,58 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setShowLotForm(false);
     };
 
+    const normalizeNumber = (val: string | number | undefined): number => {
+        if (val === undefined || val === null) return 0;
+        if (typeof val === 'number') return val;
+        // Spanish/Argentine notation: dots for thousands, comma for decimal
+        // Remove dots, replace comma with dot
+        const normalized = val.toString().replace(/\./g, '').replace(',', '.');
+        return parseFloat(normalized) || 0;
+    };
+
     const handleMarkHarvested = async (lot: Lot, data: any) => {
-        const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
-
-        const campaign = campaigns.find(c => c.id === campaignId);
-        const campaignName = campaign?.name || 'Común'; // Fallback to 'Común' if no campaign name found
-        
-        const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
-        const productName = cropBaseName;
-        const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
-
-        // Convention: Brand for Propia harvest is the Campaign Name
-        const propBrand = campaignName;
-
-        let product = products.find(p =>
-            p.name.toLowerCase() === productName.toLowerCase() &&
-            p.type === productType &&
-            p.brandName === propBrand &&
-            p.clientId === id
-        );
-
-        if (!product && lot.cropSpecies) {
-            product = await addProduct({
-                clientId: id,
-                name: productName,
-                type: productType,
-                brandName: propBrand,
-                commercialName: 'Propia',
-                unit: 'kg',
-                createdAt: new Date().toISOString(),
-                synced: false
-            });
-        }
-
-        if (!product) {
-            alert('No se pudo identificar el cultivo del lote.');
-            return;
-        }
-
-        const pricePerHa = parseFloat(laborPricePerHa) || 0;
-        const totalCost = pricePerHa * lot.hectares;
-
         try {
+            const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
+
+            const campaign = campaigns.find(c => c.id === campaignId);
+            const campaignName = campaign?.name || 'Común';
+
+            const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
+            const productName = cropBaseName;
+            const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
+
+            // Convention: Brand for Propia harvest is the Campaign Name
+            const propBrand = campaignName;
+
+            let product = products.find(p =>
+                p.name.toLowerCase() === productName.toLowerCase() &&
+                p.type === productType &&
+                p.brandName === propBrand &&
+                p.clientId === id
+            );
+
+            if (!product && lot.cropSpecies) {
+                product = await addProduct({
+                    clientId: id,
+                    name: productName,
+                    type: productType,
+                    brandName: propBrand,
+                    commercialName: 'Propia',
+                    unit: 'kg',
+                    createdAt: new Date().toISOString(),
+                    synced: false
+                });
+            }
+
+            if (!product) {
+                alert('No se pudo identificar el cultivo del lote.');
+                return;
+            }
+
+            const pricePerHa = normalizeNumber(laborPricePerHa);
+            const totalCost = pricePerHa * lot.hectares;
+            const normalizedTotalYield = normalizeNumber(totalYield);
+
             // --- MOVEMENT TRACING (REVERSAL) ---
             if (isEditingHarvestPanel && harvestPlanOrder) {
                 const oldMovements = (harvestPlanOrder as any).movements || [];
@@ -318,14 +331,15 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             const movementDate = date || new Date().toISOString().split('T')[0];
             const farm = farms.find(f => f.id === lot.farmId);
-            const pricePerHa = laborPricePerHa || 0;
+
             // --- AUTO-ASSIGN REMAINDER ---
             const assignedAmount = distributions.reduce((sum: number, d: any) => sum + d.amount, 0);
-            const remaining = totalYield - assignedAmount;
+            const remaining = normalizedTotalYield - assignedAmount;
             const finalDistributions = [...distributions];
             if (remaining > 5 && client?.defaultHarvestWarehouseId) {
                 const defWarehouse = warehouses.find(w => w.id === client.defaultHarvestWarehouseId);
                 finalDistributions.push({
+                    id: generateId(),
                     type: 'WAREHOUSE',
                     targetId: client.defaultHarvestWarehouseId,
                     targetName: defWarehouse?.name || 'Acopio por Defecto',
@@ -355,13 +369,18 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
                 // Record Movement for this distribution
                 const distSheets = (sheets || []).filter((s: any) => !s.distributionId || s.distributionId === dist.id);
+                const isFirstDist = finalDistributions.indexOf(dist) === 0;
+
                 await db.put('movements', {
+                    ...dist.logistics,
                     id: generateId(),
                     clientId: id,
+                    farmId: lot.farmId,
+                    lotId: lot.id,
                     warehouseId: dist.type === 'WAREHOUSE' ? dist.targetId : undefined,
                     productId: product!.id,
                     productName: product!.name,
-                    productBrand: propBrand, // Explicitly set campaign-based brand
+                    productBrand: propBrand,
                     type: 'HARVEST',
                     quantity: dist.amount,
                     unit: product!.unit,
@@ -372,14 +391,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'}) -> Destino: ${dist.targetName}`,
                     contractorName: contractor || undefined,
                     harvestLaborPricePerHa: pricePerHa || undefined,
-                    harvestLaborCost: totalCost || undefined,
+                    harvestLaborCost: isFirstDist ? (totalCost || undefined) : 0,
                     investorName: investor || undefined,
+                    investors: data.investors || [],
                     receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
                     createdBy: displayName || 'Sistema',
                     createdAt: new Date().toISOString(),
                     synced: false,
                     transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
-                    ...dist.logistics
                 });
             }
 
@@ -388,15 +407,26 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 await db.put('orders', {
                     ...harvestPlanOrder,
                     clientId: id,
+                    farmId: lot.farmId,
+                    lotId: lot.id,
+                    type: 'HARVEST',
                     status: 'DONE',
-                    date: movementDate, // Update to current selection
-                    appliedAt: new Date().toISOString(),
-                    appliedBy: displayName || 'Sistema',
+                    date: movementDate,
+                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                    expectedYield: normalizedTotalYield,
+                    servicePrice: pricePerHa || undefined,
                     contractorName: contractor || undefined,
                     investorName: investor || undefined,
+                    applicatorId: contractors.find(c => c.username === contractor)?.id,
+                    items: harvestPlanOrder.items || [],
+                    treatedArea: lot.hectares,
+                    plantingDensity: harvestPlanOrder.plantingDensity || 0,
+                    plantingSpacing: harvestPlanOrder.plantingSpacing || 0,
                     campaignId: campaignId || undefined,
-                    servicePrice: pricePerHa || undefined,
-                    expectedYield: totalYield,
+                    createdBy: harvestPlanOrder.createdBy || displayName || 'Sistema',
+                    appliedBy: displayName || 'Sistema',
+                    appliedAt: new Date().toISOString(),
+                    createdAt: harvestPlanOrder.createdAt || new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     synced: false,
                     notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
@@ -415,7 +445,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     status: 'DONE',
                     date: movementDate,
                     time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    expectedYield: totalYield,
+                    expectedYield: normalizedTotalYield,
                     servicePrice: pricePerHa,
                     contractorName: contractor,
                     investorName: investor,
@@ -437,7 +467,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             }
 
             await refreshOrders();
-            syncService.pushChanges();
+            await syncService.pushChanges();
+            
+            // Increment refresh key to update LotHistory immediately
+            setHistoryRefreshKey(prev => prev + 1);
+            await refreshMovements();
+            
+            // alert('Cosecha registrada con éxito.');
             setIsHarvesting(false);
             setObservedYield('');
             setHarvestLaborPrice('');
@@ -453,6 +489,81 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     };
 
+    const handleUpdateHarvest = async (movement: InventoryMovement, date: string, quantity: number, pricePerHa: number, contractor: string, investorName: string) => {
+        try {
+            const lotId = movement.referenceId;
+            const lot = allClientLots.find(l => l.id === lotId);
+            if (!lot) return;
+
+            const totalCost = pricePerHa * lot.hectares;
+
+            // 1. Calculate yield difference to adjust stock
+            const yieldDiff = quantity - movement.quantity;
+
+            // 2. Fetch Stock to update
+            const stockItem = stock.find(s => s.productId === movement.productId && s.warehouseId === movement.warehouseId);
+            if (stockItem) {
+                await updateStock({
+                    ...stockItem,
+                    quantity: stockItem.quantity + yieldDiff,
+                    lastUpdated: new Date().toISOString()
+                });
+            }
+
+            // 3. Update the primary movement (and its siblings if any)
+            const allMovements = await db.getAll('movements') as InventoryMovement[];
+            const relatedMovements = allMovements.filter(m => m.referenceId === lotId && m.date === movement.date && m.type === 'HARVEST' && !m.deleted);
+
+            // Update movements
+            for (const m of relatedMovements) {
+                const isFirst = relatedMovements.indexOf(m) === 0;
+                await db.put('movements', {
+                    ...m,
+                    date,
+                    quantity: relatedMovements.length === 1 ? quantity : m.quantity, // Only update if single
+                    harvestLaborPricePerHa: pricePerHa,
+                    harvestLaborCost: isFirst ? totalCost : 0,
+                    contractorName: contractor,
+                    investorName: investorName,
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
+            }
+
+            // 4. Update the Order
+            const allOrders = await db.getAll('orders') as Order[];
+            const harvestOrder = allOrders.find(o => o.lotId === lotId && o.type === 'HARVEST' && o.date === movement.date && o.status === 'DONE' && !o.deleted);
+            if (harvestOrder) {
+                await db.put('orders', {
+                    ...harvestOrder,
+                    date,
+                    expectedYield: quantity,
+                    servicePrice: pricePerHa,
+                    contractorName: contractor,
+                    investorName: investorName,
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
+            }
+
+            // 5. Update Lot Rinde if applicable
+            await updateLot({
+                ...lot,
+                observedYield: quantity.toString(),
+                lastUpdatedBy: displayName || 'Sistema'
+            });
+
+            await refreshOrders();
+            await syncService.pushChanges();
+            setIsEditingHarvestPanel(false);
+            setHistoryRefreshKey(prev => prev + 1);
+            // alert('Cosecha actualizada correctamente.');
+        } catch (error) {
+            console.error('Error updating harvest:', error);
+            alert('Error al actualizar la cosecha.');
+        }
+    };
+
     const handleEditHarvest = (event: any) => {
         // Find lot and farm
         const lotId = activePanel?.lotId || activePanel?.id;
@@ -462,15 +573,32 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         if (!lot || !farm) return;
 
         // 1. Prepare wizard states
+        // 1. Aggregate ALL transport sheets from all related movements
+        const eventMovements = (event.movements || [event]);
+        const allSheets: any[] = [];
+        eventMovements.forEach((m: any) => {
+            if (m.transportSheets) {
+                m.transportSheets.forEach((s: any) => {
+                    if (!allSheets.find(existing => existing.id === s.id)) {
+                        allSheets.push(s);
+                    }
+                });
+            }
+        });
+
+        // 2. Prepare wizard states
         setHarvestDate(event.date);
         setHarvestContractor(event.contractorName || '');
-        setObservedYield(event.observedYield?.toString() || '');
-        setHarvestLaborPrice(event.movements?.[0]?.harvestLaborPricePerHa?.toString() || '');
-        setSelectedHarvestInvestor(event.movements?.[0]?.investorName || '');
-        setSelectedHarvestCampaignId(event.movements?.[0]?.campaignId || '');
+        setObservedYield(event.observedYield?.toString() || event.quantity?.toString() || '');
+        setHarvestLaborPrice(event.harvestLaborPricePerHa?.toString() || event.movements?.[0]?.harvestLaborPricePerHa?.toString() || '');
+        setSelectedHarvestInvestor(event.investorName || event.movements?.[0]?.investorName || '');
+        setSelectedHarvestCampaignId(event.campaignId || event.movements?.[0]?.campaignId || '');
 
-        // 2. Open Wizard in Edit Mode
-        setHarvestPlanOrder(event); // Reusing this for the wizard source
+        // 3. Open Wizard in Edit Mode
+        setHarvestPlanOrder({
+            ...event,
+            transportSheets: allSheets // Pass the aggregated sheets
+        });
         setIsEditingHarvestPanel(true);
         setIsHarvesting(true);
         setSelectedLotId(lot.id);
@@ -540,7 +668,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             }
 
             await refreshOrders();
-            syncService.pushChanges();
+            await syncService.pushChanges();
+            
+            // Increment refresh key to update LotHistory immediately
+            setHistoryRefreshKey(prev => prev + 1);
+
             alert('Cosecha cancelada correctamente.');
         } catch (error) {
             console.error('Error cancelling harvest:', error);
@@ -724,99 +856,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         } catch (error) {
             console.error('Error fetching harvest details:', error);
             setHarvestMovement(null);
-        }
-    };
-
-    const handleUpdateHarvest = async (originalHarvest: InventoryMovement, newDate: string, newYield: number, newPrice: number, newContractor: string, newInvestor?: string) => {
-        try {
-            // 1. Calculate yield difference to adjust stock
-            const yieldDiff = newYield - originalHarvest.quantity;
-
-            // 2. Fetch Stock to update
-            const stockItem = stock.find(s => s.productId === originalHarvest.productId && s.warehouseId === originalHarvest.warehouseId);
-            if (stockItem) {
-                await updateStock({
-                    ...stockItem,
-                    quantity: stockItem.quantity + yieldDiff,
-                    lastUpdated: new Date().toISOString()
-                });
-            }
-
-            // 3. Update HARVEST movement
-            await db.put('movements', {
-                ...originalHarvest, // Keep original harvest movement data
-                quantity: newYield,
-                date: newDate,
-                time: originalHarvest.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                harvestLaborPricePerHa: newPrice, // This seems to be the intended field for price per ha
-                contractorName: newContractor,
-                investorName: newInvestor,
-                updatedAt: new Date().toISOString(),
-                synced: false
-            });
-
-            // 4. Update or Create EXPENSE movement
-            // Find existing OUT movement
-            const allMovements = await db.getAll('movements') as InventoryMovement[];
-            const expenseMovement = allMovements.find(m => m.referenceId === originalHarvest.referenceId && m.type === 'OUT' && m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
-
-            const lot = lots.find(l => l.id === originalHarvest.referenceId);
-            const totalCost = newPrice * (lot?.hectares || 0);
-
-            if (expenseMovement) {
-                await db.put('movements', {
-                    ...expenseMovement,
-                    date: newDate,
-                    purchasePrice: totalCost,
-                    harvestLaborPricePerHa: newPrice,
-                    harvestLaborCost: totalCost,
-                    contractorName: newContractor,
-                    investorName: newInvestor,
-                    updatedAt: new Date().toISOString(),
-                    synced: false
-                });
-            } else if (newPrice > 0) {
-                // Create new if it didn't exist but now we have a price
-                // We need harvestWarehouseId which is in originalHarvest
-                await db.put('movements', {
-                    id: generateId(),
-                    clientId: id,
-                    warehouseId: originalHarvest.warehouseId,
-                    productId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-                    productName: 'Egresos de Cosecha (Labor)',
-                    type: 'OUT',
-                    quantity: 1,
-                    unit: 'UN',
-                    date: newDate,
-                    time: originalHarvest.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    referenceId: originalHarvest.referenceId,
-                    purchasePrice: totalCost,
-                    harvestLaborPricePerHa: newPrice,
-                    harvestLaborCost: totalCost,
-                    contractorName: newContractor,
-                    notes: `Labor de cosecha - Lote ${lot?.name}`,
-                    createdBy: displayName || 'Sistema',
-                    createdAt: new Date().toISOString(),
-                    synced: false
-                });
-            }
-
-            // 5. Update Lot observed yield if it matches
-            if (lot && lot.status === 'HARVESTED') {
-                await updateLot({
-                    ...lot,
-                    observedYield: newYield,
-                    lastUpdatedBy: displayName || 'Sistema'
-                });
-            }
-
-            syncService.pushChanges();
-            alert('Cosecha actualizada correctamente.');
-            setIsEditingHarvestPanel(false);
-            fetchHarvestDetails(originalHarvest.referenceId); // Refresh
-        } catch (error) {
-            console.error('Error updating harvest:', error);
-            alert('Error al actualizar la cosecha.');
         }
     };
 
@@ -1634,6 +1673,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             {activePanel.type === 'history' && (
                                 <div ref={historySectionRef} className="p-0 bg-white shadow-inner">
                                     <LotHistory
+                                        key={historyRefreshKey}
                                         clientId={id}
                                         lotId={activePanel.id!}
                                         onSelectEvent={(event) => {
@@ -1750,74 +1790,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                 lots={allClientLots}
                                                 campaigns={campaigns}
                                                 onClose={() => setActivePanel(null)}
-                                                onEdit={() => setIsEditingHarvestPanel(true)}
+                                                onEdit={() => handleEditHarvest(harvestMovement)}
                                                 isReadOnly={isReadOnly}
                                             />
-                                        ) : (
-                                            <form
-                                                onSubmit={(e) => {
-                                                    e.preventDefault();
-                                                    const fd = new FormData(e.currentTarget);
-                                                    handleUpdateHarvest(
-                                                        harvestMovement!,
-                                                        fd.get('date') as string,
-                                                        parseFloat(fd.get('yield') as string),
-                                                        parseFloat(fd.get('price') as string),
-                                                        fd.get('contractor') as string,
-                                                        selectedHarvestInvestor
-                                                    );
-                                                }}
-                                                className="space-y-4"
-                                            >
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <Input
-                                                        name="date"
-                                                        label="Fecha"
-                                                        type="date"
-                                                        defaultValue={harvestMovement.date}
-                                                        required
-                                                    />
-                                                    <Input
-                                                        name="contractor"
-                                                        label="Contratista"
-                                                        defaultValue={harvestMovement.contractorName || ''}
-                                                    />
-                                                    <Input
-                                                        name="yield"
-                                                        label="Rinde Total (kg)"
-                                                        type="number"
-                                                        defaultValue={harvestMovement.quantity}
-                                                        required
-                                                    />
-                                                    <Input
-                                                        name="price"
-                                                        label="Precio Labor (USD/ha)"
-                                                        type="number"
-                                                        defaultValue={harvestMovement.harvestLaborPricePerHa || 0}
-                                                    />
-                                                    <div className="w-full">
-                                                        <label className="block text-sm font-medium text-slate-700 mb-1">Pagado por:</label>
-                                                        <select
-                                                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-[42px]"
-                                                            value={selectedHarvestInvestor}
-                                                            onChange={e => setSelectedHarvestInvestor(e.target.value)}
-                                                        >
-                                                            <option value="">Seleccione un socio...</option>
-                                                            {client?.partners?.map((p: any) => (
-                                                                <option key={p.name} value={p.name}>{p.name}</option>
-                                                            ))}
-                                                            {(!client?.partners || client.partners.length === 0) && client?.investors?.map((inv: any) => (
-                                                                <option key={inv.name} value={inv.name}>{inv.name}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                                                    <Button type="button" variant="ghost" onClick={() => setIsEditingHarvestPanel(false)}>Cancelar</Button>
-                                                    <Button type="submit">Guardar Cambios</Button>
-                                                </div>
-                                            </form>
-                                        )
+                                        ) : null
                                     ) : (
                                         <div className="text-center py-8 text-slate-400">
                                             <p>No se encontró información de la cosecha.</p>
@@ -1845,21 +1821,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         lots={allClientLots}
                                         campaigns={campaigns}
                                         onClose={() => setSelectedEvent(null)}
-                                        onEdit={() => {
-                                            const m = selectedEvent.movements[0];
-                                            setHarvestDate(m.date);
-                                            setHarvestContractor(m.contractorName || '');
-                                            setHarvestLaborPrice(m.harvestLaborPricePerHa?.toString() || '');
-                                            setObservedYield(m.quantity);
-                                            setSelectedLotId(activePanel?.id || '');
-                                            setHarvestPlanOrder({
-                                                ...m,
-                                                movements: selectedEvent.movements
-                                            } as any);
-                                            setIsEditingHarvestPanel(true);
-                                            setIsHarvesting(true);
-                                            setSelectedEvent(null);
-                                        }}
+                                        onEdit={() => handleEditHarvest(selectedEvent)}
                                         onSelectMovement={(m) => {
                                             setSelectedMovement({
                                                 m,
@@ -1920,9 +1882,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             movements={movements}
                             onCancel={() => {
                                 setIsHarvesting(false);
+                                setHistoryRefreshKey(prev => prev + 1);
                             }}
-                            onComplete={(data) => {
-                                handleMarkHarvested(lots.find(l => l.id === selectedLotId)!, data);
+                            onComplete={async (data) => {
+                                await handleMarkHarvested(lots.find(l => l.id === selectedLotId)!, data);
+                                setHistoryRefreshKey(prev => prev + 1);
                             }}
                             initialDate={harvestDate}
                             initialContractor={harvestContractor}
@@ -1937,6 +1901,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 amount: m.quantity,
                                 logistics: m as any
                             })) || []}
+                            initialTransportSheets={
+                                isEditingHarvestPanel
+                                    ? ((harvestPlanOrder as any)?.transportSheets || [])
+                                    : undefined
+                            }
+                            defaultWhId={client?.defaultHarvestWarehouseId}
                         />
                     </div>
                 )}

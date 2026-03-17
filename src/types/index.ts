@@ -294,6 +294,8 @@ export interface InventoryMovement {
     items?: MovementItem[]; // For consolidated entries
     investors?: { name: string; percentage: number }[]; // Multi-investor support
     campaignId?: string; // Link to Campaign
+    farmId?: string; // Farm ID for harvest/sowing context
+    lotId?: string; // Lot ID for harvest/sowing context
     isTransfer?: boolean;
     originName?: string;
     destName?: string;

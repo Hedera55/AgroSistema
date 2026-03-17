@@ -174,6 +174,12 @@ const mappers = {
             driver_cuit: m.driverCuit,
             warehouse_name: m.warehouseName,
             transport_sheets: m.transportSheets || [],
+            harvest_labor_price_per_ha: m.harvestLaborPricePerHa || 0,
+            harvest_labor_cost: m.harvestLaborCost || 0,
+            contractor_name: m.contractorName || null,
+            receiver_name: m.receiverName || null,
+            farm_id: m.farmId || null,
+            lot_id: m.lotId || null,
             created_at: m.createdAt || new Date(m.date).toISOString(),
             updated_at: m.updatedAt || new Date().toISOString(),
             deleted: m.deleted || false,
@@ -389,6 +395,12 @@ const reverseMappers = {
         driverCuit: m.driver_cuit,
         warehouseName: m.warehouse_name,
         transportSheets: m.transport_sheets || [],
+        harvestLaborPricePerHa: m.harvest_labor_price_per_ha || 0,
+        harvestLaborCost: m.harvest_labor_cost || 0,
+        contractorName: m.contractor_name,
+        receiverName: m.receiver_name,
+        farmId: m.farm_id,
+        lotId: m.lot_id,
         createdBy: m.created_by,
         createdAt: m.created_at,
         updatedAt: m.updated_at,
@@ -543,6 +555,12 @@ export class SyncService {
                         const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
 
                         if (remoteTime > localTime) {
+                            // PROTECT LOCAL CHANGES: If local item is NOT synced, do NOT overwrite it
+                            if (localItem.synced === false) {
+                                console.log(`[Realtime] ✋ Protecting local unsynced changes for ${localStore}:${newRecord.id}`);
+                                return;
+                            }
+
                             // Preserve boundary/KML if remote is blank but local exists
                             if (!mappedItem.boundary && localItem.boundary) {
                                 mappedItem.boundary = localItem.boundary;
@@ -761,6 +779,12 @@ export class SyncService {
                     const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
 
                     if (remoteTime > localTime) {
+                        // PROTECT LOCAL CHANGES: If local item is NOT synced, do NOT overwrite it
+                        if (localItem.synced === false) {
+                            console.log(`[Pull] ✋ Protecting local unsynced changes for ${localStoreName}:${remoteItem.id}`);
+                            continue;
+                        }
+
                         // Preserve boundary/KML if remote is blank but local exists
                         if (!mappedItem.boundary && localItem.boundary) {
                             mappedItem.boundary = localItem.boundary;
