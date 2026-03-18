@@ -149,7 +149,11 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de cosecha</label>
                         <p className="text-sm font-bold text-slate-700">
-                            {harvestMovement.date ? new Date(harvestMovement.date).toLocaleDateString() : '-'}
+                            {(() => {
+                                if (!harvestMovement.date) return '-';
+                                const [y, m, d] = harvestMovement.date.split('-');
+                                return `${d}/${m}/${y}`;
+                            })()}
                         </p>
                     </div>
                     <div>

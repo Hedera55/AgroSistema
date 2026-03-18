@@ -76,6 +76,7 @@ export interface Lot { // Lote
     yield?: number; // Expected yield
     observedYield?: number; // Actual yield after harvest
     status?: LotStatus;
+    lastHarvestId?: string;
     boundary?: GeoJSON.FeatureCollection | string; // KML content or GeoJSON
     kmlData?: string; // Original KML file content for download
     createdBy?: string;
@@ -300,6 +301,7 @@ export interface InventoryMovement {
     originName?: string;
     destName?: string;
     partnerId?: string;
+    harvestBatchId?: string;
     transportName?: string;
     transportCuit?: string;
     driverName?: string;
@@ -363,6 +365,7 @@ export interface Order {
     investorName?: string; // Who is responsible for the service cost
     investors?: { name: string; percentage: number }[]; // Multi-investor support
     campaignId?: string; // Link to Campaign
+    harvestBatchId?: string;
     boundary?: any; // New: Section KML GeoJSON
     kmlData?: string; // New: Original KML content
 }

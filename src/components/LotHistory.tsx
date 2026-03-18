@@ -10,9 +10,10 @@ interface LotHistoryProps {
     refreshKey?: number;
     onSelectEvent?: (event: any) => void;
     onEditEvent?: (event: any) => void;
+    onDeleteBatch?: (batchId: string, referenceId: string) => Promise<void>;
 }
 
-export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onEditEvent }: LotHistoryProps) {
+export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onEditEvent, onDeleteBatch }: LotHistoryProps) {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -190,6 +191,21 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                                             title="Editar Cosecha"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                        </button>
+                                    )}
+                                    {event.type === 'HARVEST' && onDeleteBatch && event.movements?.[0]?.harvestBatchId && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDeleteBatch(event.movements[0].harvestBatchId, event.movements[0].referenceId);
+                                            }}
+                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                            title="Eliminar Cosecha"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
                                         </button>
                                     )}
                                     <div className="text-slate-300 group-hover:text-emerald-500 transition-colors">

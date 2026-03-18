@@ -26,6 +26,7 @@ import { HarvestWizard } from '@/components/HarvestWizard';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { HarvestDetailsView } from '@/components/HarvestDetailsView';
+import { normalizeNumber } from '@/lib/numbers';
 
 type PanelType = 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details';
 
@@ -248,18 +249,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setShowLotForm(false);
     };
 
-    const normalizeNumber = (val: string | number | undefined): number => {
-        if (val === undefined || val === null) return 0;
-        if (typeof val === 'number') return val;
-        // Spanish/Argentine notation: dots for thousands, comma for decimal
-        // Remove dots, replace comma with dot
-        const normalized = val.toString().replace(/\./g, '').replace(',', '.');
-        return parseFloat(normalized) || 0;
-    };
 
     const handleMarkHarvested = async (lot: Lot, data: any) => {
         try {
             const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
+            const batchId = generateId();
 
             const campaign = campaigns.find(c => c.id === campaignId);
             const campaignName = campaign?.name || 'Común';
@@ -326,6 +320,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 ...lot,
                 status: 'HARVESTED',
                 observedYield: totalYield,
+                lastHarvestId: batchId,
                 lastUpdatedBy: displayName || 'Sistema'
             });
 
@@ -333,20 +328,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             const farm = farms.find(f => f.id === lot.farmId);
 
             // --- AUTO-ASSIGN REMAINDER ---
-            const assignedAmount = distributions.reduce((sum: number, d: any) => sum + d.amount, 0);
-            const remaining = normalizedTotalYield - assignedAmount;
-            const finalDistributions = [...distributions];
-            if (remaining > 5 && client?.defaultHarvestWarehouseId) {
-                const defWarehouse = warehouses.find(w => w.id === client.defaultHarvestWarehouseId);
-                finalDistributions.push({
-                    id: generateId(),
-                    type: 'WAREHOUSE',
-                    targetId: client.defaultHarvestWarehouseId,
-                    targetName: defWarehouse?.name || 'Acopio por Defecto',
-                    amount: remaining,
-                    logistics: { notes: 'Cosecha: asignación automática' } as any
-                });
-            }
+            // The HarvestWizard now handles this internally and guarantees finalDistributions is fully balanced!
+            const finalDistributions = distributions;
 
             for (const dist of finalDistributions) {
                 if (dist.type === 'WAREHOUSE') {
@@ -398,6 +381,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     createdBy: displayName || 'Sistema',
                     createdAt: new Date().toISOString(),
                     synced: false,
+                    harvestBatchId: batchId,
                     transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
                 });
             }
@@ -429,6 +413,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     createdAt: harvestPlanOrder.createdAt || new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     synced: false,
+                    harvestBatchId: batchId,
                     notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
                 });
             } else {
@@ -462,6 +447,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     synced: false,
+                    harvestBatchId: batchId,
                     notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
                 });
             }
@@ -525,6 +511,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     harvestLaborCost: isFirst ? totalCost : 0,
                     contractorName: contractor,
                     investorName: investorName,
+                    harvestBatchId: m.harvestBatchId,
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
@@ -541,6 +528,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     servicePrice: pricePerHa,
                     contractorName: contractor,
                     investorName: investorName,
+                    harvestBatchId: harvestOrder.harvestBatchId,
                     updatedAt: new Date().toISOString(),
                     synced: false
                 });
@@ -619,6 +607,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 ...lot,
                 status: 'SOWED',
                 observedYield: undefined,
+                lastHarvestId: undefined, // Clear batch link
                 lastUpdatedBy: displayName || 'Sistema'
             });
 
@@ -657,26 +646,99 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 }
             }
 
-            // 4. Update Order (Mark HARVEST order as DRAFT or revert it)
+            // 4. Update Order (Mark HARVEST order as DELETED)
             const allOrders = await db.getAll('orders') as Order[];
             const harvestOrders = allOrders.filter(o => o.lotId === lot.id && o.type === 'HARVEST' && o.status === 'DONE' && !o.deleted);
             for (const o of harvestOrders) {
-                // Option A: Soft delete the order
                 await db.put('orders', { ...o, deleted: true, updatedAt: new Date().toISOString(), synced: false });
-                // Option B: Revert to CONFIRMED (if it was a plan)
-                // Actually best is to just soft-delete so it can be re-planned
             }
 
             await refreshOrders();
-            await syncService.pushChanges();
-            
-            // Increment refresh key to update LotHistory immediately
             setHistoryRefreshKey(prev => prev + 1);
-
+            await syncService.pushChanges();
             alert('Cosecha cancelada correctamente.');
         } catch (error) {
             console.error('Error cancelling harvest:', error);
             alert('Error al cancelar la cosecha.');
+        }
+    };
+
+    const handleDeleteHarvestBatch = async (batchId: string, lotId: string) => {
+        if (!confirm('¿Está seguro de eliminar esta cosecha del historial? Se restará el stock y se borrarán los registros.')) return;
+
+        try {
+            const lot = allClientLots.find(l => l.id === lotId);
+            if (!lot) return;
+
+            const isCurrentHarvest = lot.status === 'HARVESTED' && lot.lastHarvestId === batchId;
+
+            if (!isCurrentHarvest && lot.lastHarvestId !== batchId) {
+                alert("No se puede. Opción: Editar el rinde total a 0");
+                return;
+            }
+
+            // 1. Fetch ALL batch movements
+            const allMovements = await db.getAll('movements') as InventoryMovement[];
+            const batchMovements = allMovements.filter(m => m.harvestBatchId === batchId && !m.deleted);
+
+            // 2. Revert Stock for each movement
+            for (const mov of batchMovements) {
+                const items = mov.items && mov.items.length > 0 ? mov.items : [{
+                    productId: mov.productId,
+                    quantity: mov.quantity,
+                    productBrand: mov.productBrand,
+                    presentationLabel: mov.presentationLabel,
+                    presentationContent: mov.presentationContent,
+                    presentationAmount: mov.presentationAmount
+                }];
+
+                const allStock = await db.getAll('stock') as ClientStock[];
+                for (const it of items) {
+                    const existing = allStock.find(s =>
+                        s.productId === it.productId &&
+                        s.warehouseId === mov.warehouseId &&
+                        s.clientId === id
+                    );
+                    if (existing) {
+                        await updateStock({
+                            ...existing,
+                            quantity: existing.quantity - it.quantity,
+                            presentationAmount: existing.presentationAmount !== undefined 
+                                ? (existing.presentationAmount - (it.presentationAmount || 0))
+                                : undefined,
+                            lastUpdated: new Date().toISOString()
+                        });
+                    }
+                }
+
+                // 3. Soft Delete Movement
+                await db.put('movements', { ...mov, deleted: true, updatedAt: new Date().toISOString(), synced: false });
+            }
+
+            // 4. Delete associated order
+            const allOrders = await db.getAll('orders') as Order[];
+            const batchOrder = allOrders.find(o => o.harvestBatchId === batchId && !o.deleted);
+            if (batchOrder) {
+                await db.put('orders', { ...batchOrder, deleted: true, updatedAt: new Date().toISOString(), synced: false });
+            }
+
+            // 5. Revert Lot state if it was current
+            if (isCurrentHarvest) {
+                await updateLot({
+                    ...lot,
+                    status: 'SOWED',
+                    observedYield: undefined,
+                    lastHarvestId: undefined,
+                    lastUpdatedBy: displayName || 'Sistema'
+                });
+            }
+
+            setHistoryRefreshKey(prev => prev + 1);
+            await syncService.pushChanges();
+            alert('Cosecha eliminada correctamente.');
+        } catch (error) {
+            console.error('Error deleting harvest batch:', error);
+            alert('Error al eliminar la cosecha.');
         }
     };
 
@@ -1673,17 +1735,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             {activePanel.type === 'history' && (
                                 <div ref={historySectionRef} className="p-0 bg-white shadow-inner">
                                     <LotHistory
-                                        key={historyRefreshKey}
                                         clientId={id}
                                         lotId={activePanel.id!}
-                                        onSelectEvent={(event) => {
-                                            setSelectedEvent(event);
-                                            setSelectedMovement(null);
-                                            setTimeout(() => {
-                                                detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                            }, 100);
-                                        }}
+                                        refreshKey={historyRefreshKey}
                                         onEditEvent={handleEditHarvest}
+                                        onDeleteBatch={handleDeleteHarvestBatch}
                                     />
 
                                 </div>

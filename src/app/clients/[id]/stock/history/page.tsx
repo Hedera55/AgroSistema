@@ -22,6 +22,7 @@ import { HarvestWizard } from '@/components/HarvestWizard';
 import { useLots } from '@/hooks/useLocations';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { normalizeNumber } from '@/lib/numbers';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -56,11 +57,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const { stock, updateStock } = useClientStock(clientId);
     const { warehouses: warehousesList } = useWarehouses(clientId);
     const { products: allProductsList } = useInventory();
+    const [contractors, setContractors] = useState<any[]>([]);
 
     // StockEntryForm Required States
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' });
-    
+
     const updateActiveStockItem = React.useCallback((field: string, value: string) => {
         setActiveStockItem(prev => {
             const newState = { ...prev, [field]: value };
@@ -70,10 +72,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
                 const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
 
-                const content = parseFloat(contentVal.toString().replace(',', '.'));
-                const amount = parseFloat(amountVal.toString().replace(',', '.'));
+                const content = normalizeNumber(contentVal);
+                const amount = normalizeNumber(amountVal);
 
-                if (!isNaN(content) && !isNaN(amount)) {
+                if (content && amount) {
                     newState.quantity = (content * amount).toString();
                 }
             }
@@ -136,9 +138,23 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         setClient(currentClient || null);
         if (currentClient?.enabledSellers) setAvailableSellers(currentClient.enabledSellers);
 
+        // Fetch contractors assigned to this client
+        const { data: contractorsData } = await supabase
+            .from('profiles')
+            .select('id, username, assigned_clients')
+            .eq('role', 'CONTRATISTA');
+
+        if (contractorsData) {
+            const filtered = contractorsData.filter((c: any) =>
+                c.assigned_clients && c.assigned_clients.includes(clientId)
+            );
+            setContractors(filtered);
+        }
+
         const clientMovements = allMovements
             .filter((m: InventoryMovement) =>
                 m.clientId === clientId &&
+                !m.deleted &&
                 !m.notes?.toLowerCase().includes('labor de cosecha')
             )
             .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -173,16 +189,179 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     }, [clientId]);
 
     const handleDeleteMovement = React.useCallback(async (id: string, partnerId?: string) => {
-        if (!confirm('¿Eliminar este movimiento? (No afectará al stock actual, solo al historial)')) return;
+        if (!confirm('¿Seguro que quieres eliminar este registro? Esto ajustará el saldo en el Galpón automáticamente.')) return;
+
         try {
-            await db.delete('movements', id);
-            if (partnerId) await db.delete('movements', partnerId);
+            // 1. Fetch movement to know what to revert
+            const mov = await db.get('movements', id) as InventoryMovement;
+            if (!mov) {
+                // If not found, just try to delete anyway
+                await db.delete('movements', id);
+                if (partnerId) await db.delete('movements', partnerId);
+                await loadData();
+                return;
+            }
+
+            // 2. Identify items to revert
+            const items = mov.items && mov.items.length > 0
+                ? mov.items
+                : [{
+                    productId: mov.productId,
+                    quantity: mov.quantity,
+                    productBrand: mov.productBrand,
+                    presentationLabel: (mov as any).presentationLabel,
+                    presentationContent: (mov as any).presentationContent,
+                    presentationAmount: (mov as any).presentationAmount
+                }];
+
+            const isOut = ['OUT', 'SALE'].includes(mov.type);
+            const multiplier = isOut ? 1 : -1; // Reversing an OUT adds back, reversing an IN subtracts
+
+            // 3. Helper to update stock incrementally
+            const revertMovementStock = async (m: InventoryMovement, mItems: any[], mult: number) => {
+                const allStock = await db.getAll('stock') as ClientStock[];
+
+                for (const it of mItems) {
+                    const existing = allStock.find(s =>
+                        s.productId === it.productId &&
+                        s.warehouseId === m.warehouseId &&
+                        s.clientId === clientId &&
+                        (it.productBrand ? (s.productBrand || '').toLowerCase().trim() === it.productBrand.toLowerCase().trim() : true) &&
+                        (it.presentationLabel ? s.presentationLabel === it.presentationLabel : true) &&
+                        (it.presentationContent ? s.presentationContent === it.presentationContent : true)
+                    );
+
+                    if (existing) {
+                        await updateStock({
+                            ...existing,
+                            quantity: existing.quantity + (it.quantity * mult),
+                            presentationAmount: existing.presentationAmount !== undefined
+                                ? (existing.presentationAmount + ((it.presentationAmount || 0) * mult))
+                                : undefined
+                        });
+                    } else {
+                        // Create entry with negative/positive balance if it didn't exist
+                        await updateStock({
+                            clientId,
+                            warehouseId: m.warehouseId,
+                            productId: it.productId,
+                            productBrand: it.productBrand,
+                            campaignId: m.campaignId,
+                            quantity: it.quantity * mult,
+                            presentationLabel: it.presentationLabel,
+                            presentationContent: it.presentationContent,
+                            presentationAmount: it.presentationAmount ? (it.presentationAmount * mult) : undefined
+                        });
+                    }
+                }
+            };
+
+            // 4. Handle Harvest Batch Deletion Logic
+            if (mov.type === 'HARVEST' && mov.harvestBatchId) {
+                const lotId = mov.referenceId;
+                const lot = await db.get('lots', lotId) as Lot;
+
+                if (lot) {
+                    const isCurrentHarvest = lot.status === 'HARVESTED' && lot.lastHarvestId === mov.harvestBatchId;
+
+                    if (!isCurrentHarvest && lot.lastHarvestId !== mov.harvestBatchId) {
+                        // This is an "Old" harvest. Prevent deletion.
+                        alert("No se puede. Opción: Editar el rinde total a 0");
+                        return;
+                    }
+
+                    // Proceed with Batch Reversion
+                    const allMovements = await db.getAll('movements') as InventoryMovement[];
+                    const batchMovements = allMovements.filter(m => m.harvestBatchId === mov.harvestBatchId && !m.deleted);
+
+                    for (const bMov of batchMovements) {
+                        const bItems = bMov.items && bMov.items.length > 0 ? bMov.items : [{
+                            productId: bMov.productId,
+                            quantity: bMov.quantity,
+                            productBrand: bMov.productBrand,
+                            presentationLabel: bMov.presentationLabel,
+                            presentationContent: bMov.presentationContent,
+                            presentationAmount: bMov.presentationAmount
+                        }];
+                        // Harvest is IN, so multiplier -1 reverts (subtracts from stock)
+                        await revertMovementStock(bMov, bItems, -1);
+
+                        // Soft delete
+                        await db.put('movements', {
+                            ...bMov,
+                            deleted: true,
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        });
+                    }
+
+                    // Delete the associated HARVEST order
+                    const allOrders = await db.getAll('orders') as Order[];
+                    const batchOrder = allOrders.find(o => o.harvestBatchId === mov.harvestBatchId && !o.deleted);
+                    if (batchOrder) {
+                        await db.put('orders', {
+                            ...batchOrder,
+                            deleted: true,
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        });
+                    }
+
+                    // If it was the current harvest, revert the Lot state
+                    if (isCurrentHarvest) {
+                        await updateLot({
+                            ...lot,
+                            status: 'SOWED',
+                            observedYield: undefined,
+                            lastHarvestId: undefined,
+                            lastUpdatedBy: displayName || 'Sistema'
+                        });
+                    }
+                }
+            } else {
+                // STANDARD DELETION (Non-harvest or legacy harvest without batchId)
+                // Revert primary movement
+                await revertMovementStock(mov, items, multiplier);
+
+                // Handle Transfer (Partner)
+                if (partnerId) {
+                    const pMov = await db.get('movements', partnerId) as InventoryMovement;
+                    if (pMov) {
+                        const pIsOut = ['OUT', 'SALE'].includes(pMov.type);
+                        const pMultiplier = pIsOut ? 1 : -1;
+                        const pItems = pMov.items && pMov.items.length > 0 ? pMov.items : items;
+                        await revertMovementStock(pMov, pItems, pMultiplier);
+                    }
+                }
+
+                // Soft delete from movements
+                await db.put('movements', {
+                    ...mov,
+                    deleted: true,
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
+
+                if (partnerId) {
+                    const pMov = await db.get('movements', partnerId) as InventoryMovement;
+                    if (pMov) {
+                        await db.put('movements', {
+                            ...pMov,
+                            deleted: true,
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        });
+                    }
+                }
+            }
+
             await loadData();
+            syncService.pushChanges();
         } catch (error) {
             console.error('Error deleting movement:', error);
             alert('Error al eliminar');
         }
-    }, [loadData]);
+    }, [loadData, clientId, updateStock, displayName]);
 
     useEffect(() => {
         loadData();
@@ -202,7 +381,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             const publicUrl = publicUrlData.publicUrl;
             const movement = movements.find(m => m.id === movementId);
             if (movement) {
-                const updateData = type === 'factura' 
+                const updateData = type === 'factura'
                     ? { facturaImageUrl: publicUrl }
                     : { remitoImageUrl: publicUrl };
                 await db.put('movements', { ...movement, ...updateData, synced: false, updatedAt: new Date().toISOString() });
@@ -263,7 +442,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         return 'EGRESO';
     };
 
-    const handleEditMovement = React.useCallback((m: InventoryMovement) => {
+    const handleEditMovement = React.useCallback(async (m: InventoryMovement) => {
         const label = getMovementLabel(m);
         if (label === 'E-SIEMBRA' || label === 'E-APLICACIÓN') {
             if (m.referenceId) {
@@ -272,6 +451,17 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             }
         }
         if (label === 'I-COSECHA') {
+            if (m.referenceId) {
+                const related = (await db.getAll('movements')).filter((mov: any) =>
+                    mov.referenceId === m.referenceId &&
+                    mov.clientId === clientId &&
+                    mov.date === m.date &&
+                    !mov.deleted
+                );
+                setHarvestMovements(related);
+            } else {
+                setHarvestMovements([]);
+            }
             setEditingMovement(m);
             setShowHarvestWizard(true);
             return;
@@ -347,8 +537,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         try {
             if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
                 const isSale = editingMovement.type === 'SALE';
-                const qtyNum = parseFloat(saleQuantity.toString().replace(',', '.'));
-                const priceNum = parseFloat(salePrice.toString().replace(',', '.'));
+                const qtyNum = normalizeNumber(saleQuantity);
+                const priceNum = normalizeNumber(salePrice);
 
                 let currentStockState = [...stock];
 
@@ -361,7 +551,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     (s.presentationLabel || '') === ((editingMovement as any).presentationLabel || '') &&
                     (s.presentationContent || 0) === ((editingMovement as any).presentationContent || 0)
                 );
-                
+
                 if (oldSt) {
                     const updatedOldSt = { ...oldSt, quantity: oldSt.quantity + editingMovement.quantity };
                     await updateStock(updatedOldSt);
@@ -412,39 +602,48 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     destinationAddress: saleDestinationAddress || undefined,
                     transportCompany: saleTransportCompany || undefined,
                     dischargeNumber: saleDischargeNumber || undefined,
-                    humidity: saleHumidity ? parseFloat(saleHumidity.toString().replace(',', '.')) : undefined,
-                    hectoliterWeight: saleHectoliterWeight ? parseFloat(saleHectoliterWeight.toString().replace(',', '.')) : undefined,
-                    grossWeight: saleGrossWeight ? parseFloat(saleGrossWeight.toString().replace(',', '.')) : undefined,
-                    tareWeight: saleTareWeight ? parseFloat(saleTareWeight.toString().replace(',', '.')) : undefined,
+                    humidity: saleHumidity ? normalizeNumber(saleHumidity) : undefined,
+                    hectoliterWeight: saleHectoliterWeight ? normalizeNumber(saleHectoliterWeight) : undefined,
+                    grossWeight: saleGrossWeight ? normalizeNumber(saleGrossWeight) : undefined,
+                    tareWeight: saleTareWeight ? normalizeNumber(saleTareWeight) : undefined,
                     primarySaleCuit: salePrimarySaleCuit || undefined,
                     departureDateTime: saleDepartureDateTime || undefined,
-                    distanceKm: saleDistanceKm ? parseFloat(saleDistanceKm.toString().replace(',', '.')) : undefined,
-                    freightTariff: saleFreightTariff ? parseFloat(saleFreightTariff.toString().replace(',', '.')) : undefined,
+                    distanceKm: saleDistanceKm ? normalizeNumber(saleDistanceKm) : undefined,
+                    freightTariff: saleFreightTariff ? normalizeNumber(saleFreightTariff) : undefined,
                 } as any);
                 await loadData();
                 setShowEditForm(false);
                 setEditingMovement(null);
                 syncService.pushChanges();
+                
+                // Refresh modal state if it's open
+                if (selectedMovement?.movement?.id === editingMovement.id) {
+                    const freshMovements = await db.getAll('movements');
+                    const freshMov = freshMovements.find(m => m.id === editingMovement.id);
+                    if (freshMov) {
+                        setSelectedMovement(prev => prev ? { ...prev, movement: freshMov } : null);
+                    }
+                }
                 return;
             }
 
             if (editingMovement.type === 'IN' || editingMovement.type === 'HARVEST') {
                 let currentStockState = [...stock];
-                const oldItems = editingMovement.items || [{ 
-                    productId: editingMovement.productId, 
-                    quantity: editingMovement.quantity, 
+                const oldItems = editingMovement.items || [{
+                    productId: editingMovement.productId,
+                    quantity: editingMovement.quantity,
                     productBrand: editingMovement.productBrand,
-                    presentationLabel: (editingMovement as any).presentationLabel, 
+                    presentationLabel: (editingMovement as any).presentationLabel,
                     presentationContent: (editingMovement as any).presentationContent,
                     presentationAmount: (editingMovement as any).presentationAmount
                 }];
                 for (const it of oldItems) {
-                    const st = currentStockState.find((s: ClientStock) => 
-                        s.productId === it.productId && 
-                        s.warehouseId === editingMovement.warehouseId && 
+                    const st = currentStockState.find((s: ClientStock) =>
+                        s.productId === it.productId &&
+                        s.warehouseId === editingMovement.warehouseId &&
                         (s.campaignId || undefined) === (editingMovement.campaignId || undefined) &&
                         (s.productBrand || '').toLowerCase().trim() === (it.productBrand || '').toLowerCase().trim() &&
-                        (s.presentationLabel || '') === (it.presentationLabel || '') && 
+                        (s.presentationLabel || '') === (it.presentationLabel || '') &&
                         (s.presentationContent || 0) === (it.presentationContent || 0)
                     );
                     if (st) {
@@ -457,26 +656,26 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 const movementItems: MovementItem[] = [];
                 for (const item of validItems) {
                     const product = productsData[item.productId];
-                    const qtyNum = parseFloat(item.quantity.toString().replace(',', '.'));
-                    const priceNum = item.price ? parseFloat(item.price.toString().replace(',', '.')) : 0;
+                    const qtyNum = normalizeNumber(item.quantity);
+                    const priceNum = item.price ? normalizeNumber(item.price) : 0;
                     const pLabel = (item.presentationLabel || '').trim();
-                    const pContent = item.presentationContent ? parseFloat(item.presentationContent.toString().replace(',', '.')) : 0;
-                    const pAmount = item.presentationAmount ? parseFloat(item.presentationAmount.toString().replace(',', '.')) : 0;
+                    const pContent = item.presentationContent ? normalizeNumber(item.presentationContent) : 0;
+                    const pAmount = item.presentationAmount ? normalizeNumber(item.presentationAmount) : 0;
                     const pBrand = (item.tempBrand || product?.brandName || '').toLowerCase().trim();
 
-                    const existing = currentStockState.find((s: ClientStock) => 
-                        s.productId === item.productId && 
-                        s.warehouseId === selectedWarehouseId && 
+                    const existing = currentStockState.find((s: ClientStock) =>
+                        s.productId === item.productId &&
+                        s.warehouseId === selectedWarehouseId &&
                         (s.campaignId || undefined) === (selectedCampaignId || undefined) &&
                         (s.productBrand || '').toLowerCase().trim() === pBrand &&
-                        (s.presentationLabel || '') === pLabel && 
+                        (s.presentationLabel || '') === pLabel &&
                         (s.presentationContent || 0) === pContent
                     );
-                    
+
                     const stockId = existing ? existing.id : generateId();
                     const newQuantity = (existing ? existing.quantity : 0) + qtyNum;
                     const newPresentationAmount = existing ? (existing.presentationAmount || 0) + pAmount : pAmount;
-                    
+
                     const newItem = {
                         id: stockId, clientId, warehouseId: selectedWarehouseId || undefined, productId: item.productId, productBrand: item.tempBrand || product?.brandName || '',
                         campaignId: selectedCampaignId || undefined,
@@ -495,11 +694,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         sellerName: selectedSeller || undefined, presentationLabel: pLabel || undefined, presentationContent: pContent || 0, presentationAmount: pAmount || 0
                     });
                 }
-                
-                const singleValidItem = validItems.length === 1 ? validItems[0] : null;
-                const rootPurchasePrice = singleValidItem && singleValidItem.price ? parseFloat(singleValidItem.price.toString().replace(',', '.')) : undefined;
 
-                await db.put('movements', { 
+                const singleValidItem = validItems.length === 1 ? validItems[0] : null;
+                const rootPurchasePrice = singleValidItem && singleValidItem.price ? normalizeNumber(singleValidItem.price) : undefined;
+
+                await db.put('movements', {
                     ...editingMovement,
                     warehouseId: selectedWarehouseId || undefined,
                     campaignId: selectedCampaignId || undefined,
@@ -510,12 +709,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     sellerName: selectedSeller || undefined,
                     items: movementItems,
                     updatedAt: now.toISOString(),
-                    quantity: validItems.length === 1 ? parseFloat(singleValidItem!.quantity.toString().replace(',', '.')) : validItems.length,
+                    quantity: validItems.length === 1 ? normalizeNumber(singleValidItem!.quantity) : validItems.length,
                     unit: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.unit || 'L') : 'items',
                     productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
                     productName: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.name || 'Unknown') : 'Compra de insumos',
                     productBrand: validItems.length === 1 ? singleValidItem!.tempBrand : undefined,
-                    purchasePrice: rootPurchasePrice 
+                    purchasePrice: rootPurchasePrice
                 });
                 await loadData();
                 setShowEditForm(false);
@@ -539,69 +738,89 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const handleRecalcularFuerte = async () => {
         if (!recalculateCampaignId) return alert('Seleccione una campaña de partida.');
         if (!confirm('ATENCIÓN: Esto reescribirá todo el stock actual basándose en los movimientos posteriores a la campaña seleccionada. Esta acción no se puede deshacer. ¿Continuar con el Recálculo Fuerte?')) return;
-        
+
         setIsRecalculating(true);
         try {
-            // 1. Load the snapshot
-            const snapshots = await db.getAll('campaign_snapshots');
-            const targetSnapshot = snapshots.find((s: CampaignSnapshot) => s.clientId === clientId && s.campaignId === recalculateCampaignId);
-            
-            if (!targetSnapshot) {
-                alert('No se encontró un snapshot cerrado para esta campaña. Vaya a Contaduría y cierre la campaña primero.');
-                return;
+            // 1. Load the snapshot (if not starting from scratch)
+            let targetSnapshot = null;
+            if (recalculateCampaignId !== 'START_FROM_ZERO') {
+                const snapshots = await db.getAll('campaign_snapshots');
+                targetSnapshot = snapshots.find((s: CampaignSnapshot) => s.clientId === clientId && s.campaignId === recalculateCampaignId);
+
+                if (!targetSnapshot) {
+                    alert('No se encontró un snapshot cerrado para esta campaña. Vaya a Contaduría y cierre la campaña primero.');
+                    return;
+                }
             }
 
             // 2. Fetch all current stock to wipe/overwrite
             const allStock = await db.getAll('stock');
             const clientStock = allStock.filter((s: ClientStock) => s.clientId === clientId);
-            
+
             // Delete current stock
             for (const s of clientStock) {
                 await db.delete('stock', s.id);
             }
 
-            // Restore stock from snapshot (using new IDs to prevent primary key issues if recreating)
-            let currentTempStock: ClientStock[] = [];
-            for (const s of targetSnapshot.stockSnapshot) {
-                const restoredInstance: ClientStock = {
-                    ...s,
-                    id: generateId(), // New cache ID
-                    lastUpdated: new Date().toISOString(),
-                    synced: false
-                };
-                await db.put('stock', restoredInstance);
-                currentTempStock.push(restoredInstance);
+            // Clear remote fast-cache to prevent Supabase from reviving ghost stock
+            try {
+                if (navigator.onLine) {
+                    const { supabase } = await import('@/lib/supabase');
+                    await supabase.from('stock').delete().eq('client_id', clientId);
+                }
+            } catch (e) {
+                console.warn('Could not clear remote stock cache', e);
             }
 
-            // 3. Fetch all POST-snapshot movements and apply them chronologically
+            // Restore stock from snapshot (using new IDs to prevent primary key issues if recreating)
+            let currentTempStock: ClientStock[] = [];
+            if (targetSnapshot) {
+                for (const s of targetSnapshot.stockSnapshot) {
+                    const restoredInstance: ClientStock = {
+                        ...s,
+                        id: generateId(), // New cache ID
+                        lastUpdated: new Date().toISOString(),
+                        synced: false
+                    };
+                    await db.put('stock', restoredInstance);
+                    currentTempStock.push(restoredInstance);
+                }
+            }
+
+            // 3. Fetch all POST-snapshot movements (or all movements if starting from zero) and apply them chronologically
             const allMovements = await db.getAll('movements');
-            const postMovements = allMovements.filter((m: InventoryMovement) => 
-                m.clientId === clientId && 
-                new Date(m.createdAt || m.date).getTime() > new Date(targetSnapshot.createdAt).getTime()
+            const postMovements = allMovements.filter((m: InventoryMovement) =>
+                m.clientId === clientId &&
+                !m.deleted &&
+                (targetSnapshot ? new Date(m.createdAt || m.date).getTime() > new Date(targetSnapshot.createdAt).getTime() : true)
             ).sort((a: InventoryMovement, b: InventoryMovement) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
 
             // 4. Replay logic
             for (const mov of postMovements) {
+                // Phase 21: Ignore partner harvest distributions as they do not belong in the physical warehouse stock
+                if (mov.type === 'HARVEST' && !mov.warehouseId) continue;
+
                 const isOut = ['OUT', 'SALE'].includes(mov.type);
                 const isIn = ['IN', 'HARVEST'].includes(mov.type);
-                
+
                 const processItemMath = (item: { productId: string; quantity: number; tempBrand?: string; presentationLabel?: string; presentationContent?: number; presentationAmount?: number; }) => {
-                    const existingIdx = currentTempStock.findIndex(s => 
+                    const existingIdx = currentTempStock.findIndex(s =>
                         s.productId === item.productId &&
                         s.warehouseId === mov.warehouseId &&
                         s.clientId === clientId &&
-                        (item.tempBrand ? s.productBrand === item.tempBrand : true) &&
+                        (item.tempBrand ? (s.productBrand || '').toLowerCase().trim() === item.tempBrand.toLowerCase().trim() : true) &&
                         (item.presentationLabel ? s.presentationLabel === item.presentationLabel : true) &&
-                        (item.presentationContent ? s.presentationContent === item.presentationContent : true)
+                        (item.presentationContent ? s.presentationContent === item.presentationContent : true) &&
+                        (mov.campaignId ? s.campaignId === mov.campaignId : true)
                     );
 
                     if (existingIdx !== -1) {
                         const existing = currentTempStock[existingIdx];
-                        let newQty = parseFloat(String(existing.quantity));
-                        let newAmount = parseFloat(String(existing.presentationAmount || 0));
-                        
-                        let itemQty = parseFloat(String(item.quantity));
-                        let itemAmount = parseFloat(String(item.presentationAmount || 0));
+                        let newQty = normalizeNumber(existing.quantity);
+                        let newAmount = normalizeNumber(existing.presentationAmount || 0);
+
+                        let itemQty = normalizeNumber(item.quantity);
+                        let itemAmount = normalizeNumber(item.presentationAmount || 0);
 
                         if (isIn) {
                             newQty += itemQty;
@@ -610,7 +829,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             newQty -= itemQty;
                             newAmount -= itemAmount;
                         }
-                        
+
                         currentTempStock[existingIdx] = { ...existing, quantity: newQty, presentationAmount: newAmount, updatedAt: new Date().toISOString(), synced: false };
                     } else if (isIn) { // Only create if it's an IN operation AND didn't exist
                         const newItem: ClientStock = {
@@ -633,16 +852,16 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
                 if (mov.items && mov.items.length > 0) {
                     for (const item of mov.items) {
-                        processItemMath({ ...item, tempBrand: item.productBrand, quantity: parseFloat(item.quantity.toString()), presentationAmount: parseFloat(item.presentationAmount?.toString() || '0') });
+                        processItemMath({ ...item, tempBrand: item.productBrand, quantity: normalizeNumber(item.quantity), presentationAmount: normalizeNumber(item.presentationAmount) });
                     }
                 } else {
-                    processItemMath({ 
-                        productId: mov.productId, 
-                        quantity: parseFloat(mov.quantity.toString()), 
+                    processItemMath({
+                        productId: mov.productId,
+                        quantity: normalizeNumber(mov.quantity),
                         tempBrand: mov.productBrand,
                         presentationLabel: mov.presentationLabel,
                         presentationContent: mov.presentationContent,
-                        presentationAmount: parseFloat(mov.presentationAmount?.toString() || '0')
+                        presentationAmount: normalizeNumber(mov.presentationAmount)
                     });
                 }
             }
@@ -656,7 +875,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             setShowRecalculateModal(false);
             setRecalculateCampaignId('');
             // Trigger refresh
-            window.location.reload(); 
+            window.location.reload();
         } catch (error) {
             console.error(error);
             alert('Error crítico durante el Recálculo Fuerte.');
@@ -674,9 +893,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     <p className="text-slate-500 mt-1">Ingresos y egresos de insumos.</p>
                 </div>
                 {!isReadOnly && (
-                    <Button 
-                        onClick={() => setShowRecalculateModal(true)} 
-                        variant="outline" 
+                    <Button
+                        onClick={() => setShowRecalculateModal(true)}
+                        variant="outline"
                         className="border-orange-200 text-orange-600 hover:bg-orange-50 font-bold uppercase tracking-widest text-[10px]"
                     >
                         ⚡ Recalcular Fuerte
@@ -688,13 +907,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-center gap-3 text-orange-600 mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><polyline points="16 16 21 16 21 21"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><polyline points="3 3 3 8 8 8" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><polyline points="16 16 21 16 21 21" /></svg>
                             <h2 className="text-lg font-bold">Recalcular Fuerte</h2>
                         </div>
-                        
+
                         <p className="text-sm text-slate-600 mb-6">
-                            Esta herramienta reconstruye el inventario actual partiendo desde cero. 
-                            Tomará el registro de stock guardado en la campaña seleccionada y 
+                            Esta herramienta reconstruye el inventario actual partiendo desde cero.
+                            Tomará el registro de stock guardado en la campaña seleccionada y
                             re-aplicará todos los movimientos posteriores matemáticamente.
                         </p>
 
@@ -706,19 +925,20 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                 className="w-full h-11 px-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 outline-none text-slate-700 bg-slate-50"
                             >
                                 <option value="">Seleccione una Campaña cerrada...</option>
+                                <option value="START_FROM_ZERO">Desde cero</option>
                                 {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
 
                         <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
-                            <Button 
-                                variant="outline" 
+                            <Button
+                                variant="outline"
                                 onClick={() => setShowRecalculateModal(false)}
                                 disabled={isRecalculating}
                             >
                                 Cancelar
                             </Button>
-                            <Button 
+                            <Button
                                 className="bg-orange-500 hover:bg-orange-600 font-bold"
                                 onClick={handleRecalcularFuerte}
                                 isLoading={isRecalculating}
@@ -768,6 +988,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     const processedIds = new Set();
                                     movements.forEach((m: InventoryMovement) => {
                                         if (processedIds.has(m.id)) return;
+
+                                        // Phase 23: Hide non-stock harvest rows (Partner distributions) from the visual history list
+                                        if (m.type === 'HARVEST' && !m.warehouseId) return;
+
                                         if (m.referenceId?.startsWith('MOVE-')) {
                                             const partner = movements.find((p: InventoryMovement) => p.id !== m.id && p.referenceId === m.referenceId && p.productId === m.productId);
                                             if (partner) {
@@ -791,7 +1015,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         if (label === 'TRANSFERENCIA') labelClass = 'bg-indigo-100 text-indigo-800';
                                         else if (label === 'I-COSECHA') labelClass = 'bg-blue-100 text-blue-800';
                                         else if (label === 'E-VENTA' || label === 'E-RETIRO') labelClass = 'bg-lime-100 text-lime-800';
-                                        else if (label === 'E-SIEMBRA') labelClass = 'bg-emerald-100 text-emerald-800';
+                                        else if (label === 'E-SIEMBRA' || label === 'E-APLICACIÓN') labelClass = 'bg-emerald-100 text-emerald-800';
 
                                         let showValue = (m.type === 'IN' && !m.isTransfer && m.type !== 'HARVEST') || (m.type === 'SALE');
                                         let totalValue = 0, unitPrice = 0;
@@ -833,7 +1057,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             setSelectedMovement({ movement: m, order: enrichedOrder ? { ...enrichedOrder, farmName: farms.find(f => f.id === enrichedOrder.farmId)?.name || 'D.', lotName: lots.find(l => l.id === enrichedOrder.lotId)?.name || 'D.' } : undefined, typeLabel: label });
                                             setSelectedSubMovement(null);
                                             if (label === 'I-COSECHA' && m.referenceId) {
-                                                const related = (await db.getAll('movements')).filter((mov: any) => mov.referenceId === m.referenceId && mov.clientId === clientId && !mov.deleted);
+                                                const related = (await db.getAll('movements')).filter((mov: any) =>
+                                                    mov.referenceId === m.referenceId &&
+                                                    mov.clientId === clientId &&
+                                                    mov.date === m.date &&
+                                                    !mov.deleted
+                                                );
                                                 setHarvestMovements(related);
                                             } else setHarvestMovements([]);
                                         };
@@ -991,43 +1220,142 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     // Use allLotsFull if lot id matches
                     lot={allLotsFull.find(l => l.id === editingMovement.referenceId?.split('_')[0]) || lots.find(l => l.id === editingMovement.referenceId?.split('_')[0]) || {} as any}
                     farm={farms.find(f => f.lots?.some((l: any) => l.id === editingMovement.referenceId?.split('_')[0])) || farms.find(f => f.id === (editingMovement as any).farmId) || null as any}
-                    contractors={[]} // You may need to wire this up, but empty array prevents crash
+                    contractors={contractors} // Dynamically loaded contractors
                     campaigns={campaigns}
-                    warehouses={warehousesFull} // Fixes "warehouses is undefined" crash
+                    warehouses={warehousesList} // Fixes unfiltered warehouses crash, now properly restricted to current client
+                    defaultWhId={client?.defaultHarvestWarehouseId}
                     partners={client?.partners || []}
                     investors={client?.investors || []}
                     movements={movements}
-                    onCancel={() => { setShowHarvestWizard(false); setEditingMovement(null); }}
-                    onComplete={() => { setShowHarvestWizard(false); setEditingMovement(null); loadData(); }}
+                    onCancel={() => { setShowHarvestWizard(false); setEditingMovement(null); setHarvestMovements([]); }}
+                    onComplete={async (data) => {
+                        try {
+                            if (!editingMovement) return;
+                            const { date, contractor, campaignId, laborPricePerHa, investor, harvestType, totalYield, distributions, transportSheets } = data;
+
+                            // 1. Revert old stock for all harvestMovements
+                            let currentStockState = [...stock];
+                            for (const m of harvestMovements) {
+                                if (m.warehouseId && !m.deleted) {
+                                    const existingStock = currentStockState.find((s: ClientStock) => s.clientId === clientId && s.productId === m.productId && s.warehouseId === m.warehouseId);
+                                    if (existingStock) {
+                                        const updatedStock = { ...existingStock, quantity: existingStock.quantity - m.quantity, lastUpdated: new Date().toISOString() };
+                                        await updateStock(updatedStock);
+                                        currentStockState = currentStockState.map(s => s.id === existingStock.id ? updatedStock : s);
+                                    }
+                                }
+                                await db.put('movements', { ...m, deleted: true, updatedAt: new Date().toISOString(), synced: false, clientId } as any);
+                            }
+
+                            const lotId = editingMovement.referenceId?.split('_')[0] || '';
+                            const farmId = (editingMovement as any).farmId || editingMovement.referenceId?.split('_')[1] || '';
+                            const lot = allLotsFull.find((l: any) => l.id === lotId) || lots.find(l => l.id === lotId) || {} as any;
+
+                            const pricePerHa = normalizeNumber(laborPricePerHa);
+                            const totalCost = lot.hectares ? pricePerHa * lot.hectares : 0;
+                            const normalizedTotalYield = normalizeNumber(totalYield);
+
+                            let isFirstDist = true;
+                            for (const dist of distributions) {
+                                const distWhId = dist.type === 'WAREHOUSE' ? dist.targetId : undefined;
+                                if (distWhId) {
+                                    const exSt = currentStockState.find((s: ClientStock) => s.clientId === clientId && s.productId === editingMovement.productId && s.warehouseId === distWhId);
+                                    if (exSt) {
+                                        const updatedExSt = { ...exSt, quantity: exSt.quantity + dist.amount, lastUpdated: new Date().toISOString() };
+                                        await updateStock(updatedExSt);
+                                        currentStockState = currentStockState.map(s => s.id === exSt.id ? updatedExSt : s);
+                                    } else {
+                                        const newSt = { id: generateId(), clientId, warehouseId: distWhId, productId: editingMovement.productId, productBrand: editingMovement.productBrand, campaignId: campaignId || undefined, quantity: dist.amount, lastUpdated: new Date().toISOString(), synced: false };
+                                        await updateStock(newSt);
+                                        currentStockState.push(newSt);
+                                    }
+                                }
+
+                                const distSheets = dist.logistics?.transportSheets ? [...dist.logistics.transportSheets] : [];
+                                await db.put('movements', {
+                                    ...editingMovement,
+                                    id: generateId(),
+                                    warehouseId: distWhId,
+                                    quantity: dist.amount,
+                                    date: date || editingMovement.date,
+                                    campaignId: campaignId || undefined,
+                                    contractorName: contractor || undefined,
+                                    harvestLaborPricePerHa: pricePerHa || undefined,
+                                    harvestLaborCost: isFirstDist ? (totalCost || undefined) : 0,
+                                    investorName: investor || undefined,
+                                    investors: data.investors || [],
+                                    receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
+                                    updatedAt: new Date().toISOString(),
+                                    synced: false,
+                                    deleted: false,
+                                    transportSheets: distSheets.length > 0 ? distSheets : (transportSheets || []),
+                                } as any);
+                                isFirstDist = false;
+                            }
+
+                            const originOrder = ordersData.find((o: any) => o.lotId === lotId && o.type === 'HARVEST' && o.status === 'DONE' && o.date === editingMovement.date && !o.deleted);
+                            if (originOrder) {
+                                await db.put('orders', { ...originOrder, expectedYield: normalizedTotalYield, servicePrice: pricePerHa || undefined, contractorName: contractor || undefined, investorName: investor || undefined, campaignId: campaignId || undefined, updatedAt: new Date().toISOString(), synced: false } as any);
+                            }
+                            if (lot.id) await db.put('lots', { ...lot, observedYield: normalizedTotalYield, lastUpdatedBy: displayName || 'Sistema', updatedAt: new Date().toISOString(), synced: false } as any);
+
+                            syncService.pushChanges();
+                            setShowHarvestWizard(false); 
+                            setEditingMovement(null); 
+                            
+                            // Refresh modal state if it's open
+                            const freshMovements = await db.getAll('movements');
+                            const related = freshMovements.filter((mov: any) =>
+                                mov.referenceId === editingMovement.referenceId &&
+                                mov.clientId === clientId &&
+                                mov.date === (date || editingMovement.date) &&
+                                !mov.deleted
+                            );
+                            
+                            if (selectedMovement && related.length > 0) {
+                                // We pick the first one as the new "primary" selected movement just like handleRowClick does
+                                setSelectedMovement({ movement: related[0], order: selectedMovement.order, typeLabel: selectedMovement.typeLabel });
+                                setHarvestMovements(related);
+                            } else {
+                                setHarvestMovements([]);
+                            }
+                            
+                            loadData();
+                        } catch (error) {
+                            console.error(error); alert("Error al actualizar la cosecha.");
+                        }
+                    }}
                     initialDate={editingMovement.date}
                     initialContractor={editingMovement.contractorName || ''}
-                    initialLaborPrice={editingMovement.harvestLaborCost ? String(editingMovement.harvestLaborCost) : ''}
-                    initialYield={String(editingMovement.quantity)}
+                    initialLaborPrice={editingMovement.harvestLaborPricePerHa ? String(editingMovement.harvestLaborPricePerHa) : editingMovement.harvestLaborCost ? String(editingMovement.harvestLaborCost) : ''}
+                    initialYield={String(harvestMovements.reduce((sum, m) => sum + Math.abs(m.quantity), 0))}
                     isExecutingPlan={false} // Editing an existing one
-                    // We don't have all the exact distributions here out-of-the-box in the same way, but 
-                    // this prevents it from crashing. A full implementation would fetch the other movements from the same harvest block.
-                    initialDistributions={[{
-                        id: 'initial',
-                        type: editingMovement.warehouseId ? 'WAREHOUSE' : 'PARTNER',
-                        targetId: editingMovement.warehouseId || editingMovement.receiverName || '',
-                        targetName: editingMovement.warehouseName || editingMovement.receiverName || 'Desconocido',
-                        amount: editingMovement.quantity,
+                    // Map ALL related peer harvest movements (they are all type: HARVEST)
+                    initialDistributions={harvestMovements.map(m => ({
+                        id: m.id,
+                        type: m.warehouseId ? 'WAREHOUSE' : 'PARTNER',
+                        targetId: m.warehouseId || m.receiverName || (m.investors && m.investors.length > 0 ? m.investors[0].name : '') || '',
+                        targetName: warehousesKey[m.warehouseId || ''] || m.receiverName || (m.investors && m.investors.length > 0 ? m.investors[0].name : '') || 'Desconocido',
+                        amount: Math.abs(m.quantity),
+                        transportSheets: m.transportSheets || [],
                         logistics: {
-                            // Rename internal type to avoid collision if necessary, but here we use a nested object
-                            // Cast to any to avoid "property logistics does not exist" on the parent distribution object
-                            grainType: (editingMovement as any).type?.includes('SEMILLA') ? 'SEMILLA' : 'GRANO',
-                            campaignId: editingMovement.campaignId,
-                            investorName: editingMovement.investorName,
-                            originAddress: editingMovement.originAddress,
-                            transportName: editingMovement.transportName,
-                            transportCuit: editingMovement.transportCuit,
-                            driverName: editingMovement.driverName,
-                            driverCuit: editingMovement.driverCuit,
-                            truckPlate: editingMovement.truckPlate,
-                            trailerPlate: editingMovement.trailerPlate,
-                            observations: editingMovement.notes
+                            grainType: (m as any).type?.includes('SEMILLA') ? 'SEMILLA' : 'GRANO',
+                            campaignId: m.campaignId,
+                            investorName: m.investorName,
+                            investors: m.investors,
+                            originAddress: m.originAddress,
+                            transportName: m.transportName,
+                            transportCuit: m.transportCuit,
+                            driverName: m.driverName,
+                            driverCuit: m.driverCuit,
+                            truckPlate: m.truckPlate,
+                            trailerPlate: m.trailerPlate,
+                            observations: m.notes
                         } as any
-                    }]}
+                    }))}
+                    initialTransportSheets={Array.from(new Map(
+                        harvestMovements.flatMap(m => m.transportSheets || []).map(sheet => [sheet.id, sheet])
+                    ).values())}
                 />
             )}
 

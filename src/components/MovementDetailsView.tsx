@@ -188,7 +188,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                         { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
                                         { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
                                         { label: 'Distancia (Km)', value: logistics.distanceKm !== undefined ? `${logistics.distanceKm} Km` : null },
-                                        { label: 'Tarifa Flete', value: logistics.freightTariff !== undefined ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
+                                        { label: 'Tarifa Flete', value: (logistics.freightTariff !== undefined && logistics.freightTariff !== null) ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
                                         { label: 'Nº Descarga', value: logistics.dischargeNumber },
                                         { label: 'Humedad', value: logistics.humidity !== undefined ? `${logistics.humidity} %` : null },
                                         { label: 'P. Hectolítrico', value: logistics.hectoliterWeight !== undefined ? logistics.hectoliterWeight : null },

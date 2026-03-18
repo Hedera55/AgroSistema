@@ -35,11 +35,11 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Right-Aligned**: Only weights (Kg/Tons) should remain right-aligned for digit alignment.
 
 - **Numerical Notation (Spanish/Argentine)**:
-    - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator.
+    - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator and dot (`.`) as thousands separator.
     - **Implementation**: 
         - Use `type="text"` combined with `inputMode="decimal"`.
-        - Always normalize input strings using `.replace(',', '.')` before converting to numbers (e.g., `parseFloat(val.replace(',', '.'))`).
-    - **Display**: All numeric values displayed in the UI should be formatted using `.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })` or similar to respect local formatting.
+        - **Standard Utility**: Use `normalizeNumber` from `@/lib/numbers.ts`. Avoid ad-hoc `.replace(',', '.')` calls to ensure thousands separators are also correctly handled.
+    - **Display**: All numeric values displayed in the UI should be formatted using `.toLocaleString('es-AR')` or similar to respect local formatting.
 
 - **Stock History Subrows (Expandable Rows)**: 
     - **Trigger**: Clicking a row in the Stock History table toggles its expanded state.
@@ -141,9 +141,10 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Logic**: Implements an **Event Sourcing** pattern for data recovery.
 - **Process**:
     1. Wipes the current `stock` tables for a client.
-    2. Restores the state from the last valid `CampaignSnapshot`.
-    3. Re-processes every historical `Movement` chronologically from the snapshot date to the present.
-- **Usage**: Used to resolve data corruption or ripple typo fixes (e.g., historical price corrections) forward into the current live inventory.
+    2. Restores the state from the last valid `CampaignSnapshot` (unless "Desde cero" is selected).
+    3. Re-processes every historical `Movement` chronologically.
+- **Granularity Rules**: During replay, items MUST be matched using: `productId` + `warehouseId` + `productBrand` + `campaignId` + `presentationLabel` + `presentationContent`. Ignoring brand or campaign during aggregation leads to stock corruption.
+- **"Desde cero" (Start from Zero)**: Allows rebuilding the cache from the very first movement, ignoring all snapshots. This is the ultimate "fix-all" for state inconsistencies.
 
 ## 🛠️ Infrastructure & Sync
 - **Invalid UUIDs**: The sync service (`sync.ts`) automatically cleans up legacy local IDs (e.g., "grain-soja") to prevent Supabase type errors.
@@ -154,9 +155,12 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Sync Strategy**: When local records reference IDs that no longer exist (e.g., a Lot deleted on the server), the sync service must catch the `fkey` violation error, log a warning, and skip the specific invalid record instead of stopping the entire sync process.
     - **Self-Healing**: Ideally, the system should flag these orphans for review or mark them as "Archived" rather than allowing hard crashes in the React state lifecycle.
 
-## 📦 Stock & Inventory System
+## 📦 Stock & Inventory System (Fast Cache Table)
+- **Fast Cache Role**: The `stock` table acts as a denormalized **"Fast Cache"** (technically a **Materialized View** or **Read-Model**) of all current inventory totals. It is optimized for instant reading in the Galpón UI.
 - **ID-Based Deduction**: Movements now target specific stock records (presentations) instead of using a generic product-level FIFO.
 - **Unit Multipliers**: Input fields in the movement panel act as multipliers for presentation contents (e.g., 2 units of a 100L tank = 200L).
+- **Reactive Deletion**: Deleting a record from the history (`movements`) automatically performs an incremental mathematical adjustment on the `stock` table (Inverse Logic). 
+    - *Example*: Deleting a 100L Sale adds 100L back to the cache; deleting a 50kg Purchase subtracts 50kg.
 - **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
 - **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
 ## 🌾 Harvest Data Integrity & Persistence
@@ -165,6 +169,14 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Save Priority (The Spread Rule)**: When updating historical movements that contain a `logistics` object, always spread the legacy logistics **FIRST**, and then apply updated metadata (Contractor, Price, Sheets). Spreading logistics last will clobber any fresh user input with stale data.
 - **Locale-Aware Parsing**: All agricultural labor prices MUST be parsed using a utility that handles both `.` and `,` as decimal separators to support the Spanish/Argentine standard. Prefer `val.replace(/\./g, '').replace(',', '.')` before calling `parseFloat`.
 - **Sync Parity**: Every harvest-related field added to the database must have a corresponding mapping in *both* directions within `sync.ts` (forward and reverse mappers) to prevent "flickering" or data loss upon page reload.
+- **Harvest Deletion & Lot State Reversion**:
+    - **IDs**: Each harvest event generates a unique `harvestBatchId` (stored in `InventoryMovement` and `Order`) and updates the lot's `lastHarvestId`.
+    - **Current Harvest**: If the deleted movement's `harvestBatchId` matches the lot's `lastHarvestId`, the system performs a **full reversion**:
+        - Reverts stock for all items in the batch.
+        - Soft-deletes all associated movements and the unique harvest `Order`.
+        - Reverts the lot status to `SOWED` (Sembrado) and clears `observedYield` and `lastHarvestId`.
+    - **Historicals**: Deleting a historical harvest (that no longer matches `lastHarvestId`) is **blocked** to prevent state corruption.
+    - **User Alert**: "No se puede. Opción: Editar el rinde total a 0". This preserves history while allowing for correction.
 
 ## 👥 User Roles & Permissions
 - **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.

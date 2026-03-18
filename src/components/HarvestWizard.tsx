@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Warehouse, Campaign, Lot, Farm, InventoryMovement, TransportSheet } from '@/types';
 import { InvestorSelector } from '@/components/InvestorSelector';
+import { normalizeNumber } from '@/lib/numbers';
 
 interface HarvestData {
     date: string;
@@ -92,7 +93,27 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         targetName: string;
         amount: number;
         logistics: any;
-    }>>(initialDistributions || []);
+    }>>(() => {
+        if (initialDistributions && initialDistributions.length > 0) {
+            return initialDistributions;
+        }
+        
+        // For new harvests, pre-load default warehouse if available
+        if (defaultWhId) {
+            const defaultWh = warehouses.find(w => w.id === defaultWhId);
+            if (defaultWh) {
+                return [{
+                    id: `default_${Date.now()}`,
+                    type: 'WAREHOUSE',
+                    targetId: defaultWh.id,
+                    targetName: defaultWh.name,
+                    amount: 0,
+                    logistics: {}
+                }];
+            }
+        }
+        return [];
+    });
     const [selectedDistribOption, setSelectedDistribOption] = useState('');
 
     // Step 3 State — Transport Sheets (use initial if provided, otherwise start with one blank)
@@ -130,7 +151,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         return opts;
     }, [distributions, customProfiles, selectedProfileId]);
 
-    const totalYieldNum = (typeof observedYield === 'number' ? observedYield : parseFloat(observedYield.toString().replace(/\./g, '').replace(',', '.'))) || 0;
+    const totalYieldNum = normalizeNumber(observedYield) || 0;
     const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
     const availableYield = totalYieldNum - assignedYield;
 
@@ -203,10 +224,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
     const handleAddDistribution = () => {
         if (!selectedDistribOption) return;
-        if (availableYield <= 0) {
-            alert('No hay más kilogramos disponibles para asignar.');
-            return;
-        }
 
         const option = allDestinations.find(o => o.value === selectedDistribOption);
         if (!option || option.disabled) return;
@@ -253,9 +270,16 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     };
 
     const handleUpdateDistributionAmountString = (id: string, val: string) => {
-        const normalized = val.replace(/\./g, '').replace(',', '.');
-        const num = parseFloat(normalized) || 0;
+        const num = normalizeNumber(val);
         handleUpdateDistributionAmount(id, num);
+    };
+
+    const handleFillRemainder = (id: string) => {
+        const dist = distributions.find(d => d.id === id);
+        if (!dist) return;
+        
+        // If it's a partner, we should still respect the quota alert logic in handleUpdateDistributionAmount
+        handleUpdateDistributionAmount(id, dist.amount + availableYield);
     };
 
     const handleDeleteDistribution = (id: string) => {
@@ -377,28 +401,39 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const weightDifference = totalNetWeight - totalYieldNum;
 
     const handleFinalSubmit = () => {
-        let finalDistributions = [...distributions];
-        
-        if (finalDistributions.length === 0 && totalYieldNum > 0) {
-            // Auto-assign to default warehouse/first available
-            const targetWh = warehouses.find(w => w.id === defaultWhId) || warehouses[0];
-            if (targetWh) {
-                finalDistributions = [{
-                    id: `auto_${Date.now()}`,
-                    type: 'WAREHOUSE',
-                    targetId: targetWh.id,
-                    targetName: targetWh.name,
-                    amount: totalYieldNum,
-                    logistics: {}
-                }];
-            } else {
-                alert('No hay depósitos disponibles para asignar la cosecha.');
-                return;
-            }
-        }
         if (assignedYield > totalYieldNum + 1) { // 1kg margin
             alert('Ha asignado más kilos de los cosechados.');
             return;
+        }
+
+        let finalDistributions = [...distributions];
+        const remaining = totalYieldNum - assignedYield;
+        
+        if (remaining > 5) {
+            // Auto-assign remainder to default warehouse
+            const targetWh = warehouses.find(w => w.id === defaultWhId) || (finalDistributions.length === 0 ? warehouses[0] : null);
+            
+            if (targetWh) {
+                const existingWhIndex = finalDistributions.findIndex(d => d.type === 'WAREHOUSE' && d.targetId === targetWh.id);
+                if (existingWhIndex >= 0) {
+                    finalDistributions[existingWhIndex] = {
+                        ...finalDistributions[existingWhIndex],
+                        amount: finalDistributions[existingWhIndex].amount + remaining
+                    };
+                } else {
+                    finalDistributions.push({
+                        id: `auto_${Date.now()}`,
+                        type: 'WAREHOUSE',
+                        targetId: targetWh.id,
+                        targetName: targetWh.name,
+                        amount: remaining,
+                        logistics: { notes: finalDistributions.length > 0 ? 'Cosecha: asignación automática del remanente' : '' } as any
+                    });
+                }
+            } else if (finalDistributions.length === 0) {
+                alert('No hay depósitos disponibles para asignar la cosecha.');
+                return;
+            }
         }
 
         // Apply general logistics as fallbacks to all distributions
@@ -410,7 +445,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             date: harvestDate,
             contractor: harvestContractor,
             campaignId: selectedHarvestCampaignId,
-            laborPricePerHa: typeof harvestLaborPrice === 'number' ? harvestLaborPrice : (parseFloat(harvestLaborPrice.toString().replace(/\./g, '').replace(',', '.')) || 0),
+            laborPricePerHa: normalizeNumber(harvestLaborPrice),
             investor: selectedHarvestInvestors.length > 0 ? selectedHarvestInvestors[0].name : '',
             investors: selectedHarvestInvestors,
             harvestType,
@@ -467,7 +502,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             inputMode="decimal"
                             placeholder="Ej. 65000"
                             value={observedYield}
-                            onChange={e => setObservedYield(e.target.value.replace(/\./g, '').replace(',', '.'))}
+                            onChange={e => setObservedYield(normalizeNumber(e.target.value).toString())}
                             className="bg-white border-blue-300 focus:ring-blue-500"
                             labelClassName="block text-[10px] uppercase font-bold text-blue-600 mb-1"
                         />
@@ -498,7 +533,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             type="text"
                             inputMode="decimal"
                             value={harvestLaborPrice}
-                            onChange={e => setHarvestLaborPrice(e.target.value.replace(/\./g, '').replace(',', '.'))}
+                            onChange={e => setHarvestLaborPrice(normalizeNumber(e.target.value).toString())}
                             className="bg-white"
                             labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                         />
@@ -525,38 +560,44 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             </div>
                         </div>
 
-                        {availableYield > 0 && (
-                            <div className="mb-4 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 animate-fadeIn">
-                                <span className="text-amber-600 text-sm">⚠️</span>
-                                <p className="text-xs font-bold text-blue-800 uppercase leading-none mb-1">
-                                    Falta asignar cosecha: el remanente ({totalYieldNum - assignedYield} kg) se enviará al galpón por default para cosechas
-                                </p>
-                            </div>
-                        )}
+                        <div className="min-h-[52px] mb-4">
+                            {availableYield > 0 ? (
+                                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 animate-fadeIn h-full">
+                                    <span className="text-amber-600 text-sm">⚠️</span>
+                                    <p className="text-xs font-bold text-blue-800 uppercase leading-none">
+                                        Falta asignar cosecha: el remanente ({totalYieldNum - assignedYield} kg) se enviará al galpón por default para cosechas
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="h-full border border-transparent"></div>
+                            )}
+                        </div>
 
-                        <div className="flex gap-2 items-end mb-6">
-                            <div className="flex-1">
-                                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Agregar Destino</label>
-                                <select
-                                    className="w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-                                    value={selectedDistribOption}
-                                    onChange={e => setSelectedDistribOption(e.target.value)}
+                        <div className="mb-6">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Agregar Destino</label>
+                            <div className="flex gap-2 items-center">
+                                <div className="flex-1">
+                                    <select
+                                        className="w-full px-2 py-0.5 text-sm rounded-lg border border-slate-200 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+                                        value={selectedDistribOption}
+                                        onChange={e => setSelectedDistribOption(e.target.value)}
+                                    >
+                                        <option value="">Seleccionar destino...</option>
+                                        {allDestinations.map((opt, i) => (
+                                            <option key={i} value={opt.value} disabled={opt.disabled} className={opt.disabled ? 'font-bold bg-slate-50' : ''}>
+                                                {opt.label?.replace(/🌍 |🏢 |👤 /g, '') || 'Sin nombre'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleAddDistribution}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
                                 >
-                                    <option value="">Seleccionar destino...</option>
-                                    {allDestinations.map((opt, i) => (
-                                        <option key={i} value={opt.value} disabled={opt.disabled} className={opt.disabled ? 'font-bold bg-slate-50' : ''}>
-                                            {opt.label?.replace(/🌍 |🏢 |👤 /g, '') || 'Sin nombre'}
-                                        </option>
-                                    ))}
-                                </select>
+                                    +
+                                </button>
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleAddDistribution}
-                                className="bg-blue-600 hover:bg-blue-700 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
-                            >
-                                +
-                            </button>
                         </div>
 
                         <div className="space-y-2">
@@ -588,6 +629,19 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                 <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">kg</span>
                                             </div>
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleFillRemainder(dist.id)}
+                                            disabled={availableYield <= 0}
+                                            className={`w-7 h-7 flex items-center justify-center rounded border transition-colors ${
+                                                availableYield > 0 
+                                                ? 'text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-50 cursor-pointer' 
+                                                : 'text-slate-300 bg-slate-50/50 border-slate-100 cursor-default opacity-50'
+                                            }`}
+                                            title={availableYield > 0 ? "Asignar remanente a este destino" : "No hay remanente disponible"}
+                                        >
+                                            ↓
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() => handleDeleteDistribution(dist.id)}
@@ -703,7 +757,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('humidity')}
-                                onChange={e => updateSheetField('humidity', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))}
                             />
                             <Input
                                 label="Peso Hectolítrico"
@@ -711,7 +765,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('hectoliterWeight')}
-                                onChange={e => updateSheetField('hectoliterWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))}
                             />
                             <Input
                                 label="Peso Bruto (kg)"
@@ -719,7 +773,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('grossWeight')}
-                                onChange={e => updateSheetField('grossWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))}
                             />
                             <Input
                                 label="Peso Tara (kg)"
@@ -727,7 +781,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('tareWeight')}
-                                onChange={e => updateSheetField('tareWeight', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('tareWeight', normalizeNumber(e.target.value))}
                             />
                             <Input
                                 label="Empresa de Destino"
@@ -753,7 +807,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('distanceKm')}
-                                onChange={e => updateSheetField('distanceKm', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('distanceKm', normalizeNumber(e.target.value))}
                             />
                             <Input
                                 label="Tarifa Flete (USD)"
@@ -761,7 +815,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 placeholder="0"
                                 value={getSheetValue('freightTariff')}
-                                onChange={e => updateSheetField('freightTariff', e.target.value.replace(/\./g, '').replace(',', '.'))}
+                                onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))}
                             />
                         </div>
                     </div>
@@ -860,7 +914,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         } else if (step === 3) {
                             setStep(4);
                         } else {
-                            if (!isConfirming) {
+                            if (!isExecutingPlan) {
+                                handleFinalSubmit();
+                            } else if (!isConfirming) {
                                 setIsConfirming(true);
                                 // Auto-reset after 3 seconds for safety
                                 setTimeout(() => setIsConfirming(false), 3000);

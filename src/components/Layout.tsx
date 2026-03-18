@@ -347,7 +347,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     )
                 }
 
-                <main className="p-6 md:p-8 max-w-7xl mx-auto w-full">
+                <main className={`p-6 md:p-8 w-full ${pathname?.includes('/stock/history') ? '' : 'max-w-7xl mx-auto'}`}>
                     {children}
                 </main>
             </div >
