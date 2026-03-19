@@ -337,6 +337,14 @@ const StockEntryFormInternal = memo(({
         }
     }, [activeWarehouseIds, selectedWarehouseId, setSelectedWarehouseId]);
 
+    const insumoRef = useRef<HTMLSelectElement>(null);
+    const handleAddItem = () => {
+        addStockToBatch();
+        setTimeout(() => {
+            insumoRef.current?.focus();
+        }, 0);
+    };
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-8">
             <div className="flex justify-between items-center mb-6">
@@ -366,6 +374,7 @@ const StockEntryFormInternal = memo(({
                     <div className="md:col-span-12 lg:col-span-8">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Insumo</label>
                         <select
+                            ref={insumoRef}
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={activeStockItem.productId}
                             onChange={e => updateActiveStockItem('productId', e.target.value)}
@@ -465,7 +474,7 @@ const StockEntryFormInternal = memo(({
                     <div className="md:col-span-1">
                         <button
                             type="button"
-                            onClick={addStockToBatch}
+                            onClick={handleAddItem}
                             disabled={!activeStockItem.productId || !activeStockItem.quantity}
                             className="w-full h-11 bg-emerald-500 text-white rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Agregar a la lista"

@@ -11,7 +11,7 @@ interface MovementDetailsViewProps {
     typeLabel: string;
 }
 
-export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel }: MovementDetailsViewProps) {
+export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel, campaigns }: MovementDetailsViewProps) {
     const logistics = movement as any;
     const hasLogistics =
         logistics.truckDriver ||
@@ -87,6 +87,15 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                         {movement.type === 'IN' ? 'Galpón de destino' : 'Galpón'}
                                     </span>
                                     <span className="text-sm font-bold text-slate-700">{destName || originName || 'Galpón'}</span>
+                                </div>
+                            )}
+
+                            {movement.campaignId && campaigns && (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Campaña</span>
+                                    <span className="text-sm font-bold text-emerald-600">
+                                        {campaigns.find(c => c.id === movement.campaignId)?.name || 'Campaña Desconocida'}
+                                    </span>
                                 </div>
                             )}
 

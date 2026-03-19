@@ -11,6 +11,11 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Aesthetic Constraints**: **STRICTLY NO RANDOM SHADOWS**. Use `shadow-lg` or `shadow-xl` only on main containers/cards as defined. Headers and inline elements should remain "clean" and text-only.
 - **Report Mode Buttons**: Deselected buttons should have a "carved-in" (inset) relief effect using `shadow-inner` and `bg-slate-100` to distinguish them from the active states.
 - **Table Footer Patterns**: Pagination controls (e.g., "Cargar 10 más") must be full-width clickable bars (`flex-1`) with a solid `bg-slate-50`. Horizontal scrollbars must appear **above** these footer controls to keep the buttons accessible and fixed.
+    - **Implementation Pattern**: For data-heavy lists, use an incremental, state-driven client-side slice:
+        1. Initialize a `limit` state (e.g., `const [limit, setLimit] = useState(10)`).
+        2. Apply `.slice(0, limit)` to the data array before mapping to JSX.
+        3. The "Cargar 10 más" button increments the state (`setLimit(prev => prev + 10)`).
+        4. "Ver menos" resets the state to 10 (conditionally shown if `limit > 10`).
 - **Inline Details**: When clicking a table row for an item linked to an Order, the `OrderDetailView` should render inline **below** the relevant section (e.g., below the table) rather than in a modal, providing a smoother experience.
 - **Segmented Date Inputs**: For high-speed data entry, use a custom joined-box component for dates (DD-MM-YY). 
     - **Logic**: Each segment is physically limited to 2 digits. Typing the 2nd digit triggers an automatic focus jump to the next segment.
@@ -33,6 +38,12 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Table Cell Alignment**: 
     - **Centered**: Numerical columns (Labor Cost, USD totals), counts, and Status badges must be centered (`text-center`) for visual balance.
     - **Right-Aligned**: Only weights (Kg/Tons) should remain right-aligned for digit alignment.
+
+### Layout & Width Standards
+- **Standard Width**: Most pages MUST follow a `max-w-7xl mx-auto` constraint to maintain a clean, centered reading column and consistent alignment.
+- **Extended Width (Data-Heavy Tables)**: For pages with high horizontal data density (e.g., Stock History), the preferred pattern is to bypass the `7xl` constraint to prevent row overcrowding.
+    - **Implementation**: In `Layout.tsx`, use a conditional check on `pathname` to apply `w-full` instead of the standard `max-w-7xl mx-auto`.
+    - **Rule**: This "surgical expansion" should only be applied to routes that explicitly require it, ensuring that the general navigation experience remains stable and predictable.
 
 - **Numerical Notation (Spanish/Argentine)**:
     - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator and dot (`.`) as thousands separator.

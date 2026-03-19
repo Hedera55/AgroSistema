@@ -98,6 +98,7 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - ** stlying: ** In general, I prefer using browser's native elements, like <select>, with its default styles
 
+- ** browser extension **: Don't use the browser ability, where you can open chromium and browse by yourself; my computer's too old for that, ask me and I'll investigate
 
 
 + . + . + . + . + . + . +

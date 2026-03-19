@@ -861,6 +861,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const singleValidItem = validItems.length === 1 ? validItems[0] : null;
             const rootPrice = singleValidItem && singleValidItem.price ? parseFloat(singleValidItem.price.toString().replace(',', '.')) : undefined;
 
+            const totalAmount = movementItems.reduce((acc, it) => acc + (it.quantity * (it.price || 0)), 0);
+
             const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
@@ -871,6 +873,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 type: 'IN',
                 quantity: validItems.length === 1 ? parseFloat(singleValidItem!.quantity.toString().replace(',', '.')) : validItems.length,
                 unit: validItems.length === 1 ? (availableProducts.find((p: Product) => p.id === singleValidItem!.productId)?.unit || 'L') : 'items',
+                amount: totalAmount,
                 date: dateStr,
                 time: timeStr,
                 referenceId: `PURCHASE-${movementId}`,
@@ -986,7 +989,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 // This shouldn't happen if UI validation works, but as a safety:
                 console.warn('Deduction might have been incomplete');
             }
-
             const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
@@ -998,10 +1000,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 type: 'SALE',
                 quantity: qtyNum,
                 unit: stockItem.unit,
+                amount: qtyNum * priceNum,
                 salePrice: priceNum,
                 date: new Date().toISOString().split('T')[0],
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                referenceId: `SALE-${generateId()}`,
+                referenceId: `SALE-${movementId}`,
                 campaignId: stockItem.campaignId, // Propagate campaign from stock
                 notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
                 facturaImageUrl: facturaUrl || undefined,

@@ -240,7 +240,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         movements.forEach((m: InventoryMovement) => {
             if (m.deleted) return;
-            if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
+            if (viewCampaignId === 'none') {
+                if (m.campaignId) return;
+            } else if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
 
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
@@ -502,7 +504,9 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         movements.forEach(m => {
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
-            if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
+            if (viewCampaignId === 'none') {
+                if (m.campaignId) return;
+            } else if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
 
             const { normalizedDate, normalizedTime } = normalizeDateTime(m.date, m.time);
 
@@ -679,6 +683,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 onChange={e => setViewCampaignId(e.target.value)}
                             >
                                 <option value="all">Todas las Campañas</option>
+                                <option value="none">Sin Campaña</option>
                                 {campaigns.map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}

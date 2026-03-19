@@ -17,3 +17,16 @@ And... a client only sees their own client dashboard. Different from an admin, w
 
 Retroactively changing how much an expenditure cost or who paid for it.
 Como si fuera un excel que le podés cambiar los datos, este programa también debería poder.
+
+. . . . . . . . 
+
+Es posible que... debería hacer un cálculo de costes por campaña... Igual que está por lote digamos,
+
+- En una función, contando un precio promedio entre todas las campañas, de insumos en compras, y de productos en ventas,
+  Para poder comparar campañas entre sí por un lado,
+
+- Y por otro... contando el precio durante esa campaña de los insumos y los productos vendidos, para poder contar bien, cuánto invirtió cada socio y cuánto saca.
+
+
+
+

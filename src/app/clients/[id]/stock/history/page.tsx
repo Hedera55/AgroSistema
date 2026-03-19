@@ -3,7 +3,7 @@
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/services/db';
-import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem, ClientStock, CampaignSnapshot } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse, Client, ProductType, Unit, MovementItem, ClientStock, CampaignSnapshot, Lot } from '@/types';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { useAuth } from '@/hooks/useAuth';
@@ -237,7 +237,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             quantity: existing.quantity + (it.quantity * mult),
                             presentationAmount: existing.presentationAmount !== undefined
                                 ? (existing.presentationAmount + ((it.presentationAmount || 0) * mult))
-                                : undefined
+                                : undefined,
+                            lastUpdated: new Date().toISOString()
                         });
                     } else {
                         // Create entry with negative/positive balance if it didn't exist
@@ -250,7 +251,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             quantity: it.quantity * mult,
                             presentationLabel: it.presentationLabel,
                             presentationContent: it.presentationContent,
-                            presentationAmount: it.presentationAmount ? (it.presentationAmount * mult) : undefined
+                            presentationAmount: it.presentationAmount ? (it.presentationAmount * mult) : undefined,
+                            lastUpdated: new Date().toISOString()
                         });
                     }
                 }
@@ -309,13 +311,17 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
                     // If it was the current harvest, revert the Lot state
                     if (isCurrentHarvest) {
-                        await updateLot({
+                        const lotUpdates = {
                             ...lot,
-                            status: 'SOWED',
+                            status: 'SOWED' as const,
                             observedYield: undefined,
                             lastHarvestId: undefined,
-                            lastUpdatedBy: displayName || 'Sistema'
-                        });
+                            lastUpdatedBy: displayName || 'Sistema',
+                            updatedAt: new Date().toISOString(),
+                            synced: false
+                        };
+                        await db.put('lots', lotUpdates);
+                        syncService.pushChanges();
                     }
                 }
             } else {
@@ -592,8 +598,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     campaignId: selectedCampaignId || undefined,
                     quantity: qtyNum,
                     salePrice: isSale ? priceNum : undefined,
+                    amount: qtyNum * priceNum,
                     notes: note,
                     updatedAt: new Date().toISOString(),
+                    synced: false,
                     // Flattened Properties
                     truckDriver: saleTruckDriver || undefined,
                     plateNumber: salePlateNumber || undefined,
@@ -618,10 +626,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 
                 // Refresh modal state if it's open
                 if (selectedMovement?.movement?.id === editingMovement.id) {
-                    const freshMovements = await db.getAll('movements');
+                    const freshMovements = await db.getAll('movements') as InventoryMovement[];
                     const freshMov = freshMovements.find(m => m.id === editingMovement.id);
                     if (freshMov) {
-                        setSelectedMovement(prev => prev ? { ...prev, movement: freshMov } : null);
+                        setSelectedMovement((prev: any) => prev ? { ...prev, movement: freshMov } : null);
                     }
                 }
                 return;
@@ -709,6 +717,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     sellerName: selectedSeller || undefined,
                     items: movementItems,
                     updatedAt: now.toISOString(),
+                    synced: false,
+                    amount: movementItems.reduce((acc, it) => acc + (it.quantity * (it.price || 0)), 0),
                     quantity: validItems.length === 1 ? normalizeNumber(singleValidItem!.quantity) : validItems.length,
                     unit: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.unit || 'L') : 'items',
                     productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
@@ -732,7 +742,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         editingMovement, stockItems, activeStockItem, saleQuantity, salePrice, stock, selectedWarehouseId, note, saleTruckDriver,
         salePlateNumber, saleTrailerPlate, saleDestinationCompany, saleDestinationAddress, saleTransportCompany, saleDischargeNumber,
         saleHumidity, saleHectoliterWeight, saleGrossWeight, saleTareWeight, salePrimarySaleCuit, saleDepartureDateTime, saleDistanceKm,
-        saleFreightTariff, loadData, updateStock, productsData, clientId, selectedSeller, facturaDate, dueDate, selectedInvestors
+        saleFreightTariff, loadData, updateStock, productsData, clientId, selectedSeller, facturaDate, dueDate, selectedInvestors, selectedCampaignId
     ]);
 
     const handleRecalcularFuerte = async () => {
@@ -1190,6 +1200,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             originName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.warehouseId || ''] : undefined}
                             destName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.partnerId || ''] : warehousesKey[selectedMovement.movement.warehouseId || '']}
                             onClose={() => setSelectedMovement(null)}
+                            campaigns={campaigns}
                         />
                     )}
                 </div>
@@ -1205,6 +1216,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         originName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.warehouseId || ''] : undefined}
                         destName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.partnerId || ''] : warehousesKey[selectedSubMovement.movement.warehouseId || '']}
                         onClose={() => setSelectedSubMovement(null)}
+                        campaigns={campaigns}
                     />
                 </div>
             )}
