@@ -142,19 +142,21 @@ export function OrderConfirmationStep({
                                             ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
                                             : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                     </span>
-                                    <span className="font-mono font-bold text-emerald-600">
-                                        {totalInGroup.toFixed(2)} {first.unit}
-                                        {first.productName.toUpperCase().includes('MAIZ') && ` (${(totalInGroup / 80000).toFixed(2)} bolsas)`}
-                                    </span>
+                                    <div className="flex flex-col items-end">
+                                        <span className="font-mono font-bold text-emerald-600">
+                                            {(first.dosage * (selectedLot?.hectares || 0)).toFixed(1)} {first.unit}
+                                            {first.productName.toUpperCase().includes('MAIZ') && ` (${((first.dosage * (selectedLot?.hectares || 0)) / 80000).toFixed(2)} bolsas)`}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="space-y-1 pl-4">
                                     {groupItems.map(item => (
-                                        <div key={item.id} className={`flex flex-col text-xs italic ${item.isVirtualDéficit ? 'text-orange-500 border-l-2 border-orange-200 pl-2' : 'text-slate-500'}`}>
+                                        <div key={item.id} className={`flex flex-col text-xs italic ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
                                             <div className="flex justify-between items-center w-full">
                                                 <span>
                                                     {item.multiplier ? `${item.multiplier} x ` : ''}
                                                     {item.isVirtualDéficit
-                                                        ? 'Faltan'
+                                                        ? 'Déficit'
                                                         : (item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`))}
                                                     {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
                                                     {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
@@ -168,6 +170,19 @@ export function OrderConfirmationStep({
                                             )}
                                         </div>
                                     ))}
+                                    {(() => {
+                                        const requiredTotal = first.dosage * (selectedLot?.hectares || 0);
+                                        const excess = totalInGroup - requiredTotal;
+                                        if (excess > 0.01) {
+                                            return (
+                                                <div className="flex justify-between items-center text-xs italic text-blue-600 font-bold mt-1">
+                                                    <span>EXCESO</span>
+                                                    <span className="font-mono">{excess.toFixed(2)} {first.unit}</span>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                 </div>
                             </div>
                         );

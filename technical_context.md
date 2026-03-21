@@ -89,6 +89,14 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 
 ## Navigation & Order Logic
 
+### 🛡️ Exact ID Persistence (Editing Reliability)
+- **Problem**: Previously, editing an order used "Property-based Reverse Matching" (`productId`, `warehouseId`, `presentation`). This was ambiguous if multiple batches existed or if a quantity was zero, leading to "phantom duplicates" or missing values in the edit flow.
+- **Solution**: Transitioned to **Deterministic ID Tracking**:
+    - **Implementation**: The `OrderItem` type now includes a `stockId`. 
+    - **Creation**: When an item is added to an order, it is stamped with the unique `stockId` from the original stock record.
+    - **Editing**: The system uses `st.id === i.stockId` as the **primary lookup** to reload multipliers.
+    - **Fallback**: Property-based matching is only used as a fallback for historical orders (backward compatibility).
+
 ### Stock History Navigation
 - **Direct Jump**: Clicking on **E-SIEMBRA** or **E-APLICACIÓN** rows MUST directly open the `OrderDetailView`.
 - **Movement Hierarchy**: `MovementDetailsView` is reserved for transfers, withdrawals, or sub-movements that do not constitute a primary work event.

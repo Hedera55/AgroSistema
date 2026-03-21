@@ -60,15 +60,24 @@ export const InvestorSelector: React.FC<InvestorSelectorProps> = ({
         );
         onChange(newInvestors);
     };
+    
+    const handleFillRemainder = (name: string) => {
+        const remaining = 100 - totalPercentage;
+        if (remaining <= 0) return;
+        const newInvestors = selectedInvestors.map(i => 
+            i.name === name ? { ...i, percentage: Number((i.percentage + Number(remaining.toFixed(2))).toFixed(2)) } : i
+        );
+        onChange(newInvestors);
+    };
 
     const totalPercentage = selectedInvestors.reduce((acc, i) => acc + i.percentage, 0);
 
     return (
-        <div className="space-y-3">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">
+        <div className="space-y-1.5">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
                 {label}
             </label>
-            <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 min-h-[50px]">
+            <div className="flex flex-wrap items-center gap-3 py-2 px-3 bg-slate-50 rounded-xl border border-slate-100 min-h-[42px]">
                 <div className="w-[180px] shrink-0">
                     <select
                         className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-9 bg-white"
@@ -102,6 +111,19 @@ export const InvestorSelector: React.FC<InvestorSelectorProps> = ({
                         </div>
                         <button
                             type="button"
+                            onClick={() => handleFillRemainder(inv.name)}
+                            disabled={totalPercentage >= 100}
+                            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+                                totalPercentage < 100 
+                                ? 'text-emerald-600 hover:bg-emerald-50' 
+                                : 'text-slate-300 cursor-default opacity-50'
+                            }`}
+                            title="Completar hasta 100%"
+                        >
+                            ↓
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => handleRemoveInvestor(inv.name)}
                             className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                             title="Eliminar"
@@ -115,11 +137,6 @@ export const InvestorSelector: React.FC<InvestorSelectorProps> = ({
                     <span className="text-xs text-slate-400 italic">No hay socios seleccionados</span>
                 )}
             </div>
-            {selectedInvestors.length > 0 && Math.abs(totalPercentage - 100) > 0.01 && (
-                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-tight">
-                    ⚠️ El total es {totalPercentage.toFixed(1)}% (Debe ser 100%)
-                </p>
-            )}
         </div>
     );
 };

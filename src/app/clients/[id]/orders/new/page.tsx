@@ -15,7 +15,7 @@ export default function NewOrderPage({ params }: { params: Promise<{ id: string 
     };
 
     return (
-        <div className="max-w-4xl mx-auto py-8">
+        <div className="mx-auto py-8">
             <OrderWizard 
                 clientId={clientId}
                 editId={editId}

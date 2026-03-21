@@ -192,6 +192,7 @@ export interface OrderItem {
     productType?: ProductType;
     presentationLabel?: string;
     presentationContent?: number;
+    stockId?: string; // ID of the ClientStock entry this item was allocated from
     multiplier?: number;
     groupId?: string;
     isVirtualDéficit?: boolean;

@@ -238,7 +238,9 @@ export function OrderRecipeStep({
                         {!isMechanicalLabor ? (
                             <div className="md:col-span-3">
                                 <div className="flex flex-col">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Dosis</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">
+                                        {selectedProduct?.type === 'SEED' ? 'Densidad' : 'Dosis'}
+                                    </label>
                                     <div className="relative flex items-center h-[46px]">
                                         <Input
                                             type="text"
@@ -358,7 +360,7 @@ export function OrderRecipeStep({
                                 <div className="text-right">
                                     {currDosage && (
                                         <div className={`text-[11px] font-black uppercase tracking-tight py-1 ${diff >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                                            {diff === 0 ? '✓ Cantidad Exacta' : (diff > 0 ? `Sobra ${diff.toFixed(2)} ${selectedProduct?.unit}` : `Faltan ${Math.abs(diff).toFixed(2)} ${selectedProduct?.unit}`)}
+                                            {diff === 0 ? '✓ Cantidad Exacta' : (diff > 0 ? `Exceso ${diff.toFixed(2)} ${selectedProduct?.unit}` : `Déficit ${Math.abs(diff).toFixed(2)} ${selectedProduct?.unit}`)}
                                         </div>
                                     )}
                                 </div>
@@ -428,15 +430,34 @@ export function OrderRecipeStep({
 
                                 return (
                                     <div key={groupId} className="animate-fadeIn">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <div className="flex items-center gap-2">
-                                                {first.loadingOrder && <span className="text-slate-800 font-black text-xs">#{first.loadingOrder}</span>}
-                                                <span className="font-black text-sm uppercase tracking-tight text-slate-800">
-                                                    {first.productType === 'SEED'
-                                                        ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
-                                                        : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
-                                                </span>
-                                                {!isLabor && <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-0.5 rounded-full">{totalInGroup.toFixed(1)} {first.unit}</span>}
+                                        <div className="flex justify-between items-start mb-1">
+                                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                {first.loadingOrder && <span className="text-slate-800 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
+                                                <div className="flex flex-col flex-1 min-w-0">
+                                                    <div className="flex items-baseline gap-3">
+                                                        <span className="font-black text-sm uppercase tracking-tight text-slate-800 truncate">
+                                                            {first.productType === 'SEED'
+                                                                ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                                : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
+                                                        </span>
+                                                        {!isLabor && (
+                                                            <span className="text-emerald-700 uppercase font-black text-sm leading-none whitespace-nowrap">
+                                                                {(first.dosage * selectedLot.hectares).toFixed(1)} {first.unit}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {!isLabor && (first.plantingDensity || first.plantingSpacing || first.expectedYield) && (
+                                                        <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-1">
+                                                            {first.plantingDensity && (
+                                                                <span>
+                                                                    densidad: {first.plantingDensity} {first.unit}/ha
+                                                                </span>
+                                                            )}
+                                                            {first.plantingSpacing && <span>espaciamiento: {first.plantingSpacing} cm</span>}
+                                                            {first.expectedYield && <span>rendimiento: {first.expectedYield} kg/ha</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <button onClick={() => handleEditItem(first)} className="p-1 text-slate-300 hover:text-emerald-500 transition-colors">
@@ -454,7 +475,7 @@ export function OrderRecipeStep({
                                                         <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
                                                             {item.multiplier ? `${item.multiplier} x ` : ''}
                                                             {item.isVirtualDéficit
-                                                                ? 'Faltan'
+                                                                ? 'Déficit'
                                                                 : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
                                                             {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
                                                             {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
@@ -463,38 +484,39 @@ export function OrderRecipeStep({
                                                             {item.totalQuantity.toFixed(2)} {item.unit}
                                                         </span>
                                                     </div>
-                                                    {(item.plantingDensity || item.plantingSpacing || item.expectedYield) && (
-                                                        <div className="flex flex-wrap gap-x-3 text-emerald-600/70 font-bold uppercase text-[8px] leading-none">
-                                                            {item.plantingDensity && (
-                                                                <span>
-                                                                    Densidad: {item.plantingDensity} {item.unit}/ha
-                                                                    {item.productName.toUpperCase().includes('MAIZ') && ` (${(item.plantingDensity / 80000).toFixed(2)} bolsas)`}
-                                                                </span>
-                                                            )}
-                                                            {item.plantingSpacing && <span>Espaciamiento: {item.plantingSpacing} cm</span>}
-                                                            {item.expectedYield && <span>Rendimiento: {item.expectedYield} kg/ha</span>}
-                                                        </div>
-                                                    )}
                                                     {item.fertilizerPlacement && (
-                                                        <div className="text-emerald-600/70 font-bold uppercase text-[8px] leading-none mt-1">
+                                                        <div className="text-emerald-600/70 font-bold uppercase text-[11px] leading-none mt-1">
                                                             Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
                                                         </div>
                                                     )}
                                                 </div>
                                             ))}
                                         </div>
+                                        {(() => {
+                                            const requiredTotal = first.dosage * selectedLot.hectares;
+                                            const excess = totalInGroup - requiredTotal;
+                                            if (excess > 0.01) {
+                                                return (
+                                                    <div className="flex justify-between items-center text-[11px] leading-tight text-blue-600 font-bold mt-1 pl-4 pr-1">
+                                                        <span>EXCESO</span>
+                                                        <span className="font-mono">{excess.toFixed(2)} {first.unit}</span>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
                 )}
- 
-                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-                    <div className="lg:col-span-3">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contratista</label>
+
+                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-4">
+                    <div className="sm:col-span-1 xl:col-span-3">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Contratista</label>
                         <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
+                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 px-4 text-sm h-[42px]"
                             value={selectedApplicatorId}
                             onChange={e => setSelectedApplicatorId(e.target.value)}
                         >
@@ -502,18 +524,18 @@ export function OrderRecipeStep({
                             {contractors.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
                         </select>
                     </div>
-                    <div className="lg:col-span-3">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Responsable Técnico</label>
+                    <div className="sm:col-span-1 xl:col-span-3">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Responsable Técnico</label>
                         <Input
                             type="text"
                             placeholder="Nombre..."
                             value={technicalResponsible}
                             onChange={e => setTechnicalResponsible(e.target.value)}
-                            className="h-[46px]"
+                            className="h-[42px]"
                         />
                     </div>
-                    <div className="lg:col-span-4">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Precio Servicio / Ha (USD)</label>
+                    <div className="sm:col-span-1 xl:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Precio Servicio / Ha (USD)</label>
                         <Input
                             type="text"
                             placeholder="0.00"
@@ -528,13 +550,13 @@ export function OrderRecipeStep({
                                 }
                                 setServicePrice(cleaned);
                             }}
-                            className="h-[46px]"
+                            className="h-[42px]"
                         />
                     </div>
-                    <div className="lg:col-span-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Campaña</label>
+                    <div className="sm:col-span-1 xl:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Campaña</label>
                         <select
-                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 py-3 px-4 text-sm"
+                            className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 px-4 text-sm h-[42px]"
                             value={selectedCampaignId}
                             onChange={e => setSelectedCampaignId?.(e.target.value)}
                         >
@@ -545,7 +567,7 @@ export function OrderRecipeStep({
                         </select>
                     </div>
 
-                    <div className="col-span-12">
+                    <div className="col-span-1 sm:col-span-2 xl:col-span-12 mt-6">
                         <InvestorSelector
                             label="Pagado por (Opcional)"
                             availablePartners={[...(partners || []), ...(investors || [])]}

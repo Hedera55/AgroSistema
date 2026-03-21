@@ -58,9 +58,15 @@ export function StockTable({
         const isSelected = selectedStockIds.includes(id);
         const isExpanded = expandedRows.includes(id);
 
+        const item = enrichedStock.find(i => i.id === id);
+        const hasMeaningfulBreakdown = item?.breakdown && (
+            item.breakdown.some((b: any) => b.presentationLabel || b.presentationContent) ||
+            item.breakdown.length > 1
+        );
+
         if (!isSelected) {
             toggleStockSelection(id, e);
-            if (!isExpanded) {
+            if (!isExpanded && hasMeaningfulBreakdown) {
                 setExpandedRows(prev => [...prev, id]);
             }
         } else {
@@ -130,17 +136,25 @@ export function StockTable({
                                         onClick={(e) => handleRowClick(item.id, e)}
                                         className={`stock-row transition-colors cursor-pointer group ${selectedStockIds.includes(item.id) ? 'bg-blue-50/80' : 'hover:bg-slate-50'}`}
                                     >
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-400 chevron-area" onClick={(e) => handleChevronClick(item.id, e)}>
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="16" height="16"
-                                                viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" strokeWidth="2.5"
-                                                strokeLinecap="round" strokeLinejoin="round"
-                                                className={`transition-transform duration-200 cursor-pointer hover:text-emerald-500 ${expandedRows.includes(item.id) ? 'rotate-90 text-emerald-500' : ''}`}
-                                            >
-                                                <polyline points="9 18 15 12 9 6"></polyline>
-                                            </svg>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-400 chevron-area" onClick={(e) => {
+                                            const hasMeaningfulBreakdown = item.breakdown && (
+                                                item.breakdown.some((b: any) => b.presentationLabel || b.presentationContent) ||
+                                                item.breakdown.length > 1
+                                            );
+                                            if (hasMeaningfulBreakdown) handleChevronClick(item.id, e);
+                                        }}>
+                                            {item.breakdown && (item.breakdown.some((b: any) => b.presentationLabel || b.presentationContent) || item.breakdown.length > 1) ? (
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    width="16" height="16"
+                                                    viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" strokeWidth="2.5"
+                                                    strokeLinecap="round" strokeLinejoin="round"
+                                                    className={`transition-transform duration-200 cursor-pointer hover:text-emerald-500 ${expandedRows.includes(item.id) ? 'rotate-90 text-emerald-500' : ''}`}
+                                                >
+                                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                                </svg>
+                                            ) : null}
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap text-sm text-slate-900 font-bold">
                                             {item.productCommercialName || '-'}
@@ -166,52 +180,59 @@ export function StockTable({
                                     </tr>
 
                                     {/* Breakdown Rows */}
-                                    {expandedRows.includes(item.id) && item.breakdown && item.breakdown.length > 0 && (
-                                        <tr className="bg-slate-50/50">
-                                            <td colSpan={10} className="px-6 py-3">
-                                                <div className="flex flex-col gap-1 pl-8 border-l-2 border-slate-200">
-                                                    {item.breakdown
-                                                        .filter(b => b.presentationLabel || b.presentationContent)
-                                                        .map((b, bIdx) => (
-                                                            <div key={bIdx} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0">
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest min-w-[100px] text-left">
-                                                                        {b.presentationLabel || 'S/P'}
-                                                                    </span>
-                                                                    <span className="text-sm font-bold text-slate-700">
-                                                                        {b.presentationContent || '-'}{item.unit} <span className="text-slate-400 font-normal mx-1">x</span>
-                                                                        <span className="text-emerald-600 font-black">{b.presentationAmount || '-'}</span>
-                                                                    </span>
+                                    {(() => {
+                                        const hasMeaningfulBreakdown = item.breakdown && (
+                                            item.breakdown.some((b: any) => b.presentationLabel || b.presentationContent) ||
+                                            item.breakdown.length > 1
+                                        );
+                                        if (!expandedRows.includes(item.id) || !hasMeaningfulBreakdown) return null;
+                                        return (
+                                            <tr className="bg-slate-50/50">
+                                                <td colSpan={10} className="px-6 py-3">
+                                                    <div className="flex flex-col gap-1 pl-8 border-l-2 border-slate-200">
+                                                        {item.breakdown
+                                                            ?.filter((b: any) => b.presentationLabel || b.presentationContent)
+                                                            .map((b: any, bIdx: number) => (
+                                                                <div key={bIdx} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest min-w-[100px] text-left">
+                                                                            {b.presentationLabel || 'S/P'}
+                                                                        </span>
+                                                                        <span className="text-sm font-bold text-slate-700">
+                                                                            {b.presentationContent || '-'}{item.unit} <span className="text-slate-400 font-normal mx-1">x</span>
+                                                                            <span className="text-emerald-600 font-black">{b.presentationAmount || '-'}</span>
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex flex-col items-end">
+                                                                        <div className="text-sm font-black text-slate-800">
+                                                                            {b.quantity} <span className="text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
+                                                                        </div>
+                                                                        <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                                                            USD {b._specificPPP ? b._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        {item.breakdown?.filter((b: any) => !b.presentationLabel && !b.presentationContent).map((b: any, bIdx: number) => (
+                                                            <div key={`generic-${bIdx}`} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0 opacity-60">
+                                                                <div className="flex items-center gap-3 italic text-slate-400">
+                                                                    <span className="text-[11px] font-medium uppercase tracking-widest min-w-[100px] text-left">Granel / Otros</span>
                                                                 </div>
                                                                 <div className="flex flex-col items-end">
-                                                                    <div className="text-sm font-black text-slate-800">
-                                                                        {b.quantity} <span className="text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
+                                                                    <div className="text-sm font-bold text-slate-400">
+                                                                        {b.quantity} <span className="text-[10px] uppercase">{item.unit}</span>
                                                                     </div>
-                                                                    <div className="text-[11px] font-medium text-slate-500 mt-0.5">
-                                                                        USD {(b as any)._specificPPP ? (b as any)._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
+                                                                    <div className="text-[11px] font-medium text-slate-400 mt-0.5">
+                                                                        USD {b._specificPPP ? b._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         ))}
-                                                    {item.breakdown.filter(b => !b.presentationLabel && !b.presentationContent).map((b, bIdx) => (
-                                                        <div key={`generic-${bIdx}`} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0 opacity-60">
-                                                            <div className="flex items-center gap-3 italic text-slate-400">
-                                                                <span className="text-[11px] font-medium uppercase tracking-widest min-w-[100px] text-left">Granel / Otros</span>
-                                                            </div>
-                                                            <div className="flex flex-col items-end">
-                                                                <div className="text-sm font-bold text-slate-400">
-                                                                    {b.quantity} <span className="text-[10px] uppercase">{item.unit}</span>
-                                                                </div>
-                                                                <div className="text-[11px] font-medium text-slate-400 mt-0.5">
-                                                                    USD {(b as any)._specificPPP ? (b as any)._specificPPP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} c/u
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })()}
                                 </React.Fragment>
                             ))}
                         </tbody>

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Warehouse, Product, Client, Campaign, MovementItem } from '@/types';
+import { InvestorSelector } from '@/components/InvestorSelector';
 import { generateId } from '@/lib/uuid';
 
 interface SegmentedDateInputProps {
@@ -239,28 +240,6 @@ const StockEntryFormInternal = memo(({
         availableProducts.find(p => p.id === activeStockItem.productId)
         , [availableProducts, activeStockItem.productId]);
 
-    const investorOptions = useMemo(() => {
-        const source = client?.partners || client?.investors || [];
-        return source.map((p: any) => {
-            let name = '';
-            if (typeof p === 'string') {
-                if (p.trim().startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(p);
-                        name = parsed.name || p;
-                    } catch (e) {
-                        name = p;
-                    }
-                } else {
-                    name = p;
-                }
-            } else {
-                name = p?.name || '';
-            }
-            return name;
-        }).filter(Boolean);
-    }, [client?.partners, client?.investors]);
-
     const productOptions = useMemo(() => [
         <option key="prod-default" value="">Seleccione...</option>,
         ...filteredProducts.map(p => {
@@ -304,31 +283,6 @@ const StockEntryFormInternal = memo(({
             <option key={`opt-ware-${w.id}`} value={w.id}>{w.name}</option>
         ))
     ], [warehouses]);
-
-    const investorSelectOptions = useMemo(() => [
-        <option key="inv-default" value="">...</option>,
-        ...investorOptions.map((name, idx) => (
-            <option key={`opt-inv-${name}-${idx}`} value={name}>
-                {name}
-            </option>
-        ))
-    ], [investorOptions]);
-
-    const handleAddInvestor = (name: string) => {
-        if (!name) return;
-        if (selectedInvestors.find(i => i.name === name)) return;
-        const newInv = { name, percentage: selectedInvestors.length === 0 ? 100 : 0 };
-        setSelectedInvestors([...selectedInvestors, newInv]);
-    };
-
-    const handleRemoveInvestor = (name: string) => {
-        setSelectedInvestors(selectedInvestors.filter(i => i.name !== name));
-    };
-
-    const handleUpdateInvestorPercentage = (name: string, pctStr: string) => {
-        const pct = parseFloat(pctStr) || 0;
-        setSelectedInvestors(selectedInvestors.map(i => i.name === name ? { ...i, percentage: pct } : i));
-    };
 
     // Auto-select warehouse from active set if not already selected
     useEffect(() => {
@@ -682,52 +636,12 @@ const StockEntryFormInternal = memo(({
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Pagado por</label>
-                    <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="w-[180px] shrink-0">
-                            <select
-                                className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-9"
-                                value=""
-                                onChange={e => {
-                                    handleAddInvestor(e.target.value);
-                                    e.target.value = "";
-                                }}
-                            >
-                                {investorSelectOptions}
-                            </select>
-                        </div>
-
-                        {selectedInvestors.map((inv, idx) => (
-                            <div key={idx} className="flex items-center gap-2 bg-white p-1 pl-2 pr-1 rounded-lg border border-slate-200 shadow-sm animate-fadeIn">
-                                <div className="text-xs font-bold text-slate-700 username-text truncate max-w-[100px]">{inv.name}</div>
-                                <div className="flex items-center gap-1 bg-slate-50 rounded px-1">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={inv.percentage}
-                                        onChange={(e) => handleUpdateInvestorPercentage(inv.name, e.target.value)}
-                                        className="w-10 h-6 text-right text-xs rounded border-none bg-transparent focus:ring-0 p-0 font-mono font-bold text-emerald-600"
-                                    />
-                                    <span className="text-slate-400 text-[10px]">%</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => handleRemoveInvestor(inv.name)}
-                                    className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                    title="Eliminar"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        ))}
-
-                        {selectedInvestors.length === 0 && (
-                            <span className="text-xs text-slate-400 italic">Agregue inversores...</span>
-                        )}
-                    </div>
-                </div>
+                <InvestorSelector
+                    label="Pagado por"
+                    availablePartners={[...(client?.partners || []), ...(client?.investors || [])]}
+                    selectedInvestors={selectedInvestors}
+                    onChange={setSelectedInvestors}
+                />
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100">
                     <div className="flex items-center gap-4">

@@ -1427,11 +1427,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                 openPanel('harvest_details', lot.id, selectedFarmId!, lot.id, lot.name);
                                                                                             }
                                                                                         }}
-                                                                                        className={`text-[10px] font-bold px-2 py-0.5 flex items-center justify-center leading-none rounded border transition-all relative z-10 ${lot.status === 'SOWED'
-                                                                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110'
+                                                                                        className={`text-[10px] font-bold flex items-center justify-center leading-none rounded border transition-all relative z-10 ${lot.status === 'SOWED'
+                                                                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-200 hover:scale-110 px-2 py-0.5'
                                                                                             : lot.status === 'HARVESTED' ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-pointer hover:bg-blue-200 hover:scale-110' :
-                                                                                                lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                                                                                                    'bg-slate-100 text-slate-500 border-slate-200'
+                                                                                                lot.status === 'NOT_SOWED' ? 'bg-yellow-100 text-yellow-700 border-yellow-200 px-2 py-0.5' :
+                                                                                                    'bg-slate-100 text-slate-500 border-slate-200 px-2 py-0.5'
                                                                                             }`}
                                                                                     >
                                                                                         {lot.status === 'SOWED' ? 'S' :

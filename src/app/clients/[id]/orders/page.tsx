@@ -20,7 +20,7 @@ import { OrderWizard } from './components/OrderWizard';
 export default function OrdersPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { role, isMaster, profile, displayName } = useAuth();
-    
+
     const formatDate = (dateStr?: string) => {
         if (!dateStr || typeof dateStr !== 'string') return dateStr || '---';
         if (dateStr.includes('-')) {
@@ -397,8 +397,8 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                                                 <div className="font-medium text-slate-800">
                                                     {order.lotName} (
-                                                    {order.treatedArea && order.treatedArea < (order as any).totalHectares 
-                                                        ? `${order.treatedArea}/${(order as any).totalHectares}` 
+                                                    {order.treatedArea && order.treatedArea < (order as any).totalHectares
+                                                        ? `${order.treatedArea}/${(order as any).totalHectares}`
                                                         : order.treatedArea || (order as any).totalHectares} ha)
                                                 </div>
                                                 <div className="text-xs text-slate-400">{order.farmName}</div>
@@ -413,11 +413,20 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                                {order.items && order.items.length > 1 ? (
-                                                    <span>MÚLTIPLES</span>
-                                                ) : order.items && order.items.length === 1 ? (
-                                                    <span>{order.items[0].productName}</span>
-                                                ) : '---'}
+                                                {(() => {
+                                                    if (!order.items || order.items.length === 0) return '---';
+                                                    if (order.items.length === 1) return <span>{order.items[0].productName}</span>;
+                                                    
+                                                    // Check if all items refer to the same product (by productId)
+                                                    const firstId = order.items[0].productId;
+                                                    const allSame = order.items.every(i => i.productId === firstId);
+                                                    
+                                                    if (allSame) {
+                                                        return <span>{order.items[0].productName}</span>;
+                                                    }
+                                                    
+                                                    return <span>MÚLTIPLES</span>;
+                                                })()}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
                                                 <button
@@ -567,9 +576,9 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                             <div className="flex flex-col gap-1.5 border-l-2 border-emerald-500/40 pl-4">
                                                                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desglose de Insumos</div>
                                                                 {order.items.map((item, i) => (
-                                                                    <div key={i} className="flex justify-between items-center text-slate-700 min-w-[200px]">
-                                                                        <span className="font-bold">{item.productName}</span>
-                                                                        <span className="font-mono text-emerald-600 font-bold ml-6 lowercase">{item.dosage} {item.unit}/ha</span>
+                                                                    <div key={i} className={`flex justify-between items-center min-w-[200px] ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-700'}`}>
+                                                                        <span className="font-bold">{item.isVirtualDéficit ? 'Déficit' : item.productName}</span>
+                                                                        <span className={`font-mono font-bold ml-6 lowercase ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{item.dosage} {item.unit}/ha</span>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -666,7 +675,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
                     <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-slideUp">
                         <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                             <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Registrar Costo de Labor (USD)</h3>
+                            <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Registrar Costo de Labor (USD)</h3>
                             <button onClick={() => setPriceModalOrder(null)} className="text-slate-400 hover:text-slate-600">✕</button>
                         </div>
                         <div className="p-6 space-y-4">
@@ -735,7 +744,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             {/* Inline Order Wizard */}
             <div ref={wizardRef} className="scroll-mt-24 pt-4 pb-20">
                 {(isCreatingOrder || editingOrderId) && (
-                    <OrderWizard 
+                    <OrderWizard
                         clientId={id}
                         editId={editingOrderId}
                         onClose={() => {

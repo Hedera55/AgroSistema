@@ -84,7 +84,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
     const [expectedYield, setExpectedYield] = useState('');
     const [servicePrice, setServicePrice] = useState('');
     const [selectedInvestors, setSelectedInvestors] = useState<Array<{ name: string; percentage: number }>>([]);
-    const [selectedPartnerName, setSelectedPartnerName] = useState(''); 
+    const [selectedPartnerName, setSelectedPartnerName] = useState('');
     const [notes, setNotes] = useState('');
     const [facturaImageUrl, setFacturaImageUrl] = useState<string | null>(null);
     const [remitoImageUrl, setRemitoImageUrl] = useState<string | null>(null);
@@ -185,7 +185,12 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
 
         const product = isMechanicalLabor ? null : products.find(p => p.id === currProdId);
         const requestedOrder = currLoadingOrder ? parseInt(currLoadingOrder) : undefined;
-        let otherItems = items.filter(i => (i.groupId || i.id) !== editingItemId);
+        // Filter out existing items of the group being edited
+        let otherItems = items.filter(i => {
+            if (!editingItemId) return true;
+            // Catch both by groupId (preferred) and by id (fallback for single items)
+            return i.groupId !== editingItemId && i.id !== editingItemId;
+        });
 
         if (requestedOrder !== undefined) {
             const collision = otherItems.some(i => i.loadingOrder === requestedOrder);
@@ -222,7 +227,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
             fertilizerPlacement: product?.type === 'FERTILIZER' ? fertilizerPlacement : undefined
         };
 
-        const newItemGroupId = generateId();
+        const newItemGroupId = editingItemId || generateId();
         const newItems: OrderItem[] = [];
 
         if (isMechanicalLabor) {
@@ -248,6 +253,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                         warehouseName: wh?.name || 'Desconocido',
                         presentationLabel: stockItem.presentationLabel,
                         presentationContent: stockItem.presentationContent,
+                        stockId: stockItem.id,
                         multiplier: multiplierNum,
                         totalQuantity: absoluteQty
                     });
@@ -314,13 +320,19 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
         setCurrLoadingOrder(first.loadingOrder ? String(first.loadingOrder) : '');
 
         const newSubQs: Record<string, string | number> = {};
-        groupItems.forEach(i => {
-            const s = stock.find(st =>
-                st.productId === i.productId &&
-                st.warehouseId === i.warehouseId &&
-                (st.presentationLabel || '') === (i.presentationLabel || '') &&
-                (st.presentationContent || 0) === (i.presentationContent || 0)
-            );
+        groupItems.filter(i => !i.isVirtualDéficit).forEach(i => {
+            // Primary: exact ID match (robust)
+            let s = i.stockId ? stock.find(st => st.id === i.stockId) : null;
+            // Fallback: property match for backward compat (old orders without stockId)
+            if (!s) {
+                s = stock.find(st => 
+                    st.productId === i.productId && 
+                    st.warehouseId === i.warehouseId && 
+                    (st.presentationLabel || '') === (i.presentationLabel || '') && 
+                    Number(st.presentationContent || 0) === Number(i.presentationContent || 0)
+                );
+            }
+            
             if (s) {
                 newSubQs[s.id] = i.multiplier || 0;
             }
@@ -464,7 +476,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                     nextOrderNumber = existingOrder?.orderNumber;
                 }
             }
-            
+
             if (nextOrderNumber === undefined) {
                 const allOrders = await db.getAll('orders');
                 const clientOrders = allOrders.filter((o: Order) => o.clientId === clientId && !o.deleted);
@@ -526,11 +538,11 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
 
     return (
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-xl space-y-6 animate-fadeIn">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div className="w-full h-full flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
                 <div>
                     <h2 className="text-lg font-bold text-slate-900">{editId ? 'Editar' : 'Nueva'} Orden</h2>
                 </div>
-                
+
                 <div className="flex items-center gap-8">
                     <div className="flex items-center gap-4">
                         {[
@@ -558,7 +570,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                 </div>
             </div>
 
-            <div className="max-w-4xl mx-auto">
+            <div className="w-full">
                 {step === 1 && (
                     <OrderLocationStep
                         date={date} setDate={setDate}

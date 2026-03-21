@@ -143,32 +143,67 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
                                     return (
                                         <div key={groupId} className="px-4 py-2 space-y-2 border-l-2 border-slate-100 ml-1">
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-3">
-                                                    {first.loadingOrder && <span className="text-emerald-600 font-black text-xs">#{first.loadingOrder}</span>}
-                                                    <span className="font-medium text-slate-800 text-xs uppercase tracking-tight">
-                                                        {first.productType === 'SEED'
-                                                            ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
-                                                            : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
-                                                    </span>
-                                                    {!isLabor && <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{totalInGroup.toLocaleString()} {first.unit} TOTAL</span>}
+                                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                    {first.loadingOrder && <span className="text-emerald-600 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
+                                                    <div className="flex flex-col flex-1 min-w-0">
+                                                        <div className="flex items-baseline gap-3">
+                                                            <span className="font-black text-slate-800 text-xs uppercase tracking-tight truncate">
+                                                                {first.productType === 'SEED'
+                                                                    ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                                    : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
+                                                            </span>
+                                                            {!isLabor && (
+                                                                <span className="text-emerald-700 uppercase font-black text-sm">
+                                                                    {(first.dosage * (order.treatedArea || order.hectares || 0)).toLocaleString()} {first.unit}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {!isLabor && (first.plantingDensity || first.plantingSpacing || first.expectedYield) && (
+                                                            <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-0.5">
+                                                                {first.plantingDensity && (
+                                                                    <span>
+                                                                        densidad: {first.plantingDensity} {first.unit}/ha
+                                                                    </span>
+                                                                )}
+                                                                {first.plantingSpacing && <span>espaciamiento: {first.plantingSpacing} cm</span>}
+                                                                {first.expectedYield && <span>rendimiento: {first.expectedYield} kg/ha</span>}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
                                             <div className="space-y-2 pl-2">
                                                 {groupItems.map((item, idx) => (
                                                     <div key={idx} className="flex justify-between items-center text-[11px]">
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-slate-600">
+                                                            <span className={`font-bold uppercase tracking-tight ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-600'}`}>
                                                                 {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                                {item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`)}
+                                                                {item.isVirtualDéficit
+                                                                    ? 'Déficit'
+                                                                    : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
                                                                 {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
                                                                 {item.warehouseId && <span className="text-slate-400 font-medium ml-2">— {warehouses.find(w => w.id === item.warehouseId)?.name || '---'}</span>}
                                                             </span>
-                                                            {item.plantingDensity && <span className="text-blue-500 font-bold uppercase text-[9px]">Densidad: {item.plantingDensity} {item.plantingDensityUnit === 'KG_HA' ? 'kg/ha' : 'pl/ha'}</span>}
                                                         </div>
-                                                        <span className="font-mono text-emerald-600 font-black">{item.totalQuantity.toLocaleString()} {item.unit}</span>
+                                                        <span className={`font-mono font-black ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{item.totalQuantity.toLocaleString()} {item.unit}</span>
                                                     </div>
                                                 ))}
+                                                {(() => {
+                                                    const requiredTotal = first.dosage * (order.treatedArea || order.hectares || 0);
+                                                    const excess = totalInGroup - requiredTotal;
+                                                    if (excess > 0.01) {
+                                                        return (
+                                                            <div className="flex justify-between items-center text-[11px] mt-1">
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-bold uppercase tracking-tight text-blue-600">
+                                                                        Exceso
+                                                                    </span>
+                                                                </div>
+                                                                <span className="font-mono font-black text-blue-600">{excess.toLocaleString()} {first.unit}</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </div>
                                         </div>
                                     );
