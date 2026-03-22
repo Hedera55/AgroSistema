@@ -136,35 +136,43 @@ export function OrderConfirmationStep({
 
                         return (
                             <div key={groupId} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="font-bold uppercase tracking-tight text-slate-800">
-                                        {first.productType === 'SEED'
-                                            ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
-                                            : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
-                                    </span>
-                                    <div className="flex flex-col items-end">
-                                        <span className="font-mono font-bold text-emerald-600">
+                                <div className="flex justify-between items-start mb-0.5 gap-2">
+                                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                            <div className="flex items-baseline gap-3">
+                                                <span className="font-black text-sm uppercase tracking-tight text-slate-800 truncate">
+                                                    {first.productType === 'SEED'
+                                                        ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                        : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-end shrink-0">
+                                        <span className="text-emerald-700 uppercase font-black text-sm whitespace-nowrap">
                                             {(first.dosage * (selectedLot?.hectares || 0)).toFixed(1)} {first.unit}
-                                            {first.productName.toUpperCase().includes('MAIZ') && ` (${((first.dosage * (selectedLot?.hectares || 0)) / 80000).toFixed(2)} bolsas)`}
+                                            {first.productName.toUpperCase().includes('MAIZ') && <span className="text-xs ml-1 opacity-80">({((first.dosage * (selectedLot?.hectares || 0)) / 80000).toFixed(2)} bolsas)</span>}
                                         </span>
                                     </div>
                                 </div>
-                                <div className="space-y-1 pl-4">
+                                <div className="pl-4 space-y-0.5">
                                     {groupItems.map(item => (
-                                        <div key={item.id} className={`flex flex-col text-xs italic ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
-                                            <div className="flex justify-between items-center w-full">
-                                                <span>
+                                        <div key={item.id} className="space-y-0.5">
+                                            <div className="flex justify-between items-center text-[11px] leading-tight">
+                                                <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
                                                     {item.multiplier ? `${item.multiplier} x ` : ''}
                                                     {item.isVirtualDéficit
                                                         ? 'Déficit'
                                                         : (item.presentationLabel || (item.productId === 'LABOREO_MECANICO' ? 'Labor' : `A granel (${item.unit})`))}
                                                     {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                    {item.warehouseName && <span className="ml-1 opacity-70">— {item.warehouseName}</span>}
+                                                    {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
                                                 </span>
-                                                <span className="font-mono font-bold">{item.totalQuantity.toFixed(2)} {item.unit}</span>
+                                                <span className={`font-mono font-bold ml-2 ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-400'}`}>
+                                                    {item.totalQuantity.toFixed(2)} {item.unit}
+                                                </span>
                                             </div>
                                             {item.fertilizerPlacement && (
-                                                <div className="text-[9px] font-bold text-emerald-600/70 uppercase not-italic">
+                                                <div className="text-emerald-600/70 font-bold uppercase text-[11px] leading-none mt-1">
                                                     Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
                                                 </div>
                                             )}
@@ -175,7 +183,7 @@ export function OrderConfirmationStep({
                                         const excess = totalInGroup - requiredTotal;
                                         if (excess > 0.01) {
                                             return (
-                                                <div className="flex justify-between items-center text-xs italic text-blue-600 font-bold mt-1">
+                                                <div className="flex justify-between items-center text-[11px] leading-tight text-blue-600 font-bold mt-1">
                                                     <span>EXCESO</span>
                                                     <span className="font-mono">{excess.toFixed(2)} {first.unit}</span>
                                                 </div>

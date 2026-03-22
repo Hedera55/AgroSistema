@@ -429,82 +429,86 @@ export function OrderRecipeStep({
                                 const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
 
                                 return (
-                                    <div key={groupId} className="animate-fadeIn">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <div className="flex items-start gap-2 flex-1 min-w-0">
-                                                {first.loadingOrder && <span className="text-slate-800 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
-                                                <div className="flex flex-col flex-1 min-w-0">
-                                                    <div className="flex items-baseline gap-3">
-                                                        <span className="font-black text-sm uppercase tracking-tight text-slate-800 truncate">
-                                                            {first.productType === 'SEED'
-                                                                ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
-                                                                : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
-                                                        </span>
-                                                        {!isLabor && (
-                                                            <span className="text-emerald-700 uppercase font-black text-sm leading-none whitespace-nowrap">
-                                                                {(first.dosage * selectedLot.hectares).toFixed(1)} {first.unit}
+                                    <div key={groupId} className="animate-fadeIn relative pr-8">
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                            <div className="flex justify-between items-start mb-2 gap-2">
+                                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                    {first.loadingOrder && <span className="text-slate-800 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
+                                                    <div className="flex flex-col flex-1 min-w-0">
+                                                        <div className="flex items-baseline gap-3">
+                                                            <span className="font-black text-sm uppercase tracking-tight text-slate-800 truncate">
+                                                                {first.productType === 'SEED'
+                                                                    ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
+                                                                    : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                                             </span>
+                                                        </div>
+                                                        {!isLabor && (first.plantingDensity || first.plantingSpacing || first.expectedYield) && (
+                                                            <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-[2px]">
+                                                                {first.plantingDensity && (
+                                                                    <span>
+                                                                        densidad: {first.plantingDensity} {first.unit}/ha
+                                                                    </span>
+                                                                )}
+                                                                {first.plantingSpacing && <span>espaciamiento: {first.plantingSpacing} cm</span>}
+                                                                {first.expectedYield && <span>rendimiento: {first.expectedYield} kg/ha</span>}
+                                                            </div>
                                                         )}
                                                     </div>
-                                                    {!isLabor && (first.plantingDensity || first.plantingSpacing || first.expectedYield) && (
-                                                        <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-1">
-                                                            {first.plantingDensity && (
-                                                                <span>
-                                                                    densidad: {first.plantingDensity} {first.unit}/ha
-                                                                </span>
-                                                            )}
-                                                            {first.plantingSpacing && <span>espaciamiento: {first.plantingSpacing} cm</span>}
-                                                            {first.expectedYield && <span>rendimiento: {first.expectedYield} kg/ha</span>}
-                                                        </div>
-                                                    )}
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => handleEditItem(first)} className="p-1 text-slate-300 hover:text-emerald-500 transition-colors">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-                                                </button>
-                                                <button onClick={() => handleRemoveItem(first.groupId || first.id)} className="p-1 text-slate-300 hover:text-red-400 transition-colors">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="pl-4 space-y-1">
-                                            {groupItems.map(item => (
-                                                <div key={item.id} className="space-y-0.5">
-                                                    <div className="flex justify-between items-center text-[11px] leading-tight">
-                                                        <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
-                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                            {item.isVirtualDéficit
-                                                                ? 'Déficit'
-                                                                : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
-                                                            {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                            {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
-                                                        </span>
-                                                        <span className={`font-mono font-bold ml-2 ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-400'}`}>
-                                                            {item.totalQuantity.toFixed(2)} {item.unit}
+                                                {!isLabor && (
+                                                    <div className="flex flex-col items-end shrink-0">
+                                                        <span className="text-emerald-700 uppercase font-black text-sm whitespace-nowrap">
+                                                            {(first.dosage * selectedLot.hectares).toFixed(1)} {first.unit}
                                                         </span>
                                                     </div>
-                                                    {item.fertilizerPlacement && (
-                                                        <div className="text-emerald-600/70 font-bold uppercase text-[11px] leading-none mt-1">
-                                                            Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
+                                                )}
+                                            </div>
+                                            <div className="pl-4 space-y-0.5">
+                                                {groupItems.map(item => (
+                                                    <div key={item.id} className="space-y-0.5">
+                                                        <div className="flex justify-between items-center text-[11px] leading-tight">
+                                                            <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
+                                                                {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                                {item.isVirtualDéficit
+                                                                    ? 'Déficit'
+                                                                    : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
+                                                                {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                                {item.warehouseName && <span className="opacity-60 font-medium ml-1">— {item.warehouseName}</span>}
+                                                            </span>
+                                                            <span className={`font-mono font-bold ml-2 ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-400'}`}>
+                                                                {item.totalQuantity.toFixed(2)} {item.unit}
+                                                            </span>
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                        {(() => {
-                                            const requiredTotal = first.dosage * selectedLot.hectares;
-                                            const excess = totalInGroup - requiredTotal;
-                                            if (excess > 0.01) {
-                                                return (
-                                                    <div className="flex justify-between items-center text-[11px] leading-tight text-blue-600 font-bold mt-1 pl-4 pr-1">
-                                                        <span>EXCESO</span>
-                                                        <span className="font-mono">{excess.toFixed(2)} {first.unit}</span>
+                                                        {item.fertilizerPlacement && (
+                                                            <div className="text-emerald-600/70 font-bold uppercase text-[11px] leading-none mt-1">
+                                                                Ubicación: {item.fertilizerPlacement === 'LINE' ? 'En la línea' : 'Al costado'}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                );
-                                            }
-                                            return null;
-                                        })()}
+                                                ))}
+                                            </div>
+                                            {(() => {
+                                                const requiredTotal = first.dosage * selectedLot.hectares;
+                                                const excess = totalInGroup - requiredTotal;
+                                                if (excess > 0.01) {
+                                                    return (
+                                                        <div className="flex justify-between items-center text-[11px] leading-tight text-blue-600 font-bold mt-1 pl-4">
+                                                            <span>EXCESO</span>
+                                                            <span className="font-mono">{excess.toFixed(2)} {first.unit}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
+                                        <div className="absolute top-0 -right-5 flex flex-col items-center gap-1 shrink-0">
+                                            <button onClick={() => handleEditItem(first)} className="p-1 text-slate-300 hover:text-emerald-500 transition-colors" title="Editar">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                            </button>
+                                            <button onClick={() => handleRemoveItem(first.groupId || first.id)} className="p-1 text-slate-300 hover:text-red-400 transition-colors" title="Eliminar">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}

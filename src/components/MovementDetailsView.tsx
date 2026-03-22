@@ -1,5 +1,5 @@
 import React from 'react';
-import { InventoryMovement, Order, Client, Warehouse } from '@/types';
+import { InventoryMovement, Order, Client, Warehouse, Campaign } from '@/types';
 
 interface MovementDetailsViewProps {
     movement: InventoryMovement;
@@ -9,6 +9,7 @@ interface MovementDetailsViewProps {
     destName?: string;
     onClose: () => void;
     typeLabel: string;
+    campaigns?: Campaign[];
 }
 
 export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel, campaigns }: MovementDetailsViewProps) {

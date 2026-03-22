@@ -142,24 +142,20 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                                     const totalInGroup = groupItems.reduce((acc, i) => acc + i.totalQuantity, 0);
 
                                     return (
-                                        <div key={groupId} className="px-4 py-2 space-y-2 border-l-2 border-slate-100 ml-1">
-                                                <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                    {first.loadingOrder && <span className="text-emerald-600 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
+                                        <div key={groupId} className="px-4 py-2 border-l-2 border-slate-100 ml-1">
+                                            <div className="flex items-start gap-3 flex-1 min-w-0 mb-2">
+                                                {first.loadingOrder && <span className="text-emerald-600 font-black text-xs mt-0.5">#{first.loadingOrder}</span>}
+                                                <div className="flex justify-between items-start w-full gap-3">
                                                     <div className="flex flex-col flex-1 min-w-0">
                                                         <div className="flex items-baseline gap-3">
-                                                            <span className="font-black text-slate-800 text-xs uppercase tracking-tight truncate">
+                                                            <span className="font-black text-slate-800 text-sm uppercase tracking-tight truncate">
                                                                 {first.productType === 'SEED'
                                                                     ? `${first.productName}${first.brandName ? ` (${first.brandName})` : ''}`
                                                                     : `${first.commercialName || first.productName}${first.activeIngredient ? ` (${first.activeIngredient})` : ''}`}
                                                             </span>
-                                                            {!isLabor && (
-                                                                <span className="text-emerald-700 uppercase font-black text-sm">
-                                                                    {(first.dosage * (order.treatedArea || order.hectares || 0)).toLocaleString()} {first.unit}
-                                                                </span>
-                                                            )}
                                                         </div>
                                                         {!isLabor && (first.plantingDensity || first.plantingSpacing || first.expectedYield) && (
-                                                            <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-0.5">
+                                                            <div className="flex flex-wrap gap-x-2 text-emerald-600/70 font-bold uppercase text-[9px] leading-none mt-[2px]">
                                                                 {first.plantingDensity && (
                                                                     <span>
                                                                         densidad: {first.plantingDensity} {first.unit}/ha
@@ -170,21 +166,29 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                                                             </div>
                                                         )}
                                                     </div>
-                                                </div>
-                                            <div className="space-y-2 pl-2">
-                                                {groupItems.map((item, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center text-[11px]">
-                                                        <div className="flex flex-col">
-                                                            <span className={`font-bold uppercase tracking-tight ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-600'}`}>
-                                                                {item.multiplier ? `${item.multiplier} x ` : ''}
-                                                                {item.isVirtualDéficit
-                                                                    ? 'Déficit'
-                                                                    : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
-                                                                {item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
-                                                                {item.warehouseId && <span className="text-slate-400 font-medium ml-2">— {warehouses.find(w => w.id === item.warehouseId)?.name || '---'}</span>}
+                                                    {!isLabor && (
+                                                        <div className="flex flex-col items-end shrink-0">
+                                                            <span className="text-emerald-700 uppercase font-black text-sm whitespace-nowrap">
+                                                                {(first.dosage * (order.treatedArea || order.hectares || 0)).toLocaleString()} {first.unit}
                                                             </span>
                                                         </div>
-                                                        <span className={`font-mono font-black ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{item.totalQuantity.toLocaleString()} {item.unit}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="pl-4 space-y-0.5">
+                                                {groupItems.map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-[11px] leading-tight">
+                                                        <span className={`font-bold ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-500'}`}>
+                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                            {item.isVirtualDéficit
+                                                                ? 'Déficit'
+                                                                : (item.presentationLabel || (isLabor ? 'Labor' : `A granel (${item.unit})`))}
+                                                            {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                            {item.warehouseId && <span className="opacity-60 font-medium ml-1">— {warehouses.find(w => w.id === item.warehouseId)?.name || '---'}</span>}
+                                                        </span>
+                                                        <span className={`font-mono font-bold ml-2 ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-400'}`}>
+                                                            {item.totalQuantity.toLocaleString()} {item.unit}
+                                                        </span>
                                                     </div>
                                                 ))}
                                                 {(() => {
@@ -192,13 +196,9 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                                                     const excess = totalInGroup - requiredTotal;
                                                     if (excess > 0.01) {
                                                         return (
-                                                            <div className="flex justify-between items-center text-[11px] mt-1">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-bold uppercase tracking-tight text-blue-600">
-                                                                        Exceso
-                                                                    </span>
-                                                                </div>
-                                                                <span className="font-mono font-black text-blue-600">{excess.toLocaleString()} {first.unit}</span>
+                                                            <div className="flex justify-between items-center text-[11px] leading-tight text-blue-600 font-bold mt-1">
+                                                                <span>EXCESO</span>
+                                                                <span className="font-mono">{excess.toLocaleString()} {first.unit}</span>
                                                             </div>
                                                         );
                                                     }
