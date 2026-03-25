@@ -532,7 +532,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                         </div>
                                                     </div>
 
-                                                    {!isReadOnly && (
+                                                    {!isReadOnly && role !== 'CONTRATISTA' && (
                                                         <>
                                                             <div className="relative group/tooltip">
                                                                 <button
@@ -577,8 +577,18 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desglose de Insumos</div>
                                                                 {order.items.map((item, i) => (
                                                                     <div key={i} className={`flex justify-between items-center min-w-[200px] ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-700'}`}>
-                                                                        <span className="font-bold">{item.isVirtualDéficit ? 'Déficit' : item.productName}</span>
-                                                                        <span className={`font-mono font-bold ml-6 lowercase ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>{item.dosage} {item.unit}/ha</span>
+                                                                        <span className="font-bold">
+                                                                            {item.isVirtualDéficit 
+                                                                                ? `Déficit de ${item.productName.replace(/^Déficit de\s+/i, '')}` 
+                                                                                : item.productName}
+                                                                        </span>
+                                                                        <span className={`font-mono font-bold ml-6 lowercase ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>
+                                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                                            {item.isVirtualDéficit ? '' : (item.presentationLabel || 'A granel')}
+                                                                            {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                                            {item.isVirtualDéficit ? '' : ' = '}
+                                                                            {item.totalQuantity.toLocaleString()} {item.unit}
+                                                                        </span>
                                                                     </div>
                                                                 ))}
                                                             </div>

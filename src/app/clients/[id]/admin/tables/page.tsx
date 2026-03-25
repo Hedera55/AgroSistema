@@ -31,6 +31,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
     const [editValues, setEditValues] = useState<any>({});
     const [searchTerm, setSearchTerm] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [lookups, setLookups] = useState<{
         products: Product[],
         warehouses: Warehouse[],
@@ -45,6 +46,11 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
         farms: []
     });
 
+    const showAlert = (msg: string) => {
+        setAlertMessage(msg);
+        setTimeout(() => setAlertMessage(null), 3500);
+    };
+
     // Filters for Stock
     const [stockFilter, setStockFilter] = useState<'ALL' | 'INSUMOS' | 'GRANOS'>('ALL');
 
@@ -55,9 +61,14 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
     }, [role, isMaster, authLoading, router, id]);
 
     useEffect(() => {
-        loadData();
         loadLookups();
-    }, [activeStore, id]);
+    }, [id]);
+
+    useEffect(() => {
+        if (lookups.products.length > 0 || activeStore !== 'stock') {
+            loadData();
+        }
+    }, [activeStore, id, lookups.products.length]);
 
     async function loadLookups() {
         const [ps, ws, cs, ls, fs] = await Promise.all([
@@ -83,15 +94,42 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
         setLoading(true);
         try {
             if (activeStore === 'stock') {
-                const all = await db.getAll('stock');
-                const clientStock = all.filter((s: any) => s.clientId === id);
-                const enrichedStock = await Promise.all(clientStock.map(async (item: any) => {
+                const allStock = await db.getAll('stock');
+                const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+                
+                // Mirror Galpón enrichment logic
+                const enrichedStock = clientStock.map((item: any) => {
                     const p = lookups.products.find((p: any) => p.id === item.productId);
-                    if (p) {
-                        return { ...item, unit: p.unit, commercialName: p.commercialName, brandName: p.brandName };
+                    const isHarvest = item.source === 'HARVEST' || p?.type === 'GRAIN' || p?.type === 'SEED';
+                    
+                    // Logic: 
+                    // 1. Prefer Catalog metadata if available (for purchased goods)
+                    // 2. For harvest/grains: Brand = Campaign Name, CommName = "Propia"
+                    // 3. Fallback to item stored metadata if catalog is missing
+                    
+                    let resolvedBrand = item.productBrand || p?.brandName || '';
+                    let resolvedCommName = p?.commercialName || item.productCommercialName || '';
+
+                    if (isHarvest) {
+                        const campaign = lookups.campaigns.find((c: any) => c.id === item.campaignId);
+                        resolvedBrand = campaign?.name || resolvedBrand || '';
+                        resolvedCommName = 'Propia';
+                    } else if (p) {
+                        // For purchased goods, catalog is law if it has data
+                        resolvedBrand = p.brandName || resolvedBrand;
+                        resolvedCommName = p.commercialName || resolvedCommName;
                     }
-                    return item;
-                }));
+
+                    return {
+                        ...item,
+                        productName: p ? p.name : 'Desconocido',
+                        productBrand: resolvedBrand,
+                        productCommercialName: resolvedCommName,
+                        _catalogBrand: p?.brandName,
+                        _catalogCommName: p?.commercialName
+                    };
+                });
+
                 setData(enrichedStock);
             } else if (activeStore === 'movements') {
                 const all = await db.getAll('movements');
@@ -289,6 +327,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
             setEditingId(null);
             setEditValues({});
             setIsAdding(false);
+            showAlert('Registro guardado exitosamente!');
         } catch (error) {
             alert('Error al guardar los cambios');
             console.error(error);
@@ -365,6 +404,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
 
             setData(data.filter((item: any) => item.id !== idToDelete));
             setEditingId(null);
+            showAlert('Registro eliminado exitosamente!');
         } catch (error) {
             alert('Error al eliminar');
         }
@@ -493,6 +533,16 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
             </div>
 
             {/* Table Container */}
+            {/* Rest of the UI */}
+            {alertMessage && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] animate-bounceIn">
+                    <div className="bg-white border-2 border-emerald-500 text-emerald-800 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+                        <span className="text-xl">💡</span>
+                        <p className="font-bold text-sm uppercase tracking-wide">{alertMessage}</p>
+                    </div>
+                </div>
+            )}
+
             <div className="flex-1 overflow-hidden p-6 pt-2">
                 <div
                     ref={scrollRef as any}
@@ -529,7 +579,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
                                                     {groupLabel}
                                                 </td>
                                             </tr>
-                                            {items.map(item => <Row key={item.id} item={item} activeStore={activeStore} editingId={editingId} editValues={editValues} setEditValues={setEditValues} handleSave={handleSave} handleCancel={handleCancel} setEditingId={setEditingId} handleDelete={handleDelete} handleEdit={handleEdit} lookups={lookups} expandedId={expandedId} setExpandedId={setExpandedId} />)}
+                                            {items.map(item => <Row key={item.id} item={item} activeStore={activeStore} editingId={editingId} editValues={editValues} setEditValues={setEditValues} handleSave={handleSave} handleCancel={handleCancel} setEditingId={setEditingId} handleDelete={handleDelete} handleEdit={handleEdit} lookups={lookups} expandedId={expandedId} setExpandedId={setExpandedId} showAlert={showAlert} />)}
                                         </React.Fragment>
                                     );
                                 })
@@ -538,7 +588,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
                                 (() => {
                                     const limit = activeStore === 'movements' ? movementsLimit : moneyLimit;
                                     return filteredData.slice(0, limit).map(item => (
-                                        <Row key={item.id} item={item} activeStore={activeStore} editingId={editingId} editValues={editValues} setEditValues={setEditValues} handleSave={handleSave} handleCancel={handleCancel} setEditingId={setEditingId} handleDelete={handleDelete} handleEdit={handleEdit} lookups={lookups} expandedId={expandedId} setExpandedId={setExpandedId} />
+                                        <Row key={item.id} item={item} activeStore={activeStore} editingId={editingId} editValues={editValues} setEditValues={setEditValues} handleSave={handleSave} handleCancel={handleCancel} setEditingId={setEditingId} handleDelete={handleDelete} handleEdit={handleEdit} lookups={lookups} expandedId={expandedId} setExpandedId={setExpandedId} showAlert={showAlert} />
                                     ));
                                 })()
                             )}
@@ -595,7 +645,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
 }
 
 // Subcomponent for each row to keep the main component cleaner
-function Row({ item, activeStore, editingId, editValues, setEditValues, handleSave, handleCancel, handleDelete, handleEdit, lookups, expandedId, setExpandedId }: any) {
+function Row({ item, activeStore, editingId, editValues, setEditValues, handleSave, handleCancel, handleDelete, handleEdit, lookups, expandedId, setExpandedId, showAlert }: any) {
     const isEditing = editingId === item.id;
     const columns: any[] = getColumns(activeStore);
     const hasItems = item.items && item.items.length > 0;
@@ -618,7 +668,7 @@ function Row({ item, activeStore, editingId, editValues, setEditValues, handleSa
                              {col.key === 'concept' && hasItems && activeStore === 'money' && (
                                  <span className={`text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                              )}
-                             {renderCell(col.key, item, lookups, isEditing, editValues, setEditValues)}
+                             {renderCell(col.key, item, lookups, activeStore, isEditing, editValues, setEditValues, showAlert)}
                         </div>
                     </td>
                 ))}
@@ -688,8 +738,8 @@ function getColumns(store: EntityStore) {
         case 'stock':
             return [
                 { key: 'productId', label: 'Ingrediente Activo' },
-                { key: 'commercialName', label: 'Nombre Comercial' },
-                { key: 'brandName', label: 'Marca' },
+                { key: 'productCommercialName', label: 'Nombre Comercial' },
+                { key: 'productBrand', label: 'Marca' },
                 { key: 'quantity', label: 'Saldo Total' },
                 { key: 'unit', label: 'Unidad' },
                 { key: 'presentationLabel', label: 'Envase' },
@@ -745,10 +795,31 @@ function getGroupLabel(store: EntityStore, id: string, lookups: any) {
     return id;
 }
 
-function renderCell(key: string, item: any, lookups: any, isEditing?: boolean, editValues?: any, setEditValues?: any) {
+function renderCell(key: string, item: any, lookups: any, activeStore: string, isEditing?: boolean, editValues?: any, setEditValues?: any, showAlert?: (msg: string) => void) {
     const value = isEditing ? editValues[key] : item[key];
 
     if (isEditing) {
+        const handleMetadataEdit = (key: string, val: string) => {
+            if (activeStore === 'stock') {
+                const isCatalogOverride = (key === 'productCommercialName' && !!item._catalogCommName) || 
+                                         (key === 'productBrand' && !!item._catalogBrand);
+                
+                if (isCatalogOverride) {
+                    showAlert?.("Cambie esto en el catálogo de productos para mantener la consistencia.");
+                    return;
+                }
+            }
+            setEditValues({ ...editValues, [key]: val });
+        };
+
+        const handleQuantityEdit = (val: string) => {
+            if (activeStore === 'stock') {
+                showAlert?.("Para mantener la trazabilidad, cambie los kg en el Historial de Movimientos.");
+                return;
+            }
+            setEditValues({ ...editValues, quantity: val });
+        };
+
         if (key === 'productId') {
             return (
                 <select 
@@ -817,14 +888,73 @@ function renderCell(key: string, item: any, lookups: any, isEditing?: boolean, e
             );
         }
 
+        if (key === 'quantity') {
+            return (
+                <input
+                    className="w-full px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-emerald-500 outline-none text-sm bg-white font-medium shadow-sm"
+                    value={value || ''}
+                    onChange={(e) => handleQuantityEdit(e.target.value)}
+                    onFocus={() => activeStore === 'stock' && handleQuantityEdit('')}
+                />
+            );
+        }
+
+        if (key === 'productCommercialName' || key === 'productBrand' || key === 'commercialName' || key === 'brandName') {
+            return (
+                <input
+                    className="w-full px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-emerald-500 outline-none text-sm bg-slate-50 font-medium cursor-not-allowed"
+                    value={value || ''}
+                    readOnly
+                    onClick={() => handleMetadataEdit(key, '')}
+                />
+            );
+        }
+
         return (
             <input
                 className="w-full px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-emerald-500 outline-none text-sm bg-white font-medium shadow-sm"
                 value={value || ''}
-                readOnly={key === 'commercialName' || key === 'brandName' || key === 'unit'}
+                readOnly={activeStore !== 'stock' && (key === 'commercialName' || key === 'brandName' || key === 'unit')}
                 onChange={(e) => setEditValues({ ...editValues, [key]: e.target.value })}
             />
         );
+    }
+
+    // Resolve IDs and specific formatting that should run even if value is null/undefined
+    if (key === 'productId') {
+        const val = isEditing ? editValues[key] : (value || item.productId);
+        const p = lookups.products.find((p: any) => p.id === val);
+        return p ? p.name : <span className="text-[10px] text-slate-300 font-mono">{String(val || '-').slice(0, 8)}</span>;
+    }
+
+    if (key === 'productCommercialName' || key === 'commercialName') {
+        const val = isEditing ? editValues[key] : (item.productCommercialName || item.commercialName);
+        if (val && val !== '-' && val !== '') return val;
+        
+        const p = lookups.products.find((p: any) => p.id === item.productId);
+        if (p?.commercialName) return p.commercialName;
+        if (item.source === 'HARVEST' || (p?.type === 'GRAIN' || p?.type === 'SEED')) return 'Propia';
+        if (item.productBrand === 'propia' || item.brandName === 'propia') return 'Propia';
+        return val || '-';
+    }
+
+    if (key === 'productBrand' || key === 'brandName') {
+        const val = isEditing ? editValues[key] : (item.productBrand || item.brandName);
+        if (val && val !== '-' && val !== '') return val;
+        
+        const p = lookups.products.find((p: any) => p.id === item.productId);
+        if (p?.brandName) return p.brandName;
+        if (item.source === 'HARVEST' || (p?.type === 'GRAIN' || p?.type === 'SEED')) {
+            const campaign = lookups.campaigns.find((c: any) => c.id === item.campaignId);
+            return campaign ? campaign.name : '-';
+        }
+        return val || '-';
+    }
+
+    if (key === 'unit') {
+        if (isEditing) return editValues[key] || '-';
+        const p = lookups.products.find((p: any) => p.id === item.productId);
+        return item.unit || p?.unit || '-';
     }
 
     if (value === undefined || value === null) return '-';
@@ -839,19 +969,6 @@ function renderCell(key: string, item: any, lookups: any, isEditing?: boolean, e
         );
     }
 
-    // Resolve IDs
-    if (key === 'productId') {
-        const p = lookups.products.find((p: any) => p.id === value);
-        return p ? p.name : <span className="text-[10px] text-slate-300 font-mono">{String(value).slice(0, 8)}</span>;
-    }
-    if (key === 'commercialName') {
-        const p = lookups.products.find((p: any) => p.id === item.productId);
-        return p?.commercialName || '-';
-    }
-    if (key === 'brandName') {
-        const p = lookups.products.find((p: any) => p.id === item.productId);
-        return p?.brandName || '-';
-    }
     if (key === 'farmId') {
         const f = lookups.farms.find((f: any) => f.id === value);
         return f ? f.name : <span className="text-slate-300 font-mono text-[10px]">{String(value).slice(0, 8)}</span>;
@@ -887,6 +1004,12 @@ function renderCell(key: string, item: any, lookups: any, isEditing?: boolean, e
             const d = new Date(value);
             return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch { return String(value); }
+    }
+
+    if (key === 'unit') {
+        if (value && value !== '-') return value;
+        const p = lookups.products.find((p: any) => p.id === item.productId);
+        return p?.unit || '-';
     }
 
     return String(value);

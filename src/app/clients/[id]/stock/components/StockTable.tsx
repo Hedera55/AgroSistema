@@ -196,7 +196,7 @@ export function StockTable({
                                                                 <div key={bIdx} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0">
                                                                     <div className="flex items-center gap-3">
                                                                         <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest min-w-[100px] text-left">
-                                                                            {b.presentationLabel || 'S/P'}
+                                                                            {b.presentationLabel || 'A granel'}
                                                                         </span>
                                                                         <span className="text-sm font-bold text-slate-700">
                                                                             {b.presentationContent || '-'}{item.unit} <span className="text-slate-400 font-normal mx-1">x</span>

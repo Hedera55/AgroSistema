@@ -330,17 +330,7 @@ export default function GlobalOrdersPage() {
                                                 {order.createdBy || '---'}
                                             </td>
                                             <td className="px-4 py-2 whitespace-nowrap text-right text-sm" onClick={e => e.stopPropagation()}>
-                                                <div className="grid grid-cols-3 gap-1 w-fit ml-auto">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedOrderId(prev => prev === order.id ? null : order.id);
-                                                        }}
-                                                        className="w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 rounded-md text-[10px] font-black transition-all shadow-sm flex items-center justify-center p-0"
-                                                        title="Detalles"
-                                                    >
-                                                        i
-                                                    </button>
+                                                <div className="grid grid-cols-2 gap-1 w-fit ml-auto">
                                                     <div className="relative group/tooltip">
                                                         <button
                                                             onClick={() => generateInsumosPDF(order as any, clients.find(c => c.id === order.clientId)!)}
@@ -376,11 +366,21 @@ export default function GlobalOrdersPage() {
                                                             <div className="flex flex-col gap-1.5 border-l-2 border-emerald-500/40 pl-4">
                                                                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desglose de Insumos</div>
                                                                 {order.items.map((item, i) => (
-                                                                    <div key={i} className="flex justify-between items-center text-slate-700 min-w-[200px]">
-                                                                        <span className="font-bold">{item.productName}</span>
-                                                                        <span className="font-mono text-emerald-600 font-bold ml-6 lowercase">{item.dosage} {item.unit}/ha</span>
-                                                                    </div>
-                                                                ))}
+                                                    <div key={i} className={`flex justify-between items-center min-w-[200px] ${item.isVirtualDéficit ? 'text-orange-500' : 'text-slate-700'}`}>
+                                                        <span className="font-bold">
+                                                            {item.isVirtualDéficit 
+                                                                ? `Déficit de ${item.productName.replace(/^Déficit de\s+/i, '')}` 
+                                                                : item.productName}
+                                                        </span>
+                                                        <span className={`font-mono font-bold ml-6 lowercase ${item.isVirtualDéficit ? 'text-orange-500' : 'text-emerald-600'}`}>
+                                                            {item.multiplier ? `${item.multiplier} x ` : ''}
+                                                            {item.isVirtualDéficit ? '' : (item.presentationLabel || 'A granel')}
+                                                            {!item.isVirtualDéficit && item.presentationContent ? ` (${item.presentationContent}${item.unit})` : ''}
+                                                            {item.isVirtualDéficit ? '' : ' = '}
+                                                            {item.totalQuantity.toLocaleString()} {item.unit}
+                                                        </span>
+                                                    </div>
+                                                ))}
                                                             </div>
                                                         </td>
                                                     </tr>

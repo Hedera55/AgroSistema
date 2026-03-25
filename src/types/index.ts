@@ -127,7 +127,7 @@ export interface Product {
 
 // --- Campaigns ---
 
-export type CampaignMode = 'MONEY' | 'GRAIN';
+export type CampaignMode = 'MONEY' | 'GRAIN' | 'MIXED';
 
 export interface Campaign {
     id: string;
@@ -165,6 +165,8 @@ export interface ClientStock {
     presentationContent?: number; // e.g., 20
     presentationAmount?: number;  // e.g., 5
     campaignId?: string; // Link to Campaign
+    source?: 'HARVEST' | 'PURCHASE';
+    productCommercialName?: string;
 }
 
 // --- Orders ---
@@ -213,6 +215,7 @@ export interface MovementItem {
     presentationLabel?: string;
     presentationContent?: number;
     presentationAmount?: number;
+    source?: 'HARVEST' | 'PURCHASE';
 }
 
 export interface TransportSheet {
@@ -256,6 +259,7 @@ export interface InventoryMovement {
     time?: string;
     salePrice?: number; // Price at which it was sold (for SALE type)
     purchasePrice?: number; // Price paid at which it was bought (for IN type)
+    source?: 'HARVEST' | 'PURCHASE';
     referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
     facturaDate?: string; // Fecha de emisión

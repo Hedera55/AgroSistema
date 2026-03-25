@@ -92,7 +92,7 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     )}
                     <button
                         onClick={onClose}
-                        className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400"
+                        className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
                     >
                         ✕
                     </button>
@@ -125,13 +125,13 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                                             {sheet.transportCompany && (
                                                 <div><span className="font-bold text-slate-400 uppercase">Transporte:</span> <span className="text-slate-600">{sheet.transportCompany}</span></div>
                                             )}
-                                            {sheet.humidity !== undefined && sheet.humidity !== 0 && (
+                                            {sheet.humidity != null && sheet.humidity !== 0 && (
                                                 <div><span className="font-bold text-slate-400 uppercase">Humedad:</span> <span className="text-slate-600">{sheet.humidity}%</span></div>
                                             )}
-                                            {sheet.grossWeight !== undefined && sheet.grossWeight !== 0 && (
+                                            {sheet.grossWeight != null && sheet.grossWeight !== 0 && (
                                                 <div><span className="font-bold text-slate-400 uppercase">Bruto:</span> <span className="text-slate-600">{(sheet.grossWeight as number).toLocaleString()} kg</span></div>
                                             )}
-                                            {sheet.tareWeight !== undefined && sheet.tareWeight !== 0 && (
+                                            {sheet.tareWeight != null && sheet.tareWeight !== 0 && (
                                                 <div><span className="font-bold text-slate-400 uppercase">Tara:</span> <span className="text-slate-600">{(sheet.tareWeight as number).toLocaleString()} kg</span></div>
                                             )}
                                         </div>

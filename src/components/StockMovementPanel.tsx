@@ -9,9 +9,10 @@ interface StockMovementPanelProps {
     warehouses: Warehouse[]; // for transfer destination
     activeWarehouseIds: string[];
     investors?: { name: string; percentage?: number }[];
+    campaignShares?: Record<string, Record<string, number>>;
     campaigns?: any[];
     movements?: any[];
-    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => Promise<void>;
+    onConfirm: (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any, remitoFile?: File | null) => Promise<void>;
     onCancel: () => void;
     isSaleActive?: boolean;
 }
@@ -24,6 +25,7 @@ function StockMovementPanelInternal({
     onConfirm,
     onCancel,
     investors = [],
+    campaignShares = {},
     campaigns = [],
     movements = [],
     isSaleActive = false
@@ -34,6 +36,7 @@ function StockMovementPanelInternal({
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [remitoFile, setRemitoFile] = useState<File | null>(null);
 
     // Logistics fields for WITHDRAW
     const [truckDriver, setTruckDriver] = useState('');
@@ -140,20 +143,23 @@ function StockMovementPanelInternal({
     const getPartnerQuotaInfo = (productId: string, campaignId?: string, partnerName?: string) => {
         if (!campaignId || !partnerName) return null;
         const campaign = campaigns.find(c => c.id === campaignId);
-        if (campaign?.mode !== 'GRAIN') return null;
+        if (campaign?.mode !== 'GRAIN' && campaign?.mode !== 'MIXED') return null;
 
-        const partner = investors.find(i => i.name === partnerName);
-        const percentage = partner?.percentage || 0;
+        const percentage = campaignShares?.[campaignId]?.[partnerName] || 0;
 
-        // Total Harvested (Movements type HARVEST for this specific product/campaign)
+        // Total Harvested
         const totalHarvested = movements
             .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'HARVEST')
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
+        // Sales of Harvested grain (for MIXED mode)
+        const totalSoldHarvest = (campaign.mode === 'MIXED') 
+            ? movements
+                .filter(m => m.productId === productId && m.campaignId === campaignId && m.type === 'SALE' && m.source === 'HARVEST')
+                .reduce((acc, m) => acc + (m.quantity || 0), 0)
+            : 0;
+
         // Already Withdrawn/Taken by this partner
-        // Includes:
-        // - Direct harvests to partner (type HARVEST, receiverName)
-        // - Withdrawals from warehouse (type OUT, receiverName)
         const alreadyWithdrawn = movements
             .filter(m =>
                 m.productId === productId &&
@@ -163,7 +169,8 @@ function StockMovementPanelInternal({
             )
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
-        const quota = totalHarvested * (percentage / 100);
+        const netGrainPool = Math.max(0, totalHarvested - totalSoldHarvest);
+        const quota = netGrainPool * (percentage / 100);
         const remaining = quota - alreadyWithdrawn;
 
         return { quota, remaining, percentage };
@@ -205,26 +212,8 @@ function StockMovementPanelInternal({
             return;
         }
 
-        if (wouldGoNegative) {
-            if (!confirm('Atención: La cantidad seleccionada supera el stock disponible. Esto resultará en un saldo negativo. ¿Desea continuar?')) {
-                return;
-            }
-        }
-
-        // --- Quota Validation ---
-        if (action === 'WITHDRAW' && receiverName) {
-            for (const item of selectedItems) {
-                const info = getPartnerQuotaInfo(item.productId, item.campaignId, receiverName);
-                if (info) {
-                    const totalToWithdraw = getGroupTotal(item);
-                    if (totalToWithdraw > info.remaining + 0.01) { // 0.01 for float precision
-                        if (!confirm(`Atención: El retiro (${totalToWithdraw.toLocaleString()} ${item.unit}) supera el cupo restante de ${receiverName} (${info.remaining.toLocaleString()} ${item.unit}, Cuota: ${info.percentage}%). ¿Desea forzar la operación?`)) {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
+        // Inline warnings are shown to the user if wouldGoNegative or quota is exceeded.
+        // We removed the native window.confirm() dialogs per user request.
 
         setLoading(true);
         try {
@@ -246,7 +235,7 @@ function StockMovementPanelInternal({
                 freightTariff: freightTariff ? parseFloat(freightTariff.replace(',', '.')) : undefined,
             } : undefined;
 
-            await onConfirm(action, absoluteQuantities, destinationId || undefined, note, receiverName, logisticsInfo);
+            await onConfirm(action, absoluteQuantities, destinationId || undefined, note, receiverName, logisticsInfo, remitoFile);
         } catch (e) {
             console.error(e);
             alert('Error al procesar movimiento');
@@ -333,7 +322,7 @@ function StockMovementPanelInternal({
                                                 <div key={b.id || bIdx} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0 pl-4">
                                                     <div className="flex-1">
                                                         <div className="text-[11px] font-bold text-red-600 uppercase tracking-tighter">
-                                                            {b.presentationLabel || 'S/P'} {b.presentationContent ? b.presentationContent + item.unit : ''}
+                                                            {b.presentationLabel || 'A GRANEL'} {b.presentationContent ? b.presentationContent + item.unit : ''}
                                                         </div>
                                                         <div className="text-[10px] text-slate-400 font-bold">
                                                             Disp: {b.quantity} {item.unit}
@@ -345,7 +334,7 @@ function StockMovementPanelInternal({
                                                             placeholder="0"
                                                             value={subQuantities[b.id] || ''}
                                                             onChange={e => handleSubQuantityChange(b.id, e.target.value)}
-                                                            className="h-8 text-right font-black text-sm border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
+                                                            className="h-8 text-right font-black text-sm pr-4 rounded-md !border-transparent !shadow-[inset_0_0_6px_rgba(0,0,0,0.25)]"
                                                         />
                                                     </div>
                                                 </div>
@@ -367,7 +356,7 @@ function StockMovementPanelInternal({
                                                     placeholder="0"
                                                     value={subQuantities[item.id] || ''}
                                                     onChange={e => handleSubQuantityChange(item.id, e.target.value)}
-                                                    className="h-8 text-right font-black text-sm border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
+                                                    className="h-8 text-right font-black text-sm pr-4 rounded-md !border-transparent !shadow-[inset_0_0_6px_rgba(0,0,0,0.25)]"
                                                 />
                                             </div>
                                         </div>
@@ -407,18 +396,16 @@ function StockMovementPanelInternal({
                         const campaign = campaigns.find(c => c.id === item.campaignId);
                         return campaign?.mode === 'GRAIN';
                     }) && (
-                            <div className="mt-3 space-y-2">
-                                <label className="block text-[10px] font-black text-orange-600 uppercase tracking-widest">Cupos Disponibles ({receiverName}):</label>
-                                <div className="grid grid-cols-1 gap-2">
+                            <div className="mt-4 mb-2 p-3 bg-white/60 rounded border border-orange-100/50">
+                                <div className="grid grid-cols-1 gap-1.5">
                                     {selectedItems.map(item => {
                                         const info = getPartnerQuotaInfo(item.productId, item.campaignId, receiverName);
                                         if (!info) return null;
                                         return (
-                                            <div key={item.id} className="flex justify-between items-center bg-white/60 p-2 rounded border border-orange-100/50">
-                                                <span className="text-[11px] font-bold text-slate-600">{item.productName}</span>
-                                                <span className={`text-[11px] font-black ${info.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                    {info.remaining.toLocaleString()} {item.unit} libres
-                                                    <span className="text-[9px] text-slate-400 ml-1 font-normal">(Cupo: {info.percentage}%)</span>
+                                            <div key={item.id} className="flex justify-between items-center">
+                                                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Cupo Disponible ({receiverName})</span>
+                                                <span className={`text-[13px] font-black ${info.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                    {info.remaining.toLocaleString(undefined, {maximumFractionDigits: 0})} {item.unit} <span className="text-[10px] text-slate-400 font-bold lowercase ml-1">{item.productName}</span>
                                                 </span>
                                             </div>
                                         );
@@ -434,28 +421,28 @@ function StockMovementPanelInternal({
                                 label="Chofer"
                                 value={truckDriver}
                                 onChange={e => setTruckDriver(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                             <Input
                                 label="Patente Camión"
                                 value={plateNumber}
                                 onChange={e => setPlateNumber(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                             <Input
                                 label="Patente Acoplado"
                                 value={trailerPlate}
                                 onChange={e => setTrailerPlate(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                             <Input
                                 label="Empresa Transp."
                                 value={transportCompany}
                                 onChange={e => setTransportCompany(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                         </div>
@@ -464,14 +451,14 @@ function StockMovementPanelInternal({
                                 label="Empresa Destino"
                                 value={destinationCompany}
                                 onChange={e => setDestinationCompany(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                             <Input
                                 label="Dirección / Localidad"
                                 value={destinationAddress}
                                 onChange={e => setDestinationAddress(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80"
                             />
                         </div>
@@ -480,42 +467,42 @@ function StockMovementPanelInternal({
                                 label="Nº Descarga"
                                 value={dischargeNumber}
                                 onChange={e => setDischargeNumber(e.target.value)}
-                                className="bg-white h-9 text-center"
+                                className="bg-white h-9 text-right px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Humedad (%)"
                                 value={humidity}
                                 onChange={e => setHumidity(e.target.value)}
-                                className="bg-white h-9 text-center"
+                                className="bg-white h-9 text-right px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="P. Hectolítrico"
                                 value={hectoliterWeight}
                                 onChange={e => setHectoliterWeight(e.target.value)}
-                                className="bg-white h-9 text-center"
+                                className="bg-white h-9 text-right px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Peso Bruto"
                                 value={grossWeight}
                                 onChange={e => setGrossWeight(e.target.value)}
-                                className="bg-white h-9 text-right font-mono"
+                                className="bg-white h-9 text-right font-mono px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Peso Tara"
                                 value={tareWeight}
                                 onChange={e => setTareWeight(e.target.value)}
-                                className="bg-white h-9 text-right font-mono"
+                                className="bg-white h-9 text-right font-mono px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Km Recorridos"
                                 value={distanceKm}
                                 onChange={e => setDistanceKm(e.target.value)}
-                                className="bg-white h-9 text-center"
+                                className="bg-white h-9 text-right px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                         </div>
@@ -524,7 +511,7 @@ function StockMovementPanelInternal({
                                 label="CUIT Venta Primaria"
                                 value={primarySaleCuit}
                                 onChange={e => setPrimarySaleCuit(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
@@ -532,14 +519,14 @@ function StockMovementPanelInternal({
                                 type="datetime-local"
                                 value={departureDateTime}
                                 onChange={e => setDepartureDateTime(e.target.value)}
-                                className="bg-white h-9"
+                                className="bg-white h-9 px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                             <Input
                                 label="Tarifa Flete (USD)"
                                 value={freightTariff}
                                 onChange={e => setFreightTariff(e.target.value)}
-                                className="bg-white h-9 text-right"
+                                className="bg-white h-9 text-right px-2"
                                 labelClassName="text-[10px] text-orange-700/80 font-bold"
                             />
                         </div>
@@ -548,22 +535,22 @@ function StockMovementPanelInternal({
             )}
 
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
-                <div className="w-full sm:w-auto">
+                <div className="w-full sm:w-auto flex items-center gap-4 flex-wrap">
                     {!showNote ? (
                         <button
                             type="button"
                             onClick={() => setShowNote(true)}
-                            className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2"
+                            className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 shrink-0"
                         >
-                            + Agregar Nota
+                            + Agregar nota
                         </button>
                     ) : (
-                        <div className="flex items-center gap-2 animate-fadeIn pt-2 sm:pt-0">
+                        <div className="flex items-center gap-2 animate-fadeIn pt-2 sm:pt-0 shrink-0">
                             <Input
                                 placeholder="Nota..."
                                 value={note}
                                 onChange={e => setNote(e.target.value)}
-                                className="h-10 text-sm bg-white border-slate-200 shadow-sm w-full sm:w-64 focus:border-emerald-500 focus:ring-emerald-500"
+                                className="h-10 text-sm bg-white border-slate-200 shadow-sm w-full sm:w-64 focus:border-emerald-500 focus:ring-emerald-500 px-2"
                             />
                             <button
                                 type="button"
@@ -577,9 +564,61 @@ function StockMovementPanelInternal({
                             </button>
                         </div>
                     )}
+
+                    <div className="w-px h-4 bg-slate-200 mx-2" />
+
+                    <label className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 cursor-pointer shrink-0">
+                        + Adjuntar remito
+                        <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                    setRemitoFile(e.target.files[0]);
+                                }
+                            }} 
+                        />
+                    </label>
+
+                    {remitoFile && (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100 shrink-0">
+                            <span className="truncate max-w-[150px] font-medium">{remitoFile.name}</span>
+                            <button type="button" onClick={(e) => { e.preventDefault(); setRemitoFile(null); }} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex justify-end gap-2 w-full sm:w-auto">
+                {action === 'WITHDRAW' && receiverName && (
+                    <div className="flex-1 text-center sm:text-right text-[11px] sm:text-xs font-bold italic text-orange-600 px-2 leading-tight">
+                        {(() => {
+                            let exceedsStock = false;
+                            let exceedsQuota = false;
+                            selectedItems.forEach((item: any) => {
+                                const info = getPartnerQuotaInfo(item.productId, item.campaignId, receiverName);
+                                if (info) {
+                                    const totalToWithdraw = getGroupTotal(item);
+                                    if (totalToWithdraw > info.remaining + 0.01) exceedsQuota = true;
+                                }
+                                if (item.breakdown) {
+                                    item.breakdown.forEach((b: any) => {
+                                        const absQty = getAbsoluteQty(b.id, item);
+                                        if (absQty > b.quantity) exceedsStock = true;
+                                    });
+                                } else {
+                                    const absQty = getAbsoluteQty(item.id, item);
+                                    if (absQty > item.quantity) exceedsStock = true;
+                                }
+                            });
+
+                            if (!exceedsQuota && !exceedsStock) return null;
+                            if (exceedsQuota && exceedsStock) return 'El retiro es más grande que lo permitido al socio y lo existente en el galpón, se anotará una cantidad negativa';
+                            if (exceedsQuota && !exceedsStock) return 'El retiro es más grande que lo permitido al socio, se anotará una cantidad negativa';
+                            return 'El retiro es más grande que lo existente en el galpón, se anotará una cantidad negativa';
+                        })()}
+                    </div>
+                )}
+
+                <div className="flex justify-end gap-2 w-full sm:w-auto shrink-0">
                     <Button
                         onClick={handleSubmit}
                         isLoading={loading}

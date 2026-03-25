@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +13,7 @@ import { Warehouse } from '@/types';
 export default function Layout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { isActive, loading, role, user, isMaster, assignedId, displayName, profile } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -215,8 +216,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
                 <nav className="flex-1 px-4 space-y-2">
                     {navigation.map((item) => {
-                        const isMainActive = pathname === item.href;
                         const isOrders = item.name === 'Órdenes' && role === 'CONTRATISTA';
+                        const hasClientSelected = isOrders && !!searchParams?.get('clientId');
+                        const isMainActive = pathname === item.href && !hasClientSelected;
 
                         return (
                             <div key={item.name} className="space-y-1">
@@ -233,13 +235,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 {isOrders && assignedCompanies.length > 0 && (
                                     <div className="space-y-1 py-1 animate-fadeIn">
                                         {assignedCompanies.map((comp) => {
-                                            const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
                                             const isSelected = pathname === '/orders' && searchParams?.get('clientId') === comp.id;
                                             return (
                                                 <Link
                                                     key={comp.id}
                                                     href={`/orders?clientId=${comp.id}`}
-                                                    className={`block px-4 py-2 text-sm font-medium transition-all truncate hover:text-emerald-400 ${isSelected ? 'text-emerald-400 font-bold' : 'text-emerald-500'}`}
+                                                    className={`block px-4 py-2 text-sm font-medium transition-all truncate rounded-lg ml-2 ${isSelected 
+                                                        ? 'bg-emerald-600 text-white shadow-md' 
+                                                        : 'text-emerald-500 hover:text-emerald-400 hover:bg-slate-800/50'}`}
                                                 >
                                                     {comp.name}
                                                 </Link>

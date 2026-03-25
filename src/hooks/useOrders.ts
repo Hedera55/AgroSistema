@@ -13,7 +13,7 @@ export function useOrders(clientId: string) {
         try {
             const allOrders = await db.getAll('orders');
             const clientOrders = allOrders
-                .filter((o: Order) => o.clientId === clientId && !o.deleted)
+                .filter((o: Order) => o.clientId === clientId && !o.deleted && o.type !== 'HARVEST')
                 .sort((a: Order, b: Order) => (b.orderNumber || 0) - (a.orderNumber || 0));
             setOrders(clientOrders);
         } catch (error) {

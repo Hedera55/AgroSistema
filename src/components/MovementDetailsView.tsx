@@ -58,7 +58,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                 </div>
                 <button
                     onClick={onClose}
-                    className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+                    className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
                     title="Cerrar Detalles"
                 >
                     ✕
@@ -130,13 +130,13 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                             )}
                         </div>
                     </div>
-                    
+
                     {/* Section: Product List (Detalles de compra/venta) */}
                     {(movement.items && movement.items.length > 0) && (
                         <div>
                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                {typeLabel.includes('COMPRA') ? 'Insumos Comprados' : 
-                                 typeLabel.includes('VENTA') ? 'Productos Vendidos' : 'Detalle de Items'}
+                                {typeLabel.includes('COMPRA') ? 'Insumos Comprados' :
+                                    typeLabel.includes('VENTA') ? 'Productos Vendidos' : 'Detalle de Items'}
                             </h3>
                             <div className="bg-slate-50/50 rounded-2xl border border-slate-100 overflow-hidden">
                                 <table className="min-w-full divide-y divide-slate-200">
@@ -169,7 +169,7 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                                     {Math.abs(it.quantity)} {it.unit || movement.unit}
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-sm font-mono text-slate-500">
-                                                    USD {it.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    USD {Number(it.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-sm font-mono font-bold text-slate-900">
                                                     USD {(it.quantity * (it.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -197,14 +197,14 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                         { label: 'Dirección Destino', value: logistics.destinationAddress },
                                         { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
                                         { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
-                                        { label: 'Distancia (Km)', value: logistics.distanceKm !== undefined ? `${logistics.distanceKm} Km` : null },
-                                        { label: 'Tarifa Flete', value: (logistics.freightTariff !== undefined && logistics.freightTariff !== null) ? `USD ${logistics.freightTariff.toLocaleString()}` : null },
+                                        { label: 'Distancia (Km)', value: (logistics.distanceKm != null && logistics.distanceKm !== '') ? `${Number(logistics.distanceKm).toLocaleString()} Km` : null },
+                                        { label: 'Tarifa Flete', value: (logistics.freightTariff != null && logistics.freightTariff !== '') ? `USD ${Number(logistics.freightTariff).toLocaleString()}` : null },
                                         { label: 'Nº Descarga', value: logistics.dischargeNumber },
-                                        { label: 'Humedad', value: logistics.humidity !== undefined ? `${logistics.humidity} %` : null },
-                                        { label: 'P. Hectolítrico', value: logistics.hectoliterWeight !== undefined ? logistics.hectoliterWeight : null },
-                                        { label: 'Peso Bruto', value: logistics.grossWeight !== undefined ? `${logistics.grossWeight.toLocaleString()} Kg` : null },
-                                        { label: 'Peso Tara', value: logistics.tareWeight !== undefined ? `${logistics.tareWeight.toLocaleString()} Kg` : null },
-                                    ].filter(row => row.value).map((row, idx) => (
+                                        { label: 'Humedad', value: (logistics.humidity != null && logistics.humidity !== '') ? `${Number(logistics.humidity).toLocaleString()} %` : null },
+                                        { label: 'P. Hectolítrico', value: (logistics.hectoliterWeight != null && logistics.hectoliterWeight !== '') ? Number(logistics.hectoliterWeight).toLocaleString() : null },
+                                        { label: 'Peso Bruto', value: (logistics.grossWeight != null && logistics.grossWeight !== '') ? `${Number(logistics.grossWeight).toLocaleString()} Kg` : null },
+                                        { label: 'Peso Tara', value: (logistics.tareWeight != null && logistics.tareWeight !== '') ? `${Number(logistics.tareWeight).toLocaleString()} Kg` : null },
+                                    ].filter(row => row.value != null && row.value !== '').map((row, idx) => (
                                         <div key={idx}>
                                             <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{row.label}</span>
                                             <span className="text-sm font-bold text-slate-700">{row.value}</span>

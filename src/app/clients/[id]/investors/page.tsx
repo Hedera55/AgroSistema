@@ -42,7 +42,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const [newCampaignName, setNewCampaignName] = useState('');
     const [newCampaignMode, setNewCampaignMode] = useState<CampaignMode>('MONEY');
     const [viewCampaignId, setViewCampaignId] = useState<string>('all');
-    
+
     // Campaign Snapshots
     const [snapshots, setSnapshots] = useState<CampaignSnapshot[]>([]);
     const [isSnapshotting, setIsSnapshotting] = useState(false);
@@ -74,7 +74,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             }
             setLoading(false);
         });
-        
+
         loadSnapshots();
 
         return () => {
@@ -98,7 +98,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         try {
             const allStock = await db.getAll('stock');
             const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
-            
+
             const snapshot: CampaignSnapshot = {
                 id: generateId(),
                 clientId: id,
@@ -107,7 +107,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 stockSnapshot: clientStock,
                 synced: false
             };
-            
+
             await db.put('campaign_snapshots', snapshot);
             alert('Campaña cerrada y snapshot guardado.');
             await loadSnapshots();
@@ -124,7 +124,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         const existing = snapshots.find(s => s.campaignId === campaignId);
         if (!existing) return alert('No hay snapshot anterior para recrear.');
         if (!confirm('Esto reemplazará el archivo de cierre de esta campaña con el stock actual reconstruido hasta su último movimiento. ¿Continuar?')) return;
-        
+
         setIsSnapshotting(true);
         try {
             // Note: Recalculation logic will go here if needed. 
@@ -132,14 +132,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             // under this campaign, effectively updating the snapshot if movements were edited.
             const allStock = await db.getAll('stock');
             const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
-            
+
             const newSnapshot: CampaignSnapshot = {
                 ...existing,
                 stockSnapshot: clientStock,
                 createdAt: new Date().toISOString(),
                 synced: false
             };
-            
+
             await db.put('campaign_snapshots', newSnapshot);
             alert('Archivo de campaña recreado con éxito.');
             await loadSnapshots();
@@ -212,7 +212,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         let investedMovements = 0;
         let serviceCosts = 0;
         let sold = 0;
-        
+
         const perPartner: Record<string, number> = {}; // Monetary investment per partner (current view)
         const perPartnerIncome: Record<string, number> = {}; // Monetary income (sales) per partner (current view)
 
@@ -220,6 +220,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         const investmentByCampaignPartner: Record<string, Record<string, number>> = {}; // [campaignId][partnerName] = USD
         const totalInvestmentByCampaign: Record<string, number> = {}; // [campaignId] = USD
         const harvestByCampaignCrop: Record<string, Record<string, number>> = {}; // [campaignId][crop] = KG
+        const soldHarvestByCampaignCrop: Record<string, Record<string, number>> = {}; // [campaignId][crop] = KG (Sales where source: 'HARVEST')
         const withdrawalsByPartnerCrop: Record<string, Record<string, number>> = {}; // [partnerName][crop] = KG (physical OUT)
 
         // Helper to normalize partner names
@@ -262,7 +263,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
                 if (amount > 0) {
                     investedMovements += amount;
-                    const distributors = (m.investors && m.investors.length > 0) 
+                    const distributors = (m.investors && m.investors.length > 0)
                         ? m.investors.map(inv => ({ name: getPartnerName(inv.name), amount: amount * (inv.percentage / 100) }))
                         : [{ name: getPartnerName(m.investorName), amount }];
 
@@ -278,7 +279,22 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             } else if (m.type === 'SALE') {
                 const saleValue = (m.quantity * (m.salePrice || 0));
                 sold += saleValue;
-                
+
+                // Track sold harvested grain for MIXED mode
+                // Robust check for harvest source: explicit tag OR existence of harvest movement for this product/campaign
+                // Only perform this lookup if source is null/undefined as requested by user
+                let isHarvestSource = m.source === 'HARVEST';
+                if (!isHarvestSource && !m.source && m.campaignId) {
+                    const hasBeenHarvested = !!harvestByCampaignCrop[m.campaignId]?.[m.productName || 'Granos'];
+                    if (hasBeenHarvested) isHarvestSource = true;
+                }
+
+                if (m.campaignId && isHarvestSource) {
+                    const crop = (m.productName || 'Granos').toLowerCase().trim();
+                    if (!soldHarvestByCampaignCrop[m.campaignId]) soldHarvestByCampaignCrop[m.campaignId] = {};
+                    soldHarvestByCampaignCrop[m.campaignId][crop] = (soldHarvestByCampaignCrop[m.campaignId][crop] || 0) + m.quantity;
+                }
+
                 // Income distribution: Sales income is distributed proportionally to investment in that campaign
                 if (m.campaignId && totalInvestmentByCampaign[m.campaignId] > 0) {
                     const campaignId = m.campaignId;
@@ -332,19 +348,24 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         const grainAssignments: Record<string, Record<string, number>> = {}; // [partner][crop] = KG
         Object.keys(investmentByCampaignPartner).forEach(campId => {
             const campaignInfo = campaigns.find(c => c.id === campId);
-            if (!campaignInfo || campaignInfo.mode !== 'GRAIN') return;
+            if (!campaignInfo || (campaignInfo.mode !== 'GRAIN' && campaignInfo.mode !== 'MIXED')) return;
 
             const cInvestments = investmentByCampaignPartner[campId];
             const cTotalInvest = totalInvestmentByCampaign[campId];
             const cHarvests = harvestByCampaignCrop[campId] || {};
+            const cSalesHarvestCount = soldHarvestByCampaignCrop[campId] || {};
 
             if (cTotalInvest <= 0) return;
 
             Object.entries(cHarvests).forEach(([crop, totalKg]) => {
+                const normalizedCrop = crop.toLowerCase().trim();
+                const soldKg = cSalesHarvestCount[normalizedCrop] || 0;
+                const netKg = campaignInfo.mode === 'MIXED' ? Math.max(0, totalKg - soldKg) : totalKg;
+
                 Object.entries(cInvestments).forEach(([pName, pInvested]) => {
                     const ratio = pInvested / cTotalInvest;
                     if (!grainAssignments[pName]) grainAssignments[pName] = {};
-                    grainAssignments[pName][crop] = (grainAssignments[pName][crop] || 0) + (totalKg * ratio);
+                    grainAssignments[pName][crop] = (grainAssignments[pName][crop] || 0) + (netKg * ratio);
                 });
             });
         });
@@ -396,37 +417,41 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const formatLedgerDate = (dateStr: string, timeStr?: string) => {
         if (!dateStr) return { date: '-', time: '-' };
 
-        // Handle parts directly to avoid parsing errors
         let day = '-', month = '-', year = '-';
         let formattedTime = '-';
 
-        // If it's an ISO string or similar
-        const dateObj = new Date(dateStr);
-        if (!isNaN(dateObj.getTime())) {
-            day = String(dateObj.getDate()).padStart(2, '0');
-            month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            year = String(dateObj.getFullYear());
-
-            if (!timeStr && dateStr.includes('T')) {
-                const h = dateObj.getHours();
-                const m = String(dateObj.getMinutes()).padStart(2, '0');
-                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
-                const displayHours = h % 12 || 12;
-                formattedTime = `${displayHours}:${m} ${ampm}`;
+        // ALWAYS extract date via string splitting (timezone-safe)
+        const datePart = dateStr.split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                year = parts[0]; month = parts[1]; day = parts[2];
+            } else {
+                // DD-MM-YYYY
+                day = parts[0]; month = parts[1]; year = parts[2];
             }
-        } else if (dateStr.includes('-')) {
-            // Fallback for YYYY-MM-DD
-            const parts = dateStr.split('T')[0].split('-');
-            if (parts.length === 3) {
-                year = parts[0];
-                month = parts[1];
-                day = parts[2];
+        }
+
+        // Extract time from ISO string if no explicit timeStr
+        if (!timeStr && dateStr.includes('T')) {
+            const tPart = dateStr.split('T')[1];
+            const match = tPart?.match(/(\d+):(\d+)/);
+            if (match) {
+                // Use Date object ONLY for time (UTC→local conversion is correct for time)
+                const dateObj = new Date(dateStr);
+                if (!isNaN(dateObj.getTime())) {
+                    const h = dateObj.getHours();
+                    const m = String(dateObj.getMinutes()).padStart(2, '0');
+                    const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                    const displayHours = h % 12 || 12;
+                    formattedTime = `${displayHours}:${m} ${ampm}`;
+                }
             }
         }
 
         if (timeStr) {
-            // Clean timeStr (might have extras)
-            const timePart = timeStr.split(' ')[0]; // Grab HH:mm
+            const timePart = timeStr.split(' ')[0];
             const [h, m] = timePart.split(':');
             if (h && m) {
                 const hours = parseInt(h);
@@ -596,7 +621,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         // Base rows: Main financial summary per partner
         const constRows: any[] = [];
-        
+
         // Detailed rows: Grain activity per crop
         const grainRows: any[] = [];
 
@@ -613,7 +638,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             const amount = partnersMap[pName] || 0;
             const income = incomeMap[pName] || 0;
             const percentage = totalInvested > 0 ? (amount / totalInvested) * 100 : 0;
-            
+
             // Add Main row
             constRows.push({
                 name: pName,
@@ -649,7 +674,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         // We want: Socio A (Main), Socio A (Crop 1), Socio A (Crop 2), Socio B (Main)...
         const finalRows: any[] = [];
         const sortedPartners = constRows.sort((a, b) => b.shareInvestment - a.shareInvestment);
-        
+
         sortedPartners.forEach(pMain => {
             finalRows.push(pMain);
             const pGrains = grainRows.filter(gr => gr.name === pMain.name);
@@ -870,6 +895,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     >
                                         <option value="MONEY">Saldo Monetario</option>
                                         <option value="GRAIN">Granos</option>
+                                        <option value="MIXED">Mixta (Granos + Saldo)</option>
                                     </select>
                                 </div>
                                 <button
@@ -912,6 +938,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                 >
                                                     <option value="MONEY">Saldo Monetario</option>
                                                     <option value="GRAIN">Granos</option>
+                                                    <option value="MIXED">Mixta (Granos + Saldo)</option>
                                                 </select>
                                             </div>
                                             <button
@@ -935,7 +962,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                             {/* Right - Actions & Metadata */}
                                             <div className="flex items-center gap-4 shrink-0 px-2 py-1">
                                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] whitespace-nowrap">
-                                                    Repartición de {camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}
+                                                    Repartición de {camp.mode === 'GRAIN' ? 'Granos' : camp.mode === 'MIXED' ? 'Mixta' : 'Saldo Monetario'}
                                                 </span>
 
                                                 <div className="flex items-center gap-1.5">
@@ -988,7 +1015,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     <div className="flex justify-between items-center py-2.5">
                                         <span className="font-medium text-slate-800 text-sm">{camp.name}</span>
                                         <span className={`text-[10px] font-medium uppercase tracking-widest text-slate-900`}>
-                                            Repartición de {camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}
+                                            Repartición de {camp.mode === 'GRAIN' ? 'Granos' : camp.mode === 'MIXED' ? 'Mixta' : 'Saldo Monetario'}
                                         </span>
                                     </div>
                                 )}
@@ -1117,54 +1144,54 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </div>
                     </div>
                 ) : (
-                <div className="overflow-x-auto" ref={partnersScrollRef}>
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Inversión (USD)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Monetario (USD)</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Asignada</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Retirada</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
-                            {investorBreakdown.length === 0 ? (
+                    <div className="overflow-x-auto" ref={partnersScrollRef}>
+                        <table className="min-w-full divide-y divide-slate-200">
+                            <thead className="bg-slate-50">
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-slate-400 italic">No hay inversores registrados para esta empresa o campaña.</td>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Socio</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Participación</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Inversión (USD)</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Monetario (USD)</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Asignada</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Retirada</th>
                                 </tr>
-                            ) : (
-                                investorBreakdown.map((inv, idx) => (
-                                    <tr key={idx} className={`hover:bg-slate-50 transition-colors ${inv.isMain ? 'bg-white' : 'bg-slate-50/20'}`}>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${inv.isMain ? 'text-slate-900 border-l-4 border-emerald-500' : 'text-slate-400 pl-10'}`}>
-                                            {inv.isMain ? inv.name : (idx > 0 && investorBreakdown[idx-1].name === inv.name ? '' : inv.name)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-600">
-                                            {inv.isMain ? `${inv.percentage.toFixed(2)}%` : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-red-600">
-                                            {inv.isMain ? `-USD ${inv.shareInvestment.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold ${inv.shareValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                            {inv.isMain ? `${inv.shareValue < 0 ? '-USD ' : 'USD '}${Math.abs(inv.shareValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${inv.cropName === '-' ? 'text-slate-300' : 'text-slate-600 italic'}`}>
-                                            {inv.cropName}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-700">
-                                            {inv.cropName !== '-' ? `${inv.assigned.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-orange-600">
-                                            {inv.cropName !== '-' ? `${inv.withdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
-                                        </td>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                                {investorBreakdown.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-8 text-center text-slate-400 italic">No hay inversores registrados para esta empresa o campaña.</td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                ) : (
+                                    investorBreakdown.map((inv, idx) => (
+                                        <tr key={idx} className={`hover:bg-slate-50 transition-colors ${inv.isMain ? 'bg-white' : 'bg-slate-50/20'}`}>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${inv.isMain ? 'text-slate-900 border-l-4 border-emerald-500' : 'text-slate-400 pl-10'}`}>
+                                                {inv.isMain ? inv.name : (idx > 0 && investorBreakdown[idx - 1].name === inv.name ? '' : inv.name)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-600">
+                                                {inv.isMain ? `${inv.percentage.toFixed(2)}%` : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-red-600">
+                                                {inv.isMain ? `-USD ${inv.shareInvestment.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold ${inv.shareValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                {inv.isMain ? `${inv.shareValue < 0 ? '-USD ' : 'USD '}${Math.abs(inv.shareValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${inv.cropName === '-' ? 'text-slate-300' : 'text-slate-600 italic'}`}>
+                                                {inv.cropName}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-slate-700">
+                                                {inv.cropName !== '-' ? `${inv.assigned.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-orange-600">
+                                                {inv.cropName !== '-' ? `${inv.withdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 

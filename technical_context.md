@@ -38,6 +38,8 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Table Cell Alignment**: 
     - **Centered**: Numerical columns (Labor Cost, USD totals), counts, and Status badges must be centered (`text-center`) for visual balance.
     - **Right-Aligned**: Only weights (Kg/Tons) should remain right-aligned for digit alignment.
+- **Aesthetic Refinement (The "Sunk-in" Look)**: When a "sunken" or recessed effect is requested for inputs, use a centered inset shadow (e.g., `!shadow-[inset_0_0_6px_rgba(0,0,0,0.25)]`) and a transparent border (`!border-transparent`).
+- **Override Note**: Many times, default component styles (like `shadow-sm` or `border-slate-200`) in the base `Input.tsx` are very "sticky". You MUST use the `!` modifier (e.g., `!shadow-...`) for custom formatting to take effect.
 
 ### Layout & Width Standards
 - **Standard Width**: Most pages MUST follow a `max-w-7xl mx-auto` constraint to maintain a clean, centered reading column and consistent alignment.
@@ -131,11 +133,15 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 ### Filtering Consistency
 - **Detailed Ledger Summary**: When filtering the detailed ledger by a specific partner, the summary boxes at the top (Expenditure/Income) MUST calculate based on that partner's **proportional stake** of the filtered rows, not the full row totals.
 
-### Grain Campaign Accounting (Physical Participation)
-- **Mixed-Mode Logic**: The accounting system supports two campaign modes: `MONEY` (monetary balance) and `GRAIN` (physical participation).
+### Campaign Modes & Accounting
+- **Three Campaign Modes**: Each campaign has a `mode` field: `MONEY`, `GRAIN`, or `MIXED`.
+  - **`MONEY` (Saldo Monetario)**: Pure monetary balance. Expenses are subtracted, sale revenue is added, and the resulting balance is split among partners by their participation percentage.
+  - **`GRAIN` (Granos)**: Physical grain participation. Harvested quantities are assigned to partners by their percentage stake. Withdrawals (`OUT` movements) deduct from the partner's assigned grain balance.
+  - **`MIXED` (Mixta — Granos + Saldo)**: From the total harvest, a portion is sold. The sale revenue becomes monetary balance. Whatever grain is **not** sold is partitioned physically among the investors by their participation percentage. Partners receive both a monetary split (from sales) and a physical grain split (from unsold stock).
+- **UI Label**: The campaign list displays "Repartición de Saldo Monetario", "Repartición de Granos", or "Repartición de Mixta" depending on the mode.
 - **Consolidated View**: When viewing "Todas las Campañas", the table displays:
-    - **Main Rows**: Aggregated monetary investment and "Saldo Monetario" (from `MONEY` campaigns).
-    - **Detailed Rows (per Crop)**: Physical totals of "Cosecha Asignada" and "Cosecha Retirada" (from `GRAIN` campaigns).
+  - **Main Rows**: Aggregated monetary investment and "Saldo Monetario" (from `MONEY` campaigns).
+  - **Detailed Rows (per Crop)**: Physical totals of "Cosecha Asignada" and "Cosecha Retirada" (from `GRAIN` campaigns).
 - **Proportional Assignment**: In `GRAIN` mode, physical grain quantities are assigned to partners based on their **percentage stake in that specific campaign's investment**, not their global percentage.
 - **Withdrawals (Retiros)**: Physical withdrawals (`OUT` movements) are deducted from the partner's assigned grain balance for the specific crop and campaign.
 - **Revenue Attribution**: Sales revenue from grain is attributed to campaigns by matching the `campaignId` of the stock being sold.
@@ -182,6 +188,19 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - *Example*: Deleting a 100L Sale adds 100L back to the cache; deleting a 50kg Purchase subtracts 50kg.
 - **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
 - **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
+
+### Metadata Enrichment Pattern (Display-Time Consistency)
+- **Problem**: Movement records often lack `productCommercialName` and sometimes `productBrand` because the harvest/purchase flows don't always persist these fields. The `stock` table does store them, but the `movements` table is the source for the History view.
+- **Solution**: All views that display movements (History, Admin Tables) must **enrich at display time** using the Product Catalog as the source of truth.
+- **Enrichment Rules**:
+  1. **Harvest items** (`type === 'HARVEST'`, `source === 'HARVEST'`, or product type `GRAIN`/`SEED`):
+     - **Brand** → stored value, fallback to **Campaign Name** (`campaigns.find(c => c.id === m.campaignId)?.name`).
+     - **Commercial Name** → stored value, fallback to **"Propia"**.
+  2. **Purchased items**: 
+     - **Brand** → stored value, fallback to catalog's `brandName`.
+     - **Commercial Name** → stored value, fallback to catalog's `commercialName`.
+- **Affected Files**: `stock/history/page.tsx` (main rows + expanded sub-items), `admin/tables/page.tsx` (stock view enrichment in `loadData`).
+- **Key Principle**: The `productId` is the chain of consistency. All metadata (brand, commercial name) is derived from associating that ID with the Product Catalog. Views should never rely solely on what the movement record stored.
 ## 🌾 Harvest Data Integrity & Persistence
 - **State Shadowing**: Avoid creating "lite" versions of the Harvest Wizard (e.g., side-panel forms). Always use the full `HarvestWizard` component to ensure all metadata (transport sheets, contractors) is correctly managed and aggregated.
 - **Aggregation Pattern**: When editing an event composed of multiple movements (like a multi-destination harvest), ALWAYS aggregate all sub-items (e.g., `transportSheets`) before populating the edit wizard. Failure to do so leads to data loss for all but the first movement.

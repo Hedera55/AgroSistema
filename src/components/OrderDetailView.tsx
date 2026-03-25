@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Order, Client } from '@/types';
 import { usePDF } from '@/hooks/usePDF';
+import { useAuth } from '@/hooks/useAuth';
 
 interface OrderDetailViewProps {
     order: Order & { farmName?: string; lotName?: string; hectares?: number };
@@ -16,6 +17,7 @@ interface OrderDetailViewProps {
 export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
     order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [], onEdit
 }) => {
+    const { role } = useAuth();
     const [showFullNote, setShowFullNote] = useState(false);
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
 
@@ -115,13 +117,15 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                         )}
                     </div>
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => onEdit?.(order.id, order.clientId)}
-                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                            title="Editar Orden"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                        </button>
+                        {role !== 'CONTRATISTA' && (
+                            <button
+                                onClick={() => onEdit?.(order.id, order.clientId)}
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                title="Editar Orden"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                            </button>
+                        )}
                         <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors" title="Cerrar detalles">✕</button>
                     </div>
                 </div >

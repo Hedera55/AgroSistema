@@ -122,25 +122,33 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
         let day = '-', month = '-', year = '-';
         let formattedTime = '-';
 
-        const dateObj = new Date(dateStr);
-        if (!isNaN(dateObj.getTime())) {
-            day = String(dateObj.getDate()).padStart(2, '0');
-            month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            year = String(dateObj.getFullYear());
-
-            if (!timeStr && dateStr.includes('T')) {
-                const h = dateObj.getHours();
-                const m = String(dateObj.getMinutes()).padStart(2, '0');
-                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
-                const displayHours = h % 12 || 12;
-                formattedTime = `${displayHours}:${m} ${ampm}`;
+        // ALWAYS extract date via string splitting (timezone-safe)
+        const datePart = dateStr.split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                year = parts[0]; month = parts[1]; day = parts[2];
+            } else {
+                // DD-MM-YYYY
+                day = parts[0]; month = parts[1]; year = parts[2];
             }
-        } else if (dateStr.includes('-')) {
-            const parts = dateStr.split('T')[0].split('-');
-            if (parts.length === 3) {
-                year = parts[0];
-                month = parts[1];
-                day = parts[2];
+        }
+
+        // Extract time from ISO string if no explicit timeStr
+        if (!timeStr && dateStr.includes('T')) {
+            const tPart = dateStr.split('T')[1];
+            const match = tPart?.match(/(\d+):(\d+)/);
+            if (match) {
+                // Use Date object ONLY for time (UTC→local conversion is correct for time)
+                const dateObj = new Date(dateStr);
+                if (!isNaN(dateObj.getTime())) {
+                    const h = dateObj.getHours();
+                    const m = String(dateObj.getMinutes()).padStart(2, '0');
+                    const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                    const displayHours = h % 12 || 12;
+                    formattedTime = `${displayHours}:${m} ${ampm}`;
+                }
             }
         }
 
@@ -151,7 +159,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                 const hours = parseInt(h);
                 const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
                 const displayHours = hours % 12 || 12;
-                formattedTime = `${displayHours}:${m} ${ampm}`;
+                formattedTime = `${displayHours}:${m.split(' ')[0]} ${ampm}`;
             }
         }
 

@@ -7,3 +7,60 @@
 - Las etiquetas azules son el nombre de la rama corriente
 - Las etiquetas naranjas son el nombre de la rama remota, osea la online
 - Muchos puntos violetas y dsp algunos azules, significa que los cambios hasta la parte violeta están en el repositorio remoto, y hasta la parte azul no, sólo en el local.
+
+> En algún momento conseguí que se pueda:
+- Checkout detached, an old commit,
+- Todavía poder ver más arriba las commits nuevas,
+- Y poder de nuevo, checkout main
+- Para poder sacar archivos viejos
+
+- E... hay un botón que es "see newer instances" o "see-" algo.
+  
+
+
+> git diff:
+- Working tree son los archivos actuales
+- Index es cuando ponés git add, antes de git commit
+- Head es el last commit
+
+DESCRIPTION
+
+Show changes between the working tree and the index or a tree, changes between the index and a tree, changes between two trees, changes resulting from a merge, changes between two blob objects, or changes between two files on disk.
+git diff [<options>] [--] [<path>...]
+
+    This form is to view the changes you made relative to the index (staging area for the next commit). In other words, the differences are what you could tell Git to further add to the index but you still haven’t. You can stage these changes by using git-add[1].
+git diff [<options>] --cached [--merge-base] [<commit>] [--] [<path>...]
+
+    This form is to view the changes you staged for the next commit relative to the named <commit>. Typically you would want comparison with the latest commit, so if you do not give <commit>, it defaults to HEAD. If HEAD does not exist (e.g. unborn branches) and <commit> is not given, it shows all staged changes. --staged is a synonym of --cached.
+
+	. . . . . . 
+
+First, to factually answer the initial need : "I was searching on doing a diff between working tree and last commit"
+
+You'd have to simply
+
+git diff HEAD
+
+(HEAD is implied for most commands but diff is a bit different here, and yes git diff is different from git diff HEAD)
+
+Now, the difference between HEAD and HEAD~ is quite simple :
+
+HEAD is the pointer git uses to represent the current state being worked on, often a branch. (see the glossary)
+
+~ means the designated commit's parent. So HEAD~ means "not last commit but the one before that"
+
+With such a tree :
+
+---> time direction this way --->
+
+A---B---C <<< master <<< HEAD
+
+HEAD would resolve to commit C, while HEAD~ would resolve to B
+
+Edit to clarify about HEAD^
+
+HEAD^ and HEAD~ both point (if we stick to our example) to B, but it shouldn't mislead you into thinking they're the same.
+
+<someCommit>^N (where N=1 if not explicitly given) means the designated commit's Nth parent when said commit has multiple parents. For a classic two parents merge, if HEAD points to the merge commit, parents can be found with HEAD^ and HEAD^2.
+
+<someCommit>~N(again, N defaulting to 1) , in the other hand, means Nth ancestor of said commit, meaning you go back N commits in the past, following only one parent each time. For better clarity, in our example, HEAD~2 would designate A

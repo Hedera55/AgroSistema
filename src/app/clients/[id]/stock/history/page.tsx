@@ -404,24 +404,40 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
     const formatDate = (dateStr: string, timeStr?: string) => {
         if (!dateStr) return { date: '-', time: '-' };
+
         let day = '-', month = '-', year = '-';
         let formattedTime = '-';
-        const dateObj = new Date(dateStr);
-        if (!isNaN(dateObj.getTime())) {
-            day = String(dateObj.getDate()).padStart(2, '0');
-            month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            year = String(dateObj.getFullYear());
-            if (!timeStr && dateStr.includes('T')) {
-                const h = dateObj.getHours();
-                const m = String(dateObj.getMinutes()).padStart(2, '0');
-                const ampm = h >= 12 ? 'p.m.' : 'a.m.';
-                const displayHours = h % 12 || 12;
-                formattedTime = `${displayHours}:${m} ${ampm}`;
+
+        // ALWAYS extract date via string splitting (timezone-safe)
+        const datePart = dateStr.split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                year = parts[0]; month = parts[1]; day = parts[2];
+            } else {
+                // DD-MM-YYYY
+                day = parts[0]; month = parts[1]; year = parts[2];
             }
-        } else if (dateStr.includes('-')) {
-            const parts = dateStr.split('T')[0].split('-');
-            if (parts.length === 3) { year = parts[0]; month = parts[1]; day = parts[2]; }
         }
+
+        // Extract time from ISO string if no explicit timeStr
+        if (!timeStr && dateStr.includes('T')) {
+            const tPart = dateStr.split('T')[1];
+            const match = tPart?.match(/(\d+):(\d+)/);
+            if (match) {
+                // Use Date object ONLY for time (UTC→local conversion is correct for time)
+                const dateObj = new Date(dateStr);
+                if (!isNaN(dateObj.getTime())) {
+                    const h = dateObj.getHours();
+                    const m = String(dateObj.getMinutes()).padStart(2, '0');
+                    const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+                    const displayHours = h % 12 || 12;
+                    formattedTime = `${displayHours}:${m} ${ampm}`;
+                }
+            }
+        }
+
         if (timeStr) {
             const timePart = timeStr.split(' ')[0];
             const [h, m] = timePart.split(':');
@@ -429,10 +445,14 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 const hours = parseInt(h);
                 const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
                 const displayHours = hours % 12 || 12;
-                formattedTime = `${displayHours}:${m} ${ampm}`;
+                formattedTime = `${displayHours}:${m.split(' ')[0]} ${ampm}`;
             }
         }
-        return { date: day !== '-' ? `${day}-${month}-${year}` : dateStr, time: formattedTime };
+
+        return {
+            date: day !== '-' ? `${day}-${month}-${year}` : dateStr,
+            time: formattedTime
+        };
     };
 
     const getMovementLabel = (m: InventoryMovement) => {
@@ -1043,6 +1063,19 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         let dispName = isConsolidated ? 'Varios' : (singleItem?.productName || m.productName || productObj?.name || 'Insumo');
                                         if (dispName.toLowerCase().includes('soja')) dispName = 'Soja';
 
+                                        // Enrich brand & commercial name from catalog/harvest logic
+                                        const isHarvestRow = m.type === 'HARVEST' || m.source === 'HARVEST' || productObj?.type === 'GRAIN' || productObj?.type === 'SEED';
+                                        let dispBrand = singleItem?.productBrand || m.productBrand || '';
+                                        let dispCommName = singleItem?.productCommercialName || m.productCommercialName || '';
+                                        if (isHarvestRow) {
+                                            const camp = campaigns.find(c => c.id === m.campaignId);
+                                            if (!dispBrand) dispBrand = camp?.name || '';
+                                            if (!dispCommName) dispCommName = 'Propia';
+                                        } else if (productObj) {
+                                            if (!dispBrand) dispBrand = productObj.brandName || '';
+                                            if (!dispCommName) dispCommName = productObj.commercialName || '';
+                                        }
+
                                         const enrichedOrder = m.referenceId ? ordersData.find(o => o.id === m.referenceId) : null;
                                         const handleRowClick = async () => {
                                             if (isSelected) {
@@ -1082,8 +1115,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 <tr onClick={handleRowClick} className={`group cursor-pointer transition-colors ${isSelected ? 'bg-emerald-100/80 hover:bg-emerald-100/90' : 'hover:bg-slate-50'}`}>
                                                     <td className="px-6 py-2 whitespace-nowrap"><div className="text-slate-900 font-medium">{date}</div><div className="text-[10px] text-slate-400 font-mono uppercase">{time}</div></td>
                                                     <td className="px-6 py-2 font-bold text-slate-900">{dispName}</td>
-                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (singleItem?.productBrand || m.productBrand || '-')}</td>
-                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (singleItem?.productCommercialName || m.productCommercialName || '-')}</td>
+                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (dispBrand || '-')}</td>
+                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (dispCommName || '-')}</td>
                                                     <td className="px-6 py-2 text-center whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${labelClass}`}>{label}</span></td>
                                                     <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{isConsolidated ? '---' : `${Math.abs(Number(singleItem ? singleItem.quantity : m.quantity))} ${singleItem ? singleItem.unit : m.unit}`}</td>
                                                     <td className="px-6 py-2 text-right font-mono text-slate-600">{showValue && !isConsolidated ? `USD ${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '---'}</td>
@@ -1124,19 +1157,32 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
                                                                     <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
                                                                 </tr>
-                                                                {m.items.map((it: any, i: number) => (
+                                                                {m.items.map((it: any, i: number) => {
+                                                                    const itProd = productsData[it.productId];
+                                                                    const itIsHarvest = m.type === 'HARVEST' || m.source === 'HARVEST' || itProd?.type === 'GRAIN' || itProd?.type === 'SEED';
+                                                                    let itBrand = it.productBrand || '';
+                                                                    let itCommName = it.productCommercialName || '';
+                                                                    if (itIsHarvest) {
+                                                                        if (!itBrand) { const camp = campaigns.find(c => c.id === m.campaignId); itBrand = camp?.name || ''; }
+                                                                        if (!itCommName) itCommName = 'Propia';
+                                                                    } else if (itProd) {
+                                                                        if (!itBrand) itBrand = itProd.brandName || '';
+                                                                        if (!itCommName) itCommName = itProd.commercialName || '';
+                                                                    }
+                                                                    return (
                                                                     <tr key={`${m.id}-item-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
                                                                         <td colSpan={1} className="px-6 py-1"></td>
                                                                         <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {it.productName}</td>
-                                                                        <td className="px-6 py-1 text-slate-400">{it.productBrand || '-'}</td>
-                                                                        <td className="px-6 py-1 text-slate-500">{it.productCommercialName || '-'}</td>
+                                                                        <td className="px-6 py-1 text-slate-400">{itBrand || '-'}</td>
+                                                                        <td className="px-6 py-1 text-slate-500">{itCommName || '-'}</td>
                                                                         <td colSpan={1}></td>
                                                                         <td className="px-6 py-1 text-right font-mono text-slate-500">{Math.abs(Number(it.quantity))} {it.unit || m.unit}</td>
                                                                         <td className="px-6 py-1 text-right font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                                         <td className="px-6 py-1 text-right font-mono font-bold text-slate-900">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                                         <td colSpan={8}></td>
                                                                     </tr>
-                                                                ))}
+                                                                    );
+                                                                })}
                                                             </>
                                                         )}
                                                         {m.investors && m.investors.length > 1 && (
@@ -1273,11 +1319,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                 if (distWhId) {
                                     const exSt = currentStockState.find((s: ClientStock) => s.clientId === clientId && s.productId === editingMovement.productId && s.warehouseId === distWhId);
                                     if (exSt) {
-                                        const updatedExSt = { ...exSt, quantity: exSt.quantity + dist.amount, lastUpdated: new Date().toISOString() };
+                                        const updatedExSt = { ...exSt, quantity: exSt.quantity + dist.amount, source: 'HARVEST' as const, lastUpdated: new Date().toISOString() };
                                         await updateStock(updatedExSt);
                                         currentStockState = currentStockState.map(s => s.id === exSt.id ? updatedExSt : s);
                                     } else {
-                                        const newSt = { id: generateId(), clientId, warehouseId: distWhId, productId: editingMovement.productId, productBrand: editingMovement.productBrand, campaignId: campaignId || undefined, quantity: dist.amount, lastUpdated: new Date().toISOString(), synced: false };
+                                        const newSt = { id: generateId(), clientId, warehouseId: distWhId, productId: editingMovement.productId, productBrand: editingMovement.productBrand, campaignId: campaignId || undefined, quantity: dist.amount, source: 'HARVEST' as const, lastUpdated: new Date().toISOString(), synced: false };
                                         await updateStock(newSt);
                                         currentStockState.push(newSt);
                                     }
@@ -1298,6 +1344,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     investors: data.investors || [],
                                     receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
                                     updatedAt: new Date().toISOString(),
+                                    source: 'HARVEST',
                                     synced: false,
                                     deleted: false,
                                     transportSheets: distSheets.length > 0 ? distSheets : (transportSheets || []),
@@ -1373,7 +1420,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
             {showEditForm && (
                 <div className="mt-8 bg-white p-6 rounded-2xl shadow-xl border-4 border-emerald-500/20 animate-slideUp">
-                    <div className="flex justify-between items-center mb-6"><div><h2 className="text-xl font-bold text-slate-900">Editar {editingMovement?.type === 'SALE' ? 'Venta' : (editingMovement?.type === 'OUT' ? 'Retiro / Egreso' : 'Movimiento')}</h2></div><button onClick={() => { setShowEditForm(false); setEditingMovement(null); }} className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-red-500 transition-colors">✕</button></div>
+                    <div className="flex justify-between items-center mb-6"><div><h2 className="text-xl font-bold text-slate-900">Editar {editingMovement?.type === 'SALE' ? 'Venta' : (editingMovement?.type === 'OUT' ? 'Retiro / Egreso' : 'Movimiento')}</h2></div><button onClick={() => { setShowEditForm(false); setEditingMovement(null); }} className="p-2 text-slate-400 hover:text-red-500 transition-colors">✕</button></div>
 
                     {editingMovement?.type === 'SALE' || editingMovement?.type === 'OUT' ? (
                         <form onSubmit={handleEditSave} className="space-y-6">

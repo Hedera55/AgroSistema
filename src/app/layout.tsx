@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   description: "Offline PWA for Agronomic Orders",
 };
 
+import { Suspense } from 'react';
 import { AuthProvider } from "@/hooks/useAuth";
 
 export default function RootLayout({
@@ -27,7 +28,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans`}>
         <AuthProvider>
-          <Layout>{children}</Layout>
+          <Suspense fallback={null}>
+            <Layout>{children}</Layout>
+          </Suspense>
         </AuthProvider>
       </body>
     </html>

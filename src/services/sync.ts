@@ -79,6 +79,7 @@ const mappers = {
         product_id: s.productId,
         product_brand: s.productBrand || null,
         quantity: s.quantity,
+        source: s.source || null,
         campaign_id: s.campaignId || null,
         presentation_label: s.presentationLabel,
         presentation_content: s.presentationContent,
@@ -138,6 +139,7 @@ const mappers = {
             date: m.date,
             time: m.time,
             harvest_batch_id: m.harvestBatchId || null,
+            source: m.source || null,
             sale_price: m.salePrice || 0,
             purchase_price: m.purchasePrice || 0,
             reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
@@ -306,6 +308,7 @@ const reverseMappers = {
         quantity: s.quantity,
         updatedAt: s.updated_at,
         lastUpdated: s.updated_at,
+        source: s.source,
         campaignId: s.campaign_id,
         presentationLabel: s.presentation_label,
         presentationContent: s.presentation_content,
@@ -414,7 +417,8 @@ const reverseMappers = {
         deleted: m.deleted,
         deletedAt: m.deleted_at,
         deletedBy: m.deleted_by,
-        campaignId: m.campaign_id
+        campaignId: m.campaign_id,
+        source: m.source
     }),
     activity: (a: any): OrderActivity => ({
         id: a.id,

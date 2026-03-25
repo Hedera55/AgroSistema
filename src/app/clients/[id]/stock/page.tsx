@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useClientStock, useInventory, useClientMovements } from '@/hooks/useInventory';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useCampaigns } from '@/hooks/useCampaigns';
+import { useOrders } from '@/hooks/useOrders';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { db } from '@/services/db';
@@ -13,6 +14,7 @@ import { generateId } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { syncService } from '@/services/sync';
 import { supabase } from '@/lib/supabase';
+import { calculateCampaignPartnerShares } from '@/utils/financial';
 import { StockMovementPanel } from '@/components/StockMovementPanel';
 import { usePDF } from '@/hooks/usePDF';
 import { WarehouseManager } from './components/WarehouseManager';
@@ -55,6 +57,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const { products, addProduct, updateProduct, deleteProduct, loading: productsLoading } = useInventory(); // Added deleteProduct
     const { movements, loading: movementsLoading, refresh: movementsRefresh } = useClientMovements(id);
     const { campaigns, loading: campaignsLoading } = useCampaigns(id);
+    const { orders } = useOrders(id);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -110,6 +113,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         quantity: '',
         price: '',
         tempBrand: '',
+        productCommercialName: '',
         presentationLabel: '',
         presentationContent: '',
         presentationAmount: ''
@@ -142,6 +146,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         quantity: string;
         price: string;
         tempBrand: string;
+        productCommercialName?: string;
         presentationLabel?: string;
         presentationContent?: string;
         presentationAmount?: string;
@@ -285,8 +290,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const handleToggleCatalog = React.useCallback(() => setShowCatalog(prev => !prev), []);
 
     const clientInvestors = useMemo(() =>
-        client?.investors || client?.partners || []
+        [...(client?.partners || []), ...(client?.investors || [])]
         , [client?.investors, client?.partners]);
+
+    const campaignShares = useMemo(() =>
+        calculateCampaignPartnerShares(movements, orders)
+        , [movements, orders]);
 
     // Persistence for form state
     useEffect(() => {
@@ -522,9 +531,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         };
 
         const getPresentKey = (baseId: string, item: any) => {
-             const label = (item.presentationLabel || '').trim().toLowerCase();
-             const content = (item.presentationContent || 0).toString();
-             return `${baseId}_${label}_${content}`;
+            const label = (item.presentationLabel || '').trim().toLowerCase();
+            const content = (item.presentationContent || 0).toString();
+            return `${baseId}_${label}_${content}`;
         }
 
         movements.forEach(m => {
@@ -534,11 +543,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 if (m.items && m.items.length > 0) {
                     m.items.forEach((item: any) => {
                         const cost = (item.quantity || 0) * (item.price || 0);
-                        
+
                         // 1. Specific ID + Presentation
                         const pKeySpecific = getPresentKey(item.productId, item);
                         updateStats(purchasePricing, pKeySpecific, item.quantity, cost);
-                        
+
                         // 2. Generic Name + Presentation
                         if (item.productName) {
                             const pKeyGeneric = getPresentKey(item.productName.toLowerCase().trim(), item);
@@ -550,17 +559,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     const cost = (m.quantity || 0) * (m.purchasePrice || m.price || 0);
                     const pKeySpecific = getPresentKey(m.productId, m);
                     updateStats(purchasePricing, pKeySpecific, m.quantity, cost);
-                    
+
                     if (m.productName) {
-                         const pKeyGeneric = getPresentKey(m.productName.toLowerCase().trim(), m);
-                         updateStats(purchasePricing, pKeyGeneric, m.quantity, cost);
+                        const pKeyGeneric = getPresentKey(m.productName.toLowerCase().trim(), m);
+                        updateStats(purchasePricing, pKeyGeneric, m.quantity, cost);
                     }
                 }
             } else if (m.type === 'SALE') {
                 const cost = (m.quantity || 0) * (m.salePrice || 0);
                 const pKeySpecific = getPresentKey(m.productId, m);
                 updateStats(salePricing, pKeySpecific, m.quantity, cost);
-                
+
                 const nameKey = (m.crop || m.productName || '').toLowerCase().trim();
                 const pKeyGeneric = getPresentKey(nameKey, m);
                 updateStats(salePricing, pKeyGeneric, m.quantity, cost);
@@ -582,35 +591,35 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const warehouse = warehouses.find(w => w.id === item.warehouseId);
             const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
             const normalizedName = (product?.name || '').toLowerCase().trim();
-            
+
             const isPropia = (product?.type === 'GRAIN' || product?.type === 'SEED') && brand === 'propia';
 
             // Find specific PPP for this presentation
             const pKeySpecific = getPresentKey(item.productId, item);
             const pKeyGeneric = getPresentKey(normalizedName, item);
-            
+
             let specificAvgPrice = 0;
-            
+
             if (isPropia) {
-                 const d1 = salePricing.get(pKeySpecific);
-                 const d2 = salePricing.get(`${item.productId}__0`);
-                 const d3 = salePricing.get(pKeyGeneric);
-                 const d4 = salePricing.get(`${normalizedName}__0`);
-                 
-                 const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
-                 const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
-                 
-                 if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
+                const d1 = salePricing.get(pKeySpecific);
+                const d2 = salePricing.get(`${item.productId}__0`);
+                const d3 = salePricing.get(pKeyGeneric);
+                const d4 = salePricing.get(`${normalizedName}__0`);
+
+                const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
+                const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
+
+                if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
             } else {
-                 const d1 = purchasePricing.get(pKeySpecific);
-                 const d2 = purchasePricing.get(`${item.productId}__0`);
-                 const d3 = purchasePricing.get(pKeyGeneric);
-                 const d4 = purchasePricing.get(`${normalizedName}__0`);
+                const d1 = purchasePricing.get(pKeySpecific);
+                const d2 = purchasePricing.get(`${item.productId}__0`);
+                const d3 = purchasePricing.get(pKeyGeneric);
+                const d4 = purchasePricing.get(`${normalizedName}__0`);
 
-                 const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
-                 const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
+                const totalVal = (d1?.totalVal || 0) + (d2?.totalVal || 0) + (d3?.totalVal || 0) + (d4?.totalVal || 0);
+                const totalQty = (d1?.totalQty || 0) + (d2?.totalQty || 0) + (d3?.totalQty || 0) + (d4?.totalQty || 0);
 
-                 if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
+                if (totalQty > 0) specificAvgPrice = totalVal / totalQty;
             }
 
             // Temporarily piggyback the specific PPP onto the breakdown item for rendering
@@ -622,18 +631,18 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 const existing = combined.get(key)!;
                 existing.quantity += item.quantity;
                 if (!existing.breakdown) existing.breakdown = [];
-                
-                const existingBreakdown = existing.breakdown.find(b => 
-                    b.presentationLabel === enrichedBreakdownItem.presentationLabel && 
+
+                const existingBreakdown = existing.breakdown.find(b =>
+                    b.presentationLabel === enrichedBreakdownItem.presentationLabel &&
                     b.presentationContent === enrichedBreakdownItem.presentationContent
                 );
 
                 if (existingBreakdown) {
                     existingBreakdown.quantity += enrichedBreakdownItem.quantity;
                     if (existingBreakdown.presentationAmount && enrichedBreakdownItem.presentationAmount) {
-                         existingBreakdown.presentationAmount += enrichedBreakdownItem.presentationAmount;
+                        existingBreakdown.presentationAmount += enrichedBreakdownItem.presentationAmount;
                     } else if (enrichedBreakdownItem.presentationAmount) {
-                         existingBreakdown.presentationAmount = enrichedBreakdownItem.presentationAmount;
+                        existingBreakdown.presentationAmount = enrichedBreakdownItem.presentationAmount;
                     }
                 } else {
                     existing.breakdown.push(enrichedBreakdownItem);
@@ -796,11 +805,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     campaignId: selectedCampaignId || undefined,
                     productId: item.productId,
                     productBrand: item.tempBrand || product?.brandName || '',
+                    productCommercialName: item.productCommercialName || product?.commercialName || '',
                     quantity: existingInLoop
                         ? existingInLoop.quantity + qtyNum
                         : qtyNum,
                     lastUpdated: now.toISOString(),
                     updatedAt: now.toISOString(),
+                    source: 'PURCHASE',
                     presentationLabel: pLabel || undefined,
                     presentationContent: pContent || undefined,
                     presentationAmount: existingInLoop
@@ -822,7 +833,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     const existingPresentations = product.standardPresentations || [];
                     const alreadyExists = existingPresentations.some(
                         pres => pres.label.toLowerCase().trim() === pLabel.toLowerCase().trim() &&
-                                pres.content === pContent
+                            pres.content === pContent
                     );
 
                     if (!alreadyExists) {
@@ -854,7 +865,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     sellerName: selectedSeller || undefined,
                     presentationLabel: pLabel || undefined,
                     presentationContent: pContent || 0,
-                    presentationAmount: pAmount || 0
+                    presentationAmount: pAmount || 0,
+                    source: 'PURCHASE'
                 });
             }
 
@@ -888,6 +900,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 dueDate: dueDate || undefined,
                 campaignId: selectedCampaignId || undefined,
                 items: movementItems,
+                source: 'PURCHASE',
                 purchasePrice: rootPrice
             };
 
@@ -905,6 +918,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 quantity: '',
                 price: '',
                 tempBrand: '',
+                productCommercialName: '',
                 presentationLabel: '',
                 presentationContent: '',
                 presentationAmount: ''
@@ -989,6 +1003,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 // This shouldn't happen if UI validation works, but as a safety:
                 console.warn('Deduction might have been incomplete');
             }
+            const isHarvested = !stockItem.source && movements.some(m => 
+                !m.deleted && 
+                m.type === 'HARVEST' && 
+                m.productId === stockItem.productId && 
+                m.campaignId === stockItem.campaignId &&
+                m.productBrand === stockItem.productBrand
+            );
+
             const movementData: InventoryMovement = {
                 id: movementId,
                 clientId: id,
@@ -1009,6 +1031,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
                 facturaImageUrl: facturaUrl || undefined,
                 remitoImageUrl: remitoUrl || undefined,
+                source: stockItem.source || (isHarvested ? 'HARVEST' : undefined),
                 createdBy: displayName || 'Sistema',
                 createdAt: new Date().toISOString(),
                 synced: false,
@@ -1055,13 +1078,30 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     }, [id, sellingStockId, saleQuantity, salePrice, enrichedStock, saleFacturaFile, deductStockQuantity, saleNote, displayName, saleTruckDriver, salePlateNumber, saleTrailerPlate, saleDestinationCompany, saleDestinationAddress, saleTransportCompany, saleDischargeNumber, saleHumidity, saleHectoliterWeight, saleGrossWeight, saleTareWeight, salePrimarySaleCuit, saleDepartureDateTime, saleDistanceKm, saleFreightTariff, movementsRefresh]);
 
-    const handleConfirmMove = React.useCallback(async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any) => {
+    const handleConfirmMove = React.useCallback(async (action: 'WITHDRAW' | 'TRANSFER', quantities: Record<string, number>, destinationWarehouseId?: string, note?: string, receiverName?: string, logistics?: any, remitoFile?: File | null) => {
         // quantities here is a map of specific stock IDs to their selected quantities
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         let createdMovement: InventoryMovement | null = null;
+
+        let remitoUrl = '';
+        if (remitoFile) {
+            setRemitoUploading(true);
+            const commonMovementId = generateId();
+            const fileExt = remitoFile.name.split('.').pop();
+            const filePath = `${id}/remitos/move_${commonMovementId}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage
+                .from('remitos')
+                .upload(filePath, remitoFile, { upsert: true });
+
+            if (!uploadError) {
+                const { data: publicUrlData } = supabase.storage.from('remitos').getPublicUrl(filePath);
+                remitoUrl = publicUrlData.publicUrl;
+            }
+            setRemitoUploading(false);
+        }
 
         // Iterate over the specific entries in the quantities map
         for (const [stockId, qtyToMove] of Object.entries(quantities)) {
@@ -1094,7 +1134,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
+                source: stockRecord.source,
                 receiverName: action === 'WITHDRAW' ? (receiverName || undefined) : undefined,
+                remitoImageUrl: remitoUrl || undefined,
                 ...(action === 'WITHDRAW' && logistics ? logistics : {})
             };
 
@@ -1111,6 +1153,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             await updateStock({
                 ...stockRecord,
                 quantity: remainingQty,
+                source: stockRecord.source, // Explicitly preserve
                 lastUpdated: now.toISOString()
             });
 
@@ -1130,6 +1173,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         ...existingDestItem,
                         quantity: existingDestItem.quantity + qtyToMove,
                         campaignId: stockRecord.campaignId, // Ensure campaignId is preserved
+                        source: stockRecord.source, // Ensure source is preserved
                         lastUpdated: now.toISOString()
                     });
                 } else {
@@ -1144,6 +1188,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         presentationAmount: 0, // Not relevant for moved items total
                         quantity: qtyToMove,
                         campaignId: stockRecord.campaignId, // Propagate campaign from stock
+                        source: stockRecord.source,
                         lastUpdated: now.toISOString()
                     });
                 }
@@ -1167,7 +1212,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     notes: `Transferencia desde ${warehouse?.name || 'Galpón'} - ${stockRecord.presentationLabel || ''} ${stockRecord.presentationContent || ''} - ${note || ''}`,
                     createdBy: displayName || 'Sistema',
                     createdAt: now.toISOString(),
-                    synced: false
+                    synced: false,
+                    source: stockRecord.source,
+                    remitoImageUrl: remitoUrl || undefined
                 };
                 await db.put('movements', transferInMovement);
                 createdMovement = transferInMovement;
@@ -1272,6 +1319,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             quantity: '',
             price: '',
             tempBrand: '',
+            productCommercialName: '',
             presentationLabel: '',
             presentationContent: '',
             presentationAmount: ''
@@ -1287,7 +1335,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const itemToEdit = prev[idx];
             if (itemToEdit) {
                 setActiveStockItem({
-                    ...itemToEdit,
+                    productId: itemToEdit.productId,
+                    quantity: itemToEdit.quantity,
+                    price: itemToEdit.price,
+                    tempBrand: itemToEdit.tempBrand,
+                    productCommercialName: itemToEdit.productCommercialName || '',
                     presentationLabel: itemToEdit.presentationLabel || '',
                     presentationContent: itemToEdit.presentationContent || '',
                     presentationAmount: itemToEdit.presentationAmount || ''
@@ -1381,8 +1433,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                                                 const item = enrichedStock.find(s => s.id === selectedStockIds[0]);
                                                 const campaign = item?.campaignId ? campaigns.find(c => c.id === item.campaignId) : null;
 
-                                                if (campaign?.mode === 'GRAIN') {
-                                                    alert('No se permiten ventas en campañas de modo COSECHA. Los socios deben realizar retiros.');
+                                                if (campaign?.mode === 'GRAIN' && item?.source === 'HARVEST') {
+                                                    alert('No se permiten ventas de granos cosechados en campañas de modo COSECHA. Los socios deben realizar retiros.');
                                                     return;
                                                 }
 
@@ -1437,21 +1489,6 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {(lastAction === 'WITHDRAW' || lastAction === 'SALE') && (
-                            <Button
-                                onClick={async () => {
-                                    const client = await db.get('clients', id) as any;
-                                    const warehouse = warehouses.find(w => w.id === lastMovement.warehouseId);
-                                    if (client && warehouse) {
-                                        generateRemitoPDF(lastMovement, client, warehouse.name);
-                                    }
-                                }}
-                                variant="outline"
-                                className="border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                            >
-                                📄 Descargar Remito
-                            </Button>
-                        )}
                         <button
                             onClick={() => {
                                 setLastMovement(null);
@@ -1545,6 +1582,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     onConfirm={handleConfirmMove}
                     onCancel={handleCancelMove}
                     investors={clientInvestors}
+                    campaignShares={campaignShares}
                     campaigns={campaigns}
                     movements={movements}
                     isSaleActive={!!sellingStockId}

@@ -345,7 +345,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         campaignId: campaignId || undefined,
                         productId: product!.id,
                         productBrand: propBrand, // Explicitly set campaign-based brand
+                        productCommercialName: 'propia',
                         quantity: currentQty + dist.amount,
+                        source: 'HARVEST',
                         lastUpdated: new Date().toISOString()
                     });
                 }
@@ -382,6 +384,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                     createdAt: new Date().toISOString(),
                     synced: false,
                     harvestBatchId: batchId,
+                    source: 'HARVEST',
                     transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
                 });
             }
