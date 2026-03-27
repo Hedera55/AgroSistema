@@ -11,12 +11,14 @@ interface ObservationsSectionProps {
     clientId: string;
     farmId: string;
     lotId?: string; // If present, shows lot-specific observations
+    isReadOnly?: boolean;
 }
 
 export function ObservationsSection({
     clientId,
     farmId,
-    lotId
+    lotId,
+    isReadOnly = false
 }: ObservationsSectionProps) {
     const [observations, setObservations] = useState<Observation[]>([]);
     const [loading, setLoading] = useState(true);
@@ -197,22 +199,24 @@ export function ObservationsSection({
                                     <span className="text-slate-400 font-normal">•</span>
                                     <span className="text-slate-500 font-mono font-normal">{formatDate(obs.date)}</span>
                                 </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                    <button
-                                        onClick={() => startEdit(obs)}
-                                        className="p-1 text-slate-400 hover:text-emerald-600 rounded hover:bg-emerald-50"
-                                        title="Editar"
-                                    >
-                                        ✎
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(obs)}
-                                        className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50"
-                                        title="Eliminar"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
+                                {!isReadOnly && (
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                        <button
+                                            onClick={() => startEdit(obs)}
+                                            className="p-1 text-slate-400 hover:text-emerald-600 rounded hover:bg-emerald-50"
+                                            title="Editar"
+                                        >
+                                            ✎
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(obs)}
+                                            className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50"
+                                            title="Eliminar"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                             <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                                 {obs.comments}
@@ -222,7 +226,7 @@ export function ObservationsSection({
                 </div>
             )}
 
-            {!isAdding && (
+            {!isAdding && !isReadOnly && (
                 <div className="mt-2 flex justify-end">
                     <Button size="sm" onClick={() => setIsAdding(true)}>
                         + Nueva Observación

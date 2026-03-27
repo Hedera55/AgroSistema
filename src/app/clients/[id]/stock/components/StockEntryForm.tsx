@@ -371,6 +371,20 @@ const StockEntryFormInternal = memo(({
                                     updateActiveStockItem('presentationContent', found.content.toString());
                                 }
                             }}
+                            onFocus={e => {
+                                try {
+                                    if (typeof (e.target as any).showPicker === 'function') {
+                                        (e.target as any).showPicker();
+                                    }
+                                } catch (err) {}
+                            }}
+                            onClick={e => {
+                                try {
+                                    if (typeof (e.target as any).showPicker === 'function') {
+                                        (e.target as any).showPicker();
+                                    }
+                                } catch (err) {}
+                            }}
                             placeholder="Ej: Bidón, Caja"
                         />
                         <datalist id={`pres-list-${activeProduct?.id || 'default'}`}>

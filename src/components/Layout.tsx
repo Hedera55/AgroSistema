@@ -93,12 +93,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         window.dispatchEvent(new CustomEvent('clientSelectionChanged'));
     };
     // Effective Client ID for navigation context: 
-    // - For CLIENT role: ALWAYS use assignedId.
+    // - For CLIENT role: URL/Persisted if assigned, else assigned_clients[0].
     // - For ADMIN/MASTER: URL takes precedence, then persisted selection.
     const effectiveId = useMemo(() => {
-        if (role === 'CLIENT') return assignedId;
-        return (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
-    }, [role, assignedId, urlClientId, persistedClientId]);
+        const potentialId = (urlClientId || (persistedClientId && persistedClientId !== 'null' ? persistedClientId : null));
+        
+        if (role === 'CLIENT') {
+            const hasAccess = profile?.assigned_clients?.includes(potentialId || '');
+            if (potentialId && hasAccess) return potentialId;
+            return assignedId;
+        }
+        
+        return potentialId;
+    }, [role, assignedId, urlClientId, persistedClientId, profile?.assigned_clients]);
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {
@@ -122,55 +129,95 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             try {
                 // Initial check
                 let allWarehouses = await db.getAll('warehouses');
-                let hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
-                if (hasAnyRecord) return;
+                let clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
+                
+                // --- Part 1: Safe Deduplication of existing leaks ---
+                const namesToCheck = ['Acopio de Granos', 'Galpón'];
+                let hasChanged = false;
 
-                // Robustness: Wait a bit to let any initial sync finish
-                await new Promise(resolve => setTimeout(resolve, 800));
+                for (const name of namesToCheck) {
+                    const duplicates = clientWarehouses.filter((w: Warehouse) => w.name.trim().toLowerCase() === name.toLowerCase());
+                    if (duplicates.length > 1) {
+                        const officialId = name === 'Acopio de Granos' ? `wh-harvest-${effectiveId}` : `wh-default-${effectiveId}`;
+                        // Priority: deterministic ID, else oldest one
+                        const toKeep = duplicates.find((w: Warehouse) => w.id === officialId) || duplicates[0];
+                        const toDelete = duplicates.filter((w: Warehouse) => w.id !== toKeep.id);
 
-                // Final check before creation
-                allWarehouses = await db.getAll('warehouses');
-                hasAnyRecord = allWarehouses.some((w: Warehouse) => w.clientId === effectiveId);
+                        const allStock = await db.getAll('stock');
+                        const allMovements = await db.getAll('movements');
 
-                if (!hasAnyRecord && !isInitializing.current) {
-                    isInitializing.current = true;
-                    console.log(`🚀 Initializing default warehouses for company ${effectiveId}...`);
-                    const now = new Date().toISOString();
+                        for (const wh of toDelete) {
+                            const hasStock = allStock.some((s: any) => s.warehouseId === wh.id);
+                            const hasMovements = allMovements.some((m: any) => m.warehouseId === wh.id);
+                            
+                            if (!hasStock && !hasMovements) {
+                                console.log(`🧹 Safe deduplication: Removing empty duplicate warehouse "${wh.name}" (${wh.id})`);
+                                await db.put('warehouses', { ...wh, deleted: true, synced: false });
+                                hasChanged = true;
+                            }
+                        }
+                    }
+                }
 
-                    const harvestWarehouse = {
-                        id: generateId(),
-                        clientId: effectiveId,
-                        name: 'Acopio de Granos',
-                        createdAt: now,
-                        updatedAt: now,
-                        synced: false,
-                        deleted: false
-                    };
-
-                    const defaultWarehouse = {
-                        id: generateId(),
-                        clientId: effectiveId,
-                        name: 'Galpón',
-                        createdAt: now,
-                        updatedAt: now,
-                        synced: false,
-                        deleted: false
-                    };
-
-                    await Promise.all([
-                        db.put('warehouses', harvestWarehouse),
-                        db.put('warehouses', defaultWarehouse)
-                    ]);
-
-                    // Trigger sync to persist these new warehouses
+                if (hasChanged) {
+                    allWarehouses = await db.getAll('warehouses');
+                    clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
                     syncService.pushChanges();
-                    console.log('✅ Default warehouses created.');
+                }
+
+                // --- Part 2: Creation of missing defaults ---
+                const hasHarvest = clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'acopio de granos');
+                const hasDefault = clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'galpón');
+
+                if ((!hasHarvest || !hasDefault) && !isInitializing.current) {
+                    // Robustness: Wait a bit to let any initial sync finish
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    
+                    // Final check before creation
+                    allWarehouses = await db.getAll('warehouses');
+                    clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
+                    
+                    const stillMissingHarvest = !clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'acopio de granos');
+                    const stillMissingDefault = !clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'galpón');
+
+                    if ((stillMissingHarvest || stillMissingDefault) && !isInitializing.current) {
+                        isInitializing.current = true;
+                        console.log(`🚀 Initializing missing default warehouses for company ${effectiveId}...`);
+                        const now = new Date().toISOString();
+
+                        if (stillMissingHarvest) {
+                            await db.put('warehouses', {
+                                id: `wh-harvest-${effectiveId}`,
+                                clientId: effectiveId,
+                                name: 'Acopio de Granos',
+                                createdAt: now,
+                                updatedAt: now,
+                                synced: false,
+                                deleted: false
+                            });
+                        }
+
+                        if (stillMissingDefault) {
+                            await db.put('warehouses', {
+                                id: `wh-default-${effectiveId}`,
+                                clientId: effectiveId,
+                                name: 'Galpón',
+                                createdAt: now,
+                                updatedAt: now,
+                                synced: false,
+                                deleted: false
+                            });
+                        }
+
+                        syncService.pushChanges();
+                        console.log('✅ Default warehouses verified/created.');
+                    }
                 }
 
                 // Mark as checked for this session
                 sessionStorage.setItem(`warehouse_init_${effectiveId}`, 'true');
             } catch (err) {
-                console.error('Error in warehouse auto-initialization:', err);
+                console.error('Error in warehouse auto-initialization/cleanup:', err);
             }
         };
 
@@ -192,17 +239,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { name: 'Órdenes', href: role === 'CONTRATISTA' ? '/orders' : `/clients/${effectiveId}/orders`, show: role === 'CONTRATISTA' || showClientMenu },
     ].filter(item => item.show), [isMaster, role, effectiveId, showClientMenu]);
 
+    // Don't show sidebar/header on login page or public KML views
+    if (pathname === '/login' || pathname?.startsWith('/kml') || pathname?.includes('/public/map/')) {
+        return <>{children}</>;
+    }
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
             </div>
         );
-    }
-
-    // Don't show sidebar/header on login page
-    if (pathname === '/login') {
-        return <>{children}</>;
     }
 
     return (

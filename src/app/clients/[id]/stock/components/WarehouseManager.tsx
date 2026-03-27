@@ -68,7 +68,7 @@ function WarehouseManagerInternal({
         ))
     ], [warehouses]);
 
-    if (!showWarehouses || isReadOnly) return null;
+    if (!showWarehouses) return null;
 
     return (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn mb-6">
@@ -94,12 +94,14 @@ function WarehouseManagerInternal({
                     >
                         Seleccionar todos
                     </button>
-                    <button
-                        onClick={() => setShowWarehouseForm(!showWarehouseForm)}
-                        className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
-                    >
-                        {showWarehouseForm ? 'Cancelar' : 'Agregar'}
-                    </button>
+                    {!isReadOnly && (
+                        <button
+                            onClick={() => setShowWarehouseForm(!showWarehouseForm)}
+                            className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-widest"
+                        >
+                            {showWarehouseForm ? 'Cancelar' : 'Agregar'}
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowWarehouses(false)}
                         className="text-slate-400 hover:text-slate-600 p-1"
@@ -248,29 +250,33 @@ function WarehouseManagerInternal({
                                                         Abrir
                                                     </button>
                                                 )}
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingWarehouseId(w.id);
-                                                        setEditName(w.name);
-                                                    }}
-                                                    className="text-xs font-bold text-slate-500 hover:text-emerald-600 px-2 transition-colors"
-                                                >
-                                                    Editar
-                                                </button>
+                                                {!isReadOnly && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingWarehouseId(w.id);
+                                                            setEditName(w.name);
+                                                        }}
+                                                        className="text-xs font-bold text-slate-500 hover:text-emerald-600 px-2 transition-colors"
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                )}
                                             </>
                                         )}
-                                        <button
-                                            onClick={() => {
-                                                if (editingWarehouseId === w.id) {
-                                                    setEditingWarehouseId(null);
-                                                } else {
-                                                    if (confirm('¿Eliminar galpón?')) deleteWarehouse(w.id);
-                                                }
-                                            }}
-                                            className="text-slate-400 hover:text-red-500 p-2"
-                                        >
-                                            ✕
-                                        </button>
+                                        {!isReadOnly && (
+                                            <button
+                                                onClick={() => {
+                                                    if (editingWarehouseId === w.id) {
+                                                        setEditingWarehouseId(null);
+                                                    } else {
+                                                        if (confirm('¿Eliminar galpón?')) deleteWarehouse(w.id);
+                                                    }
+                                                }}
+                                                className="text-slate-400 hover:text-red-500 p-2"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>

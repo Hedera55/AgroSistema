@@ -1196,18 +1196,18 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
                                     {selectedFarmId === farm.id && (
                                         <div className="flex justify-end pt-2 border-t border-slate-200/50 animate-fadeIn">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openPanel('observations', farm.id, farm.id, null, farm.name);
-                                                }}
-                                                className={`text-xs font-bold px-3 py-1.5 rounded border transition-all ${activePanel?.type === 'observations' && activePanel?.id === farm.id
-                                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 shadow-sm'
-                                                    }`}
-                                            >
-                                                Observaciones
-                                            </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openPanel('observations', farm.id, farm.id, null, farm.name);
+                                                    }}
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all ${activePanel?.type === 'observations' && activePanel?.id === farm.id
+                                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 shadow-sm'
+                                                        }`}
+                                                >
+                                                    Observaciones
+                                                </button>
                                         </div>
                                     )}
                                 </div>
@@ -1374,37 +1374,39 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                     <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 uppercase tracking-widest flex-shrink-0">{lot.hectares} ha</span>
                                                                 </div>
 
-                                                                {!isReadOnly && (
-                                                                    <div className="flex gap-2 flex-shrink-0 mt-0.5">
+                                                                <div className="flex gap-2 flex-shrink-0 mt-0.5">
+                                                                    {lot.boundary && (
                                                                         <Link
                                                                             href={`/clients/${id}/map?selected=${lot.id}`}
                                                                             onClick={(e) => e.stopPropagation()}
-                                                                            className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${lot.boundary
-                                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                                                                : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed hidden'}`}
+                                                                            className="text-xs font-semibold px-2 py-1 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors"
                                                                         >
                                                                             Ver mapa
                                                                         </Link>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleEditLot(lot);
-                                                                            }}
-                                                                            className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
-                                                                        >
-                                                                            Editar
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleDeleteLot(lot.id);
-                                                                            }}
-                                                                            className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-red-300 hover:text-red-700 transition-colors"
-                                                                        >
-                                                                            Eliminar
-                                                                        </button>
-                                                                    </div>
-                                                                )}
+                                                                    )}
+                                                                    {!isReadOnly && (
+                                                                        <>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleEditLot(lot);
+                                                                                }}
+                                                                                className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                                                                            >
+                                                                                Editar
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteLot(lot.id);
+                                                                                }}
+                                                                                className="text-xs font-semibold bg-white text-slate-500 px-2 py-1 rounded border border-slate-200 hover:border-red-300 hover:text-red-700 transition-colors"
+                                                                            >
+                                                                                Eliminar
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                             </div>
 
                                                             {/* Selected View: 3-Line Layout */}
@@ -1442,7 +1444,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                 lot.status === 'NOT_SOWED' ? 'A' : 'V'}
                                                                                     </span>
                                                                                     {/* Buttons moved back here */}
-                                                                                    {lot.status === 'HARVESTED' && (
+                                                                                    {/* Buttons hidden for clients */}
+                                                    {!isReadOnly && lot.status === 'HARVESTED' && (
                                                                                         <div className="flex gap-1 ml-2">
                                                                                             <button
                                                                                                 onClick={(e) => {
@@ -1470,22 +1473,20 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             )}
                                                                         </div>
 
-                                                                        {!isReadOnly && (
-                                                                            <div className="flex ml-auto">
-                                                                                <button
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        openPanel('observations', lot.id, selectedFarmId!, lot.id, lot.name, `Lote de ${farms.find(f => f.id === selectedFarmId)?.name}`);
-                                                                                    }}
-                                                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all uppercase tracking-tight ${activePanel?.type === 'observations' && activePanel?.id === lot.id
-                                                                                        ? 'bg-emerald-600 text-white border-emerald-600'
-                                                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
-                                                                                        }`}
-                                                                                >
-                                                                                    Observaciones
-                                                                                </button>
-                                                                            </div>
-                                                                        )}
+                                                                        <div className="flex ml-auto">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    openPanel('observations', lot.id, selectedFarmId!, lot.id, lot.name, `Lote de ${farms.find(f => f.id === selectedFarmId)?.name}`);
+                                                                                }}
+                                                                                className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all uppercase tracking-tight ${activePanel?.type === 'observations' && activePanel?.id === lot.id
+                                                                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
+                                                                                    }`}
+                                                                            >
+                                                                                Observaciones
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
 
                                                                     {/* Line 3: Crop Info (Clean & Simple) */}
@@ -1496,7 +1497,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             {/* Reset / Cancel Buttons moved here */}
 
                                                                             {lot.status === 'SOWED' && (
-                                                                                !isHarvesting && (
+                                                                                !isReadOnly && !isHarvesting && (
                                                                                     <button
                                                                                         onClick={(e) => {
                                                                                             e.stopPropagation();
@@ -1526,7 +1527,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                             {lotHarvestPlan && (
                                                                                 (!lot.status || lot.status !== 'HARVESTED') ? (
                                                                                     <div className="ml-auto flex items-center gap-2">
-                                                                                        {!isHarvesting && (
+                                                                                        {!isReadOnly && !isHarvesting && (
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
@@ -1552,7 +1553,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             </button>
                                                                                         )}
 
-                                                                                        {!isHarvesting && (
+                                                                                        {!isReadOnly && !isHarvesting && (
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
@@ -1676,12 +1677,15 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             </div>
                         </div>
                         <div className="px-2 pb-2">
-                            {activePanel.type === 'observations' && activePanel.farmId && (
-                                <ObservationsSection
-                                    clientId={id}
-                                    farmId={activePanel.farmId}
-                                    lotId={activePanel.lotId || undefined}
-                                />
+                            {activePanel.type === 'observations' && (
+                                <div ref={obsSectionRef} className="p-6 bg-white animate-fadeIn">
+                                    <ObservationsSection
+                                        clientId={id}
+                                        farmId={activePanel.farmId!}
+                                        lotId={activePanel.lotId || undefined}
+                                        isReadOnly={isReadOnly}
+                                    />
+                                </div>
                             )}
                             {activePanel.type === 'crop_assign' && (
                                 <div className="p-6 bg-white animate-fadeIn">
@@ -1741,8 +1745,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         clientId={id}
                                         lotId={activePanel.id!}
                                         refreshKey={historyRefreshKey}
+                                        onSelectEvent={setSelectedEvent}
                                         onEditEvent={handleEditHarvest}
                                         onDeleteBatch={handleDeleteHarvestBatch}
+                                        isReadOnly={isReadOnly}
                                     />
 
                                 </div>
@@ -1901,6 +1907,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             lots={allClientLots}
                                             campaigns={campaigns}
                                             onClose={() => setSelectedEvent(null)}
+                                            isReadOnly={isReadOnly}
                                         />
                                     )
                                 )}

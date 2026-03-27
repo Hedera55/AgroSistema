@@ -492,16 +492,16 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                                 e.stopPropagation();
                                                                 if (order.remitoImageUrl) {
                                                                     window.open(order.remitoImageUrl, '_blank');
-                                                                } else if (client) {
+                                                                } else if (client && !isReadOnly) {
                                                                     generateRemitoPDF(order, client);
                                                                 }
                                                             }}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.remitoImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 ' + (!isReadOnly ? 'hover:border-red-400' : 'opacity-50 cursor-default')}`}
                                                         >
                                                             R
                                                         </button>
                                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                            {order.remitoImageUrl ? 'Ver Remito' : 'Cargar Remito'}
+                                                            {order.remitoImageUrl ? 'Ver Remito' : (isReadOnly ? 'Sin remito cargado' : 'Cargar Remito')}
                                                         </div>
                                                     </div>
 
@@ -521,14 +521,18 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                setSelectedOrderId(prev => prev === order.id ? null : order.id);
+                                                                if (order.facturaImageUrl) {
+                                                                    window.open(order.facturaImageUrl, '_blank');
+                                                                } else if (!isReadOnly) {
+                                                                    setSelectedOrderId(prev => prev === order.id ? null : order.id);
+                                                                }
                                                             }}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 hover:border-red-400'}`}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-md text-[10px] font-black transition-colors bg-white border ${order.facturaImageUrl ? 'border-emerald-500 text-emerald-500 hover:bg-emerald-50' : 'border-red-300 text-red-300 ' + (!isReadOnly ? 'hover:border-red-400' : 'opacity-50 cursor-default')}`}
                                                         >
                                                             F
                                                         </button>
                                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded shadow-lg border border-slate-100 whitespace-nowrap pointer-events-none animate-fadeIn z-10">
-                                                            {order.facturaImageUrl ? 'Ver Factura' : 'Cargar Factura'}
+                                                            {order.facturaImageUrl ? 'Ver Factura' : (isReadOnly ? 'Sin factura cargada' : 'Cargar Factura')}
                                                         </div>
                                                     </div>
 
@@ -742,7 +746,7 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                             setEditingOrderId(orderId);
                             setIsCreatingOrder(false);
                         }}
-
+                        isReadOnly={isReadOnly}
                         warehouses={warehouses}
                         createdBy={displayName || 'Sistema'}
                         lots={lots}

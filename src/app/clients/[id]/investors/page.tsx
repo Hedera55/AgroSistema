@@ -887,7 +887,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     />
                                 </div>
                                 <div className="flex items-center gap-2 whitespace-nowrap">
-                                    <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">Repartición de</span>
+                                    <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">{newCampaignMode === 'MIXED' ? 'Repartición' : 'Repartición de'}</span>
                                     <select
                                         value={newCampaignMode}
                                         onChange={e => setNewCampaignMode(e.target.value as CampaignMode)}
@@ -930,7 +930,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                 />
                                             </div>
                                             <div className="flex items-center gap-2 whitespace-nowrap">
-                                                <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">Repartición de</span>
+                                                <span className="text-[10px] font-medium text-slate-900 uppercase tracking-widest">{camp.mode === 'MIXED' ? 'Repartición' : 'Repartición de'}</span>
                                                 <select
                                                     value={camp.mode}
                                                     onChange={e => updateCampaign({ ...camp, mode: e.target.value as CampaignMode })}
@@ -962,7 +962,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                             {/* Right - Actions & Metadata */}
                                             <div className="flex items-center gap-4 shrink-0 px-2 py-1">
                                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] whitespace-nowrap">
-                                                    Repartición de {camp.mode === 'GRAIN' ? 'Granos' : camp.mode === 'MIXED' ? 'Mixta' : 'Saldo Monetario'}
+                                                    {camp.mode === 'MIXED' ? 'Repartición Mixta' : `Repartición de ${camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}`}
                                                 </span>
 
                                                 <div className="flex items-center gap-1.5">
@@ -1015,7 +1015,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     <div className="flex justify-between items-center py-2.5">
                                         <span className="font-medium text-slate-800 text-sm">{camp.name}</span>
                                         <span className={`text-[10px] font-medium uppercase tracking-widest text-slate-900`}>
-                                            Repartición de {camp.mode === 'GRAIN' ? 'Granos' : camp.mode === 'MIXED' ? 'Mixta' : 'Saldo Monetario'}
+                                            {camp.mode === 'MIXED' ? 'Repartición Mixta' : `Repartición de ${camp.mode === 'GRAIN' ? 'Granos' : 'Saldo Monetario'}`}
                                         </span>
                                     </div>
                                 )}

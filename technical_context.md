@@ -171,6 +171,12 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Granularity Rules**: During replay, items MUST be matched using: `productId` + `warehouseId` + `productBrand` + `campaignId` + `presentationLabel` + `presentationContent`. Ignoring brand or campaign during aggregation leads to stock corruption.
 - **"Desde cero" (Start from Zero)**: Allows rebuilding the cache from the very first movement, ignoring all snapshots. This is the ultimate "fix-all" for state inconsistencies.
 
+## 🛡️ Distributed Entity Initialization
+- **Problem**: When multiple users/tabs initialize the same company (e.g., during first login), race conditions can lead to duplicate "Default" entities (like Warehouses or Folders) if random UUIDs are used.
+- **Solution (Deterministic IDs)**: Initialization logic MUST use deterministic IDs derived from the parent entity (e.g., `wh-harvest-${clientId}`).
+- **Upsert Pattern**: By using a predictable ID, concurrent initialization attempts will result in a database **UPSERT** rather than a duplication, ensuring that only one set of default records exists across all synced clients.
+- **Auto-Cleanup**: When detecting existing duplicates (from legacy random IDs), implement a "Safe Deduplication" routine that marks empty records (no stock, no movements) as deleted.
+
 ## 🛠️ Infrastructure & Sync
 - **Invalid UUIDs**: The sync service (`sync.ts`) automatically cleans up legacy local IDs (e.g., "grain-soja") to prevent Supabase type errors.
 - **Registration Schema Integrity**: The database schema MUST align with the fields used in registration triggers and frontend forms.
@@ -230,6 +236,14 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Reasoning**: Field work often occurs in areas with poor connectivity. Using a local IndexedDB store ensures **instant rendering** and extreme speed when handling large GeoJSON boundaries for multiple farms and lots, eliminating network latency during navigation.
 - **Public Map**: Powered by **Direct Supabase Fetches**.
     - **Reasoning**: Designed for lightweight, one-off guest access (QR codes). Because external users do not have a synchronized local database, the system fetches data on-the-fly directly from Supabase, balancing simplicity for the guest with consistency for the owner.
+
+### Hydration & Public Route Verification
+- **Problem**: Next.js hydration errors can occur if the server and client render different initial HTML (e.g., a global loading spinner shown on the client but not the server).
+- **Rule**: The root `Layout.tsx` MUST prioritize public route checks (`/login`, `/kml`, `/public/map/`) before rendering the global `loading` state.
+- **Implementation**:
+    - Identify public routes using `pathname.startsWith` or `pathname.includes`.
+    - Return `children` immediately for these routes to ensure consistent SSR/CSR output.
+- **Benefit**: Prevents "Hydration failed" crashes in private windows and ensures immediate access to public-facing reports and login screens.
 
 ## 📍 QR & KML System
 - **QR Target**: Scans point to the Public Map page `${window.location.origin}/public/map/[clientId]?orderId=...` (or the direct KML download route if legacy).

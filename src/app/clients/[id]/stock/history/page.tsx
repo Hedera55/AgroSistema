@@ -741,7 +741,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     amount: movementItems.reduce((acc, it) => acc + (it.quantity * (it.price || 0)), 0),
                     quantity: validItems.length === 1 ? normalizeNumber(singleValidItem!.quantity) : validItems.length,
                     unit: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.unit || 'L') : 'items',
-                    productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
+                    productId: validItems.length === 1 ? singleValidItem!.productId : validItems[0].productId,
                     productName: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.name || 'Unknown') : 'Compra de insumos',
                     productBrand: validItems.length === 1 ? singleValidItem!.tempBrand : undefined,
                     purchasePrice: rootPurchasePrice
@@ -1269,7 +1269,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
             {selectedOrder && client && (
                 <div className="mt-4">
-                    <OrderDetailView order={selectedOrder} client={client} onClose={() => setSelectedOrder(null)} warehouses={warehousesFull} createdBy={displayName || 'Sistema'} />
+                    <OrderDetailView order={selectedOrder} client={client} onClose={() => setSelectedOrder(null)} warehouses={warehousesFull} createdBy={displayName || 'Sistema'} isReadOnly={isReadOnly} />
                 </div>
             )}
 

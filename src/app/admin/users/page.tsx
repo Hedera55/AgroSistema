@@ -72,11 +72,10 @@ export default function UserManagementPage() {
         try {
             const updateData: any = { role: newRole };
 
-            // Requirement: Clients can only have ONE company assigned (or none initially)
-            // If role changes to CLIENT, we clear existing assignments to avoid forbidden state
-            if (newRole === 'CLIENT') {
-                updateData.assigned_clients = [];
-            }
+            // Removed: Clients can now have MULTIPLE companies assigned
+            // if (newRole === 'CLIENT') {
+            //     updateData.assigned_clients = [];
+            // }
 
             const { error } = await supabase
                 .from('profiles')
@@ -103,12 +102,7 @@ export default function UserManagementPage() {
 
             let newAssignments = [...(user.assigned_clients || [])];
             if (isAssigned) {
-                if (user.role === 'CLIENT') {
-                    // For clients, only one is allowed. Replace the previous one.
-                    newAssignments = [clientId];
-                } else {
-                    if (!newAssignments.includes(clientId)) newAssignments.push(clientId);
-                }
+                if (!newAssignments.includes(clientId)) newAssignments.push(clientId);
             } else {
                 newAssignments = newAssignments.filter(id => id !== clientId);
             }

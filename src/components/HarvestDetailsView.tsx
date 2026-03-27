@@ -81,7 +81,7 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                             Fichas ({allSheets.length})
                         </button>
                     )}
-                    {onEdit && (
+                    {onEdit && !isReadOnly && (
                         <button
                             onClick={onEdit}
                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"

@@ -24,11 +24,12 @@ export default function ClientsPage() {
         setPersistedClientId(saved);
     }, []);
 
-    useEffect(() => {
-        if (role === 'CLIENT' && profile?.assigned_clients?.length === 1) {
-            router.push(`/clients/${profile.assigned_clients[0]}`);
-        }
-    }, [role, profile, router]);
+    // Removed: Auto-redirecting clients with only one company
+    // useEffect(() => {
+    //     if (role === 'CLIENT' && profile?.assigned_clients?.length === 1) {
+    //         router.push(`/clients/${profile.assigned_clients[0]}`);
+    //     }
+    // }, [role, profile, router]);
     const [showForm, setShowForm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);

@@ -11,9 +11,10 @@ interface LotHistoryProps {
     onSelectEvent?: (event: any) => void;
     onEditEvent?: (event: any) => void;
     onDeleteBatch?: (batchId: string, referenceId: string) => Promise<void>;
+    isReadOnly?: boolean;
 }
 
-export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onEditEvent, onDeleteBatch }: LotHistoryProps) {
+export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onEditEvent, onDeleteBatch, isReadOnly = false }: LotHistoryProps) {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -181,7 +182,7 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                             </td>
                             <td className="px-4 py-3 align-top text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                    {event.type === 'HARVEST' && onEditEvent && (
+                                    {!isReadOnly && event.type === 'HARVEST' && onEditEvent && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -193,7 +194,7 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                                         </button>
                                     )}
-                                    {event.type === 'HARVEST' && onDeleteBatch && event.movements?.[0]?.harvestBatchId && (
+                                    {!isReadOnly && event.type === 'HARVEST' && onDeleteBatch && event.movements?.[0]?.harvestBatchId && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();

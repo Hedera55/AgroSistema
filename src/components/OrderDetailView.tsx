@@ -12,10 +12,11 @@ interface OrderDetailViewProps {
     lots?: any[];
     campaigns?: any[];
     onEdit?: (id: string, clientId: string) => void;
+    isReadOnly?: boolean;
 }
 
 export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
-    order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [], onEdit
+    order, client, onClose, createdBy, warehouses = [], lots = [], campaigns = [], onEdit, isReadOnly = false
 }) => {
     const { role } = useAuth();
     const [showFullNote, setShowFullNote] = useState(false);
@@ -117,7 +118,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                         )}
                     </div>
                     <div className="flex gap-2">
-                        {role !== 'CONTRATISTA' && (
+                        {!isReadOnly && role !== 'CONTRATISTA' && (
                             <button
                                 onClick={() => onEdit?.(order.id, order.clientId)}
                                 className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"

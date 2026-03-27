@@ -183,6 +183,7 @@ export default function OrderHistoryPage({ params }: { params: Promise<{ id: str
                         client={client}
                         onClose={() => setSelectedOrder(null)}
                         warehouses={warehouses}
+                        isReadOnly={true}
                     />
                 </div>
             )}
