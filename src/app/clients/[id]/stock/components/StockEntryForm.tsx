@@ -621,8 +621,10 @@ const StockEntryFormInternal = memo(({
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
                             value={selectedWarehouseId || (activeWarehouseIds.length > 0 ? activeWarehouseIds[0] : '')}
-                            onChange={e => setSelectedWarehouseId(e.target.value)}
+                            onChange={e => { (e.target as HTMLSelectElement).setCustomValidity(''); setSelectedWarehouseId(e.target.value); }}
                             required
+                            onInvalid={e => (e.target as HTMLSelectElement).setCustomValidity('Seleccione un galpón')}
+                            onInput={e => (e.target as HTMLSelectElement).setCustomValidity('')}
                         >
                             {warehouseOptions}
                         </select>

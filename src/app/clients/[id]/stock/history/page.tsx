@@ -159,20 +159,26 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             )
             .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
+        const clientProducts = allProducts.filter((p: any) => p.clientId === clientId);
+        const clientOrders = allOrders.filter((o: any) => o.clientId === clientId);
+        const clientWarehouses = allWarehouses.filter((w: any) => w.clientId === clientId);
+        const clientFarms = allFarms.filter((f: any) => f.clientId === clientId);
+        const clientLots = allLots.filter((l: any) => l.clientId === clientId);
+
         const priceMap: Record<string, number> = {};
         const pMap: Record<string, Product> = {};
-        allProducts.forEach((p: any) => {
+        clientProducts.forEach((p: any) => {
             if (p.price) priceMap[p.id] = p.price;
             pMap[p.id] = p;
         });
 
         const orderTypeMap: Record<string, string> = {};
-        allOrders.forEach((o: any) => {
+        clientOrders.forEach((o: any) => {
             orderTypeMap[o.id] = o.type;
         });
 
         const wMap: Record<string, string> = {};
-        allWarehouses.forEach((w: any) => {
+        clientWarehouses.forEach((w: any) => {
             wMap[w.id] = w.name;
         });
 
@@ -180,11 +186,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         setProductsKey(priceMap);
         setProductsData(pMap);
         setOrdersKey(orderTypeMap);
-        setOrdersData(allOrders);
-        setFarms(allFarms);
-        setLots(allLots);
+        setOrdersData(clientOrders);
+        setFarms(clientFarms);
+        setLots(clientLots);
         setWarehousesKey(wMap);
-        setWarehousesFull(allWarehouses);
+        setWarehousesFull(clientWarehouses);
         setLoading(false);
     }, [clientId]);
 
@@ -559,6 +565,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         if (activeStockItem.productId && activeStockItem.quantity) allItemsToProcess.push(activeStockItem);
         const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
         if (validItems.length === 0) return;
+
+        if (!selectedWarehouseId) {
+            alert("Seleccione un destino");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {

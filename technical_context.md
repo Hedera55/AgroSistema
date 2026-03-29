@@ -264,3 +264,25 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 ## 📖 Documentation
 - **Technical Context**: Located in `.gemini/antigravity/brain/` (this file).
 - **Knowledge Base**: `knowledge.md` is located in the **apps main folder**.
+
+## 📜 Recent Resolutions & Institutional Memory (2026-03-29)
+
+### 🛡️ Data Isolation (Client-Side)
+- **Problem**: In pages like **Stock History**, data was being fetched using `db.getAll()` without checking the `clientId`, leading to "cross-pollination" where dropdowns showed every warehouse or order in the system.
+- **Rule**: Every `loadData` function in a client-specific route MUST explicitly filter `warehouses`, `products`, `orders`, `farms`, and `lots` by the current `clientId`.
+- **Warning**: Do not rely on hooks alone if the component also uses manual `db.getAll` calls; ensure the local state is also restricted.
+
+### 🏗️ Code Integrity & Recovery
+- **Corruption Risk**: During complex JSX structural changes, stray braces or missing layout wrappers (`div`s) can break the entire file and the build.
+- **Recovery Pattern**: If standard code editing tools fail to find/replace corrupted segments, use **Node.js line-level repair scripts** to surgically fix specific line numbers. NEVER delete the root `div` layout of the page as it contains critical functional blocks.
+
+### 📦 Product Catalog Imports
+- **UX Requirement**: Product imports must be **silent**. No success or "skipped item" popups should be shown to the user.
+- **Data Integrity**: The import logic MUST preserve `standardPresentations`. If the JSON contains packaging information, it must be mapped to the `standardPresentations` field of the new product record to avoid losing content metadata.
+
+### 🧪 Advanced Form Validation
+- **Custom Tooltips**: For warehouse selection, the required browser-native tooltip text is **"Seleccione un galpón"**.
+- **Race Condition Fix**: To ensure the error tooltip disappears as soon as a user makes a choice, the `setCustomValidity('')` method must be called in both the `onInput` AND the `onChange` event handlers. This prevents the browser from "holding" the invalid state after a valid selection is picked.
+
+### 👥 Role-Based Security
+- **Contractor Barrier**: The **Galpón Virtual** (Virtual Warehouse) is strictly prohibited for users with the `CONTRATISTA` role. This is a business-critical rule to protect inventory levels and internal pricing.

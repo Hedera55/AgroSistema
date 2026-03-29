@@ -124,6 +124,9 @@ create table if not exists inventory_movements (
   date date not null,
   time text,
   reference_id text,
+  seller_name text,
+  factura_date text,
+  due_date text,
   notes text,
   created_by text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null

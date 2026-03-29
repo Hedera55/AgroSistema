@@ -164,14 +164,32 @@ function ProductCatalogInternal({
                                             try {
                                                 const json = JSON.parse(event.target?.result as string);
                                                 if (Array.isArray(json)) {
-                                                    if (confirm(`¿Importar ${json.length} insumos? Se agregarán al catálogo existente.`)) {
-                                                        await importProducts(json);
-                                                        alert('Insumos importados correctamente');
+                                                    const validProducts = json.filter(p => {
+                                                        const isPropia = 
+                                                            (p.commercialName?.toLowerCase().trim() === 'propia') || 
+                                                            (p.brandName?.toLowerCase().trim() === 'propia');
+                                                        return !isPropia;
+                                                    });
+
+                                                    const discarded = json.length - validProducts.length;
+
+                                                    if (validProducts.length === 0) {
+                                                        console.log(`No se importaron insumos. Se descartaron ${discarded} insumo(s) de cosecha propia que no deben ingresar al catálogo.`);
+                                                        return;
+                                                    }
+
+                                                    let confirmMessage = `¿Importar ${validProducts.length} insumos? Se agregarán al catálogo existente.`;
+                                                    if (discarded > 0) {
+                                                        confirmMessage += `\n(Se descartarán ${discarded} insumo(s) de cosecha propia y no serán importados)`;
+                                                    }
+
+                                                    if (confirm(confirmMessage)) {
+                                                        await importProducts(validProducts);
+                                                        console.log('Insumos importados correctamente');
                                                     }
                                                 }
                                             } catch (err) {
                                                 console.error(err);
-                                                alert('Error al leer el archivo JSON');
                                             }
                                             e.target.value = '';
                                         };

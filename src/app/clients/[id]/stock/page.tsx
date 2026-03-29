@@ -765,6 +765,11 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
         if (validItems.length === 0) return;
 
+        if (!selectedWarehouseId) {
+            alert("Seleccione un destino");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const movementId = generateId();
@@ -1356,17 +1361,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         });
     }, []);
 
-
-
-
-
-
     const handleImportProducts = React.useCallback(async (importedProducts: any[]) => {
         setIsSubmitting(true);
         try {
-            let importedCount = 0;
             for (const p of importedProducts) {
-                // Check if exists
                 const exists = availableProducts.find(existing =>
                     (existing.activeIngredient || '').toLowerCase() === (p.activeIngredient || '').toLowerCase() &&
                     (existing.brandName || '').toLowerCase() === (p.brandName || '').toLowerCase() &&
@@ -1376,22 +1374,19 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                 if (!exists) {
                     await addProduct({
-                        name: p.name, // Fallback if PA missing, or just name
+                        name: p.name,
                         brandName: p.brandName,
                         commercialName: p.commercialName,
                         activeIngredient: p.activeIngredient || p.name,
                         type: p.type,
                         unit: p.unit,
+                        standardPresentations: p.standardPresentations,
                         clientId: id
                     });
-                    importedCount++;
                 }
             }
-            if (importedCount > 0) alert(`${importedCount} insumos importados.`);
-            else alert('No se importaron insumos nuevos (todos ya existían).');
         } catch (error) {
             console.error('Import error:', error);
-            alert('Error al importar insumos.');
         } finally {
             setIsSubmitting(false);
         }

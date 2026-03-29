@@ -36,6 +36,7 @@ export default function ClientsPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [editingClientId, setEditingClientId] = useState<string | null>(null);
     const [isCuitSettled, setIsCuitSettled] = useState(false);
+    const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
     const handleDeselect = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -112,6 +113,7 @@ export default function ClientsPage() {
                     partners: newClient.partners
                 };
                 await addClient(clientData);
+                setShowSuccessMessage(true);
             }
             setShowForm(false);
             setIsEditing(false);
@@ -128,6 +130,11 @@ export default function ClientsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Empresas</h1>
+                    {showSuccessMessage && (
+                        <div className="mt-2 text-emerald-600 font-bold animate-fadeIn">
+                            Recuerde asignar empresa
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     {selectedId && (isMaster || role === 'ADMIN') && (
