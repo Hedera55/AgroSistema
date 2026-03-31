@@ -115,7 +115,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                         )}
                     </div>
                     <div className="flex gap-2">
-                        {!isReadOnly && role !== 'CONTRATISTA' && (
+                        {onEdit && !isReadOnly && (
                             <button
                                 onClick={() => onEdit?.(order.id, order.clientId)}
                                 className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"

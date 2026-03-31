@@ -8,11 +8,24 @@ interface MovementDetailsViewProps {
     originName?: string;
     destName?: string;
     onClose: () => void;
+    onEdit?: () => void;
+    isReadOnly?: boolean;
     typeLabel: string;
     campaigns?: Campaign[];
 }
 
-export function MovementDetailsView({ movement, client, order, originName, destName, onClose, typeLabel, campaigns }: MovementDetailsViewProps) {
+export function MovementDetailsView({
+    movement,
+    client,
+    order,
+    originName,
+    destName,
+    onClose,
+    onEdit,
+    isReadOnly = false,
+    typeLabel,
+    campaigns
+}: MovementDetailsViewProps) {
     const logistics = movement as any;
     const hasLogistics =
         logistics.truckDriver ||
@@ -56,13 +69,24 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                         Detalles de {typeLabel.replace('I-', '').replace('E-', '').toLowerCase()}
                     </h3>
                 </div>
-                <button
-                    onClick={onClose}
-                    className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-                    title="Cerrar Detalles"
-                >
-                    ✕
-                </button>
+                <div className="flex items-center gap-2">
+                    {onEdit && !isReadOnly && (
+                        <button
+                            onClick={onEdit}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                            title="Editar"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                    )}
+                    <button
+                        onClick={onClose}
+                        className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                        title="Cerrar Detalles"
+                    >
+                        ✕
+                    </button>
+                </div>
             </div>
 
             <div className="p-8">
@@ -73,7 +97,11 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8">
                             <div>
                                 <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Fecha / Hora</span>
-                                <span className="text-sm font-bold text-slate-700">{movement.createdAt ? new Date(movement.createdAt).toLocaleString() : (movement.date || '-')}</span>
+                                <span className="text-sm font-bold text-slate-700">
+                                    {movement.createdAt 
+                                        ? new Date(movement.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) 
+                                        : (movement.date || '-')}
+                                </span>
                             </div>
                             {(movement as any).isTransfer ? (
                                 <div>
@@ -91,11 +119,11 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                 </div>
                             )}
 
-                            {movement.campaignId && campaigns && (
+                            {campaigns && (
                                 <div>
                                     <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Campaña</span>
                                     <span className="text-sm font-bold text-emerald-600">
-                                        {campaigns.find(c => c.id === movement.campaignId)?.name || 'Campaña Desconocida'}
+                                        {campaigns.find(c => c.id === (movement.campaignId || order?.campaignId))?.name || 'No asignada'}
                                     </span>
                                 </div>
                             )}
@@ -196,20 +224,20 @@ export function MovementDetailsView({ movement, client, order, originName, destN
                                         { label: 'Empresa Destino', value: logistics.destinationCompany || logistics.deliveryLocation },
                                         { label: 'Dirección Destino', value: logistics.destinationAddress },
                                         { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
-                                        { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString() : null },
-                                        { label: 'Distancia (Km)', value: (logistics.distanceKm != null && logistics.distanceKm !== '') ? `${Number(logistics.distanceKm).toLocaleString()} Km` : null },
-                                        { label: 'Tarifa Flete', value: (logistics.freightTariff != null && logistics.freightTariff !== '') ? `USD ${Number(logistics.freightTariff).toLocaleString()}` : null },
-                                        { label: 'Nº Descarga', value: logistics.dischargeNumber },
-                                        { label: 'Humedad', value: (logistics.humidity != null && logistics.humidity !== '') ? `${Number(logistics.humidity).toLocaleString()} %` : null },
-                                        { label: 'P. Hectolítrico', value: (logistics.hectoliterWeight != null && logistics.hectoliterWeight !== '') ? Number(logistics.hectoliterWeight).toLocaleString() : null },
-                                        { label: 'Peso Bruto', value: (logistics.grossWeight != null && logistics.grossWeight !== '') ? `${Number(logistics.grossWeight).toLocaleString()} Kg` : null },
-                                        { label: 'Peso Tara', value: (logistics.tareWeight != null && logistics.tareWeight !== '') ? `${Number(logistics.tareWeight).toLocaleString()} Kg` : null },
-                                    ].filter(row => row.value != null && row.value !== '').map((row, idx) => (
-                                        <div key={idx}>
-                                            <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{row.label}</span>
-                                            <span className="text-sm font-bold text-slate-700">{row.value}</span>
-                                        </div>
-                                    ))}
+                            { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : null },
+                            { label: 'Distancia (Km)', value: (logistics.distanceKm != null && logistics.distanceKm !== '') ? `${Number(logistics.distanceKm).toLocaleString()} Km` : null },
+                            { label: 'Tarifa Flete', value: (logistics.freightTariff != null && logistics.freightTariff !== '') ? `USD ${Number(logistics.freightTariff).toLocaleString()}` : null },
+                            { label: 'Nº Descarga', value: logistics.dischargeNumber },
+                            { label: 'Humedad', value: (logistics.humidity != null && logistics.humidity !== '') ? `${Number(logistics.humidity).toLocaleString()} %` : null },
+                            { label: 'P. Hectolítrico', value: (logistics.hectoliterWeight != null && logistics.hectoliterWeight !== '') ? Number(logistics.hectoliterWeight).toLocaleString() : null },
+                            { label: 'Peso Bruto', value: (logistics.grossWeight != null && logistics.grossWeight !== '') ? `${Number(logistics.grossWeight).toLocaleString()} Kg` : null },
+                            { label: 'Peso Tara', value: (logistics.tareWeight != null && logistics.tareWeight !== '') ? `${Number(logistics.tareWeight).toLocaleString()} Kg` : null },
+                        ].filter(row => row.value != null && row.value !== '').map((row, idx) => (
+                            <div key={idx}>
+                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{row.label}</span>
+                                <span className="text-sm font-bold text-slate-700">{row.value}</span>
+                            </div>
+                        ))}
                                 </div>
                             ) : (
                                 <div className="text-slate-400 text-sm font-bold italic py-2">

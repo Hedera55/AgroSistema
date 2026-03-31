@@ -1123,28 +1123,26 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         if (dispName.toLowerCase().includes('soja')) dispName = 'Soja';
 
                                         // Enrich brand & commercial name from live data
-                                        const isHarvestRow = m.type === 'HARVEST' || m.source === 'HARVEST' || productObj?.type === 'GRAIN' || productObj?.type === 'SEED';
+                                        const isHarvestRow = m.type === 'HARVEST' || m.source === 'HARVEST';
                                         const camp = campaigns.find(c => c.id === m.campaignId);
                                         
                                         let dispBrand = '';
-                                        // Priority: If it's a grain/seed, ALWAYS pull from Product brand (the harvest-defined brand)
-                                        if (productObj?.type === 'GRAIN' || productObj?.type === 'SEED') {
-                                            dispBrand = productObj.brandName || '---';
-                                        } 
-                                        else if (isHarvestRow && camp) {
-                                            dispBrand = camp.name;
-                                        } else if (productObj?.brandName) {
+                                        // Priority: Catalog > Movement Campaign > Movement Brand
+                                        if (productObj?.brandName && productObj.brandName !== '---' && productObj.brandName !== 'Comun') {
                                             dispBrand = productObj.brandName;
+                                        } else if (isHarvestRow && camp) {
+                                            dispBrand = camp.name;
                                         } else {
                                             dispBrand = singleItem?.productBrand || m.productBrand || '---';
                                         }
                                         if (dispBrand === 'Comun' || dispBrand === 'Común') dispBrand = '---';
 
                                         let dispCommName = '';
-                                        if (isHarvestRow) {
-                                            dispCommName = 'Propia';
-                                        } else if (productObj?.commercialName) {
+                                        // Priority: Catalog > Movement Detail > "Propia" (if Harvest)
+                                        if (productObj?.commercialName && productObj.commercialName !== '---' && productObj.commercialName !== 'Comun') {
                                             dispCommName = productObj.commercialName;
+                                        } else if (isHarvestRow) {
+                                            dispCommName = 'Propia';
                                         } else {
                                             dispCommName = singleItem?.productCommercialName || m.productCommercialName || '---';
                                         }
@@ -1194,9 +1192,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className="px-6 py-2 text-center whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${labelClass}`}>{label}</span></td>
                                                     <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{isConsolidated ? '---' : `${Math.abs(Number(singleItem ? singleItem.quantity : m.quantity))} ${singleItem ? singleItem.unit : m.unit}`}</td>
                                                     <td className="px-6 py-2 text-right font-mono text-slate-600">{showValue && !isConsolidated ? `USD ${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '---'}</td>
-                                                    <td className="px-6 py-2 text-right font-mono text-slate-900 font-bold">{showValue ? <span className={m.type === 'IN' ? 'text-red-500' : 'text-emerald-600'}>USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> : '-'}</td>
+                                                    <td className="px-6 py-2 text-right font-mono text-slate-900 font-bold whitespace-nowrap">{showValue ? <span className={m.type === 'IN' ? 'text-red-500' : 'text-emerald-600'}>USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.sellerName || '-'}</td>
-                                                    <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.investorName || (m.investors ? m.investors.map((i: any) => i.name).join(', ') : '-')}</td>
+                                                    <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">
+                                                        {m.investorName ? m.investorName : (m.investors && m.investors.length > 1 ? 'Varios' : (m.investors?.[0]?.name || '-'))}
+                                                    </td>
                                                     <td className="px-6 py-2 text-[11px] font-medium text-slate-600 min-w-[140px] whitespace-nowrap">
                                                         {m.isTransfer ? `${warehousesKey[m.warehouseId || '']} → ${warehousesKey[m.partnerId || '']}` : 
                                                          (m.isBatch ? (
@@ -1233,37 +1233,72 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </tr>
                                                 {isSelected && (
                                                     <>
-                                                        {m.items && m.items.length > 1 && (
+                                                        {(m.items && m.items.length > 1 || (m.investors && m.investors.length > 1)) && (
                                                             <>
+                                                                {/* Parallel Header for Items and Investors */}
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
-                                                                    <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                    <td colSpan={1}></td>
+                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                    <td colSpan={1}></td>
+                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
                                                                 </tr>
-                                                                {m.items.map((it: any, i: number) => {
-                                                                    const itProd = productsData[it.productId];
-                                                                    const itIsHarvest = m.type === 'HARVEST' || m.source === 'HARVEST' || itProd?.type === 'GRAIN' || itProd?.type === 'SEED';
-                                                                    let itBrand = it.productBrand || '';
-                                                                    let itCommName = it.productCommercialName || '';
-                                                                    if (itIsHarvest) {
-                                                                        if (!itBrand) { const camp = campaigns.find(c => c.id === m.campaignId); itBrand = camp?.name || ''; }
-                                                                        if (!itCommName) itCommName = 'Propia';
-                                                                    } else if (itProd) {
-                                                                        if (!itBrand) itBrand = itProd.brandName || '';
-                                                                        if (!itCommName) itCommName = itProd.commercialName || '';
+
+                                                                {/* Parallel Zipped Rows */}
+                                                                {(() => {
+                                                                    const maxRows = Math.max(m.items?.length || 0, (m.investors && m.investors.length > 1 ? m.investors.length : 0));
+                                                                    const rows = [];
+                                                                    for (let i = 0; i < maxRows; i++) {
+                                                                        const it = m.items?.[i];
+                                                                        const itProd = it ? productsData[it.productId] : null;
+                                                                        const itIsHarvest = m.type === 'HARVEST' || m.source === 'HARVEST';
+                                                                        
+                                                                        let itBrand = '';
+                                                                        let itCommName = '';
+                                                                        if (itProd) {
+                                                                            itBrand = itProd.brandName && itProd.brandName !== '---' ? itProd.brandName : (it.productBrand || '');
+                                                                            itCommName = itProd.commercialName && itProd.commercialName !== '---' ? itProd.commercialName : (it.productCommercialName || '');
+                                                                        } else if (it) {
+                                                                            itBrand = it.productBrand || '';
+                                                                            itCommName = it.productCommercialName || '';
+                                                                        }
+                                                                        if (it && itIsHarvest) {
+                                                                            if (!itBrand || itBrand === '---' || itBrand === 'Comun') { 
+                                                                                const camp = campaigns.find(c => c.id === m.campaignId); 
+                                                                                itBrand = camp?.name || ''; 
+                                                                            }
+                                                                            if (!itCommName || itCommName === '---' || itCommName === 'Comun') itCommName = 'Propia';
+                                                                        }
+
+                                                                        const inv = (m.investors && m.investors.length > 1) ? m.investors[i] : null;
+
+                                                                        rows.push(
+                                                                            <tr key={`${m.id}-parallel-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
+                                                                                <td colSpan={1}></td>
+                                                                                {it ? (
+                                                                                    <>
+                                                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {it.productName}</td>
+                                                                                        <td className="px-6 py-1 text-slate-400 font-bold uppercase">{itBrand || '-'}</td>
+                                                                                        <td className="px-6 py-1 text-slate-400 font-bold uppercase">{itCommName || '-'}</td>
+                                                                                        <td colSpan={1}></td>
+                                                                                        <td className="px-6 py-1 text-right font-mono font-bold text-slate-500">{Math.abs(Number(it.quantity))} {it.unit || m.unit}</td>
+                                                                                        <td className="px-6 py-1 text-right font-mono text-slate-400 whitespace-nowrap">USD {Number(it.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                                        <td className="px-6 py-1 text-right font-mono text-slate-700 font-bold whitespace-nowrap">USD {(it.quantity * (it.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <td colSpan={7}></td>
+                                                                                )}
+                                                                                <td colSpan={1}></td>
+                                                                                {inv ? (
+                                                                                    <td className="px-6 py-2 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {inv.name} <span className="text-slate-400 font-medium ml-2">({inv.percentage}%)</span></td>
+                                                                                ) : (
+                                                                                    <td></td>
+                                                                                )}
+                                                                                <td colSpan={6}></td>
+                                                                            </tr>
+                                                                        );
                                                                     }
-                                                                    return (
-                                                                        <tr key={`${m.id}-item-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
-                                                                            <td colSpan={1} className="px-6 py-1"></td>
-                                                                            <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {it.productName}</td>
-                                                                            <td className="px-6 py-1 text-slate-400">{itBrand || '-'}</td>
-                                                                            <td className="px-6 py-1 text-slate-500">{itCommName || '-'}</td>
-                                                                            <td colSpan={1}></td>
-                                                                            <td className="px-6 py-1 text-right font-mono text-slate-500">{Math.abs(Number(it.quantity))} {it.unit || m.unit}</td>
-                                                                            <td className="px-6 py-1 text-right font-mono text-slate-500">USD {parseFloat(it.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                                            <td className="px-6 py-1 text-right font-mono font-bold text-slate-900">USD {(parseFloat(it.price) * parseFloat(it.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                                            <td colSpan={8}></td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
+                                                                    return rows;
+                                                                })()}
                                                             </>
                                                         )}
                                                         {m.isBatch && (
@@ -1283,19 +1318,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                 ))}
                                                             </>
                                                         )}
-                                                        {m.investors && m.investors.length > 1 && (
-                                                            <>
-                                                                <tr className="bg-slate-100/60 border-y border-slate-200/50">
-                                                                    <td colSpan={16} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
-                                                                </tr>
-                                                                {m.investors.map((inv: any, i: number) => (
-                                                                    <tr key={`${m.id}-inv-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
-                                                                        <td colSpan={1}></td>
-                                                                        <td colSpan={15} className="px-10 py-2 font-bold text-slate-600">↳ {inv.name} <span className="text-slate-400 font-medium ml-2">({inv.percentage}%)</span></td>
-                                                                    </tr>
-                                                                ))}
-                                                            </>
-                                                        )}
+
                                                     </>
                                                 )}
                                             </React.Fragment>
@@ -1344,6 +1367,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             originName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.warehouseId || ''] : undefined}
                             destName={selectedMovement.movement.isTransfer ? warehousesKey[selectedMovement.movement.partnerId || ''] : warehousesKey[selectedMovement.movement.warehouseId || '']}
                             onClose={() => setSelectedMovement(null)}
+                            onEdit={() => handleEditMovement(selectedMovement.movement)}
+                            isReadOnly={isReadOnly}
                             campaigns={campaigns}
                         />
                     )}
@@ -1360,6 +1385,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         originName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.warehouseId || ''] : undefined}
                         destName={selectedSubMovement.movement.isTransfer ? warehousesKey[selectedSubMovement.movement.partnerId || ''] : warehousesKey[selectedSubMovement.movement.warehouseId || '']}
                         onClose={() => setSelectedSubMovement(null)}
+                        onEdit={() => handleEditMovement(selectedSubMovement.movement)}
+                        isReadOnly={isReadOnly}
                         campaigns={campaigns}
                     />
                 </div>
@@ -1367,7 +1394,15 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
             {selectedOrder && client && (
                 <div className="mt-4">
-                    <OrderDetailView order={selectedOrder} client={client} onClose={() => setSelectedOrder(null)} warehouses={warehousesFull} createdBy={displayName || 'Sistema'} isReadOnly={isReadOnly} />
+                    <OrderDetailView 
+                        order={selectedOrder} 
+                        client={client} 
+                        onClose={() => setSelectedOrder(null)} 
+                        onEdit={() => router.push(`/clients/${clientId}/orders/new?editId=${selectedOrder.id}`)}
+                        warehouses={warehousesFull} 
+                        createdBy={displayName || 'Sistema'} 
+                        isReadOnly={isReadOnly} 
+                    />
                 </div>
             )}
 
@@ -1534,7 +1569,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             setSaleRemitoFile={() => {}}
                         />
                     ) : (
-                        <StockEntryForm showStockForm={true} setShowStockForm={() => { }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} activeStockItem={activeStockItem as any} updateActiveStockItem={updateActiveStockItem} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
+                        <StockEntryForm showStockForm={true} setShowStockForm={() => { setShowEditForm(false); setEditingMovement(null); }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} activeStockItem={activeStockItem as any} updateActiveStockItem={updateActiveStockItem} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
                     )}
                 </div>
             )}

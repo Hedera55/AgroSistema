@@ -130,11 +130,6 @@ export default function ClientsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Empresas</h1>
-                    {showSuccessMessage && (
-                        <div className="mt-2 text-emerald-600 font-bold animate-fadeIn">
-                            Recuerde asignar empresa
-                        </div>
-                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     {selectedId && (isMaster || role === 'ADMIN') && (
@@ -505,6 +500,12 @@ export default function ClientsPage() {
                     </div>
                 )
             }
+
+            {showSuccessMessage && (
+                <div className="pt-0 text-[#2d9a7d] font-bold text-2xl font-serif animate-fadeIn tracking-wider">
+                    Recuerde asignar empresa
+                </div>
+            )}
         </div >
     );
 }

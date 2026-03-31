@@ -1712,6 +1712,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             lots={allClientLots}
                                             campaigns={campaigns}
                                             onClose={() => setSelectedEvent(null)}
+                                            onEdit={() => router.push(`/clients/${id}/orders/new?editId=${selectedEvent.rawOrder.id}`)}
                                             isReadOnly={isReadOnly}
                                         />
                                     )
@@ -1734,6 +1735,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         destName={selectedMovement.destName}
                         typeLabel="Distribución de Cosecha"
                         onClose={() => setSelectedMovement(null)}
+                        onEdit={() => handleEditHarvest(selectedEvent)}
+                        isReadOnly={isReadOnly}
                     />
                 </div>
             )}

@@ -694,65 +694,30 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                     </Link>
                 </div>
             )}
-            {/* Status Change Date Modal */}
             {statusPopupOrder && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fadeIn">
-                    <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-sm w-full border border-slate-100 flex flex-col gap-4">
-                        <div className="space-y-1">
-                            <h3 className="text-lg font-black text-slate-800 tracking-tight">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</h3>
-                            <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                                Seleccione la fecha real en la que se realizó la {statusPopupOrder.type === 'SOWING' ? 'siembra' : 'aplicación'} para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
+                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full border border-slate-100 flex flex-col gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight text-center">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</h3>
+                            <p className="text-xs text-slate-400 font-medium leading-relaxed text-center px-4">
+                                Seleccione la fecha real de la tarea para la orden <span className="text-emerald-600 font-bold">#{statusPopupOrder.orderNumber}</span>.
                             </p>
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</label>
-                            <div className="flex gap-2 items-center">
-                                <div className="flex-1 flex flex-col gap-1">
-                                    <input
-                                        ref={dayRef}
-                                        type="text"
-                                        placeholder="DD"
-                                        maxLength={2}
-                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
-                                        value={dateSegments.day}
-                                        onChange={(e) => handleSegmentChange('day', e.target.value)}
-                                        onKeyDown={(e) => handleKeyDown(e, 'day')}
-                                    />
-                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Día</span>
-                                </div>
-                                <span className="text-slate-300 text-lg font-light pb-4">/</span>
-                                <div className="flex-1 flex flex-col gap-1">
-                                    <input
-                                        ref={monthRef}
-                                        type="text"
-                                        placeholder="MM"
-                                        maxLength={2}
-                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
-                                        value={dateSegments.month}
-                                        onChange={(e) => handleSegmentChange('month', e.target.value)}
-                                        onKeyDown={(e) => handleKeyDown(e, 'month')}
-                                    />
-                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Mes</span>
-                                </div>
-                                <span className="text-slate-300 text-lg font-light pb-4">/</span>
-                                <div className="flex-[1.5] flex flex-col gap-1">
-                                    <input
-                                        ref={yearRef}
-                                        type="text"
-                                        placeholder="AAAA"
-                                        maxLength={4}
-                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
-                                        value={dateSegments.year}
-                                        onChange={(e) => handleSegmentChange('year', e.target.value)}
-                                        onKeyDown={(e) => handleKeyDown(e, 'year')}
-                                    />
-                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Año</span>
-                                </div>
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-center">Fecha de {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</label>
+                            <div className="px-2">
+                                <input
+                                    type="date"
+                                    className="block w-full rounded-2xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-3 px-6 text-center text-sm shadow-sm font-mono font-bold bg-slate-50 transition-all"
+                                    value={statusPopupDate}
+                                    onChange={(e) => setStatusPopupDate(e.target.value)}
+                                    autoFocus
+                                />
                             </div>
                         </div>
-                        <div className="flex gap-2 pt-1">
-                            <Button variant="outline" size="sm" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>
-                            <Button size="sm" onClick={handleConfirmStatus} className="flex-1 shadow-lg shadow-emerald-200">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</Button>
+                        <div className="flex gap-3 pt-2">
+                            <Button variant="outline" size="lg" onClick={() => setStatusPopupOrder(null)} className="flex-1 rounded-2xl text-slate-600 border-slate-200 hover:bg-slate-50">Cancelar</Button>
+                            <Button size="lg" onClick={handleConfirmStatus} className="flex-[1.5] shadow-lg shadow-emerald-200 rounded-2xl bg-emerald-600 hover:bg-emerald-700">Confirmar {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</Button>
                         </div>
                     </div>
                 </div>
