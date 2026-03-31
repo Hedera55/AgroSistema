@@ -151,6 +151,43 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
     const [statusPopupOrder, setStatusPopupOrder] = useState<Order | null>(null);
     const [statusPopupDate, setStatusPopupDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [dateSegments, setDateSegments] = useState({ day: '', month: '', year: '' });
+
+    const dayRef = useRef<HTMLInputElement>(null);
+    const monthRef = useRef<HTMLInputElement>(null);
+    const yearRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (statusPopupOrder && statusPopupDate) {
+            const [y, m, d] = statusPopupDate.split('-');
+            setDateSegments({ day: d, month: m, year: y });
+        }
+    }, [statusPopupOrder, statusPopupDate]);
+
+    const handleSegmentChange = (segment: 'day' | 'month' | 'year', value: string) => {
+        const cleanValue = value.replace(/\D/g, '');
+        let nextSegments = { ...dateSegments, [segment]: cleanValue };
+
+        if (segment === 'day' && cleanValue.length === 2) {
+            monthRef.current?.focus();
+        } else if (segment === 'month' && cleanValue.length === 2) {
+            yearRef.current?.focus();
+        }
+
+        setDateSegments(nextSegments);
+
+        // Update the main date state if all segments have values
+        if (nextSegments.day.length === 2 && nextSegments.month.length === 2 && nextSegments.year.length === 4) {
+            setStatusPopupDate(`${nextSegments.year}-${nextSegments.month}-${nextSegments.day}`);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent, segment: 'day' | 'month' | 'year') => {
+        if (e.key === 'Backspace' && !dateSegments[segment]) {
+            if (segment === 'month') dayRef.current?.focus();
+            if (segment === 'year') monthRef.current?.focus();
+        }
+    };
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -669,12 +706,49 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de {statusPopupOrder.type === 'SOWING' ? 'Siembra' : 'Aplicación'}</label>
-                            <input
-                                type="date"
-                                className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-3 text-sm shadow-sm"
-                                value={statusPopupDate}
-                                onChange={e => setStatusPopupDate(e.target.value)}
-                            />
+                            <div className="flex gap-2 items-center">
+                                <div className="flex-1 flex flex-col gap-1">
+                                    <input
+                                        ref={dayRef}
+                                        type="text"
+                                        placeholder="DD"
+                                        maxLength={2}
+                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
+                                        value={dateSegments.day}
+                                        onChange={(e) => handleSegmentChange('day', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, 'day')}
+                                    />
+                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Día</span>
+                                </div>
+                                <span className="text-slate-300 text-lg font-light pb-4">/</span>
+                                <div className="flex-1 flex flex-col gap-1">
+                                    <input
+                                        ref={monthRef}
+                                        type="text"
+                                        placeholder="MM"
+                                        maxLength={2}
+                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
+                                        value={dateSegments.month}
+                                        onChange={(e) => handleSegmentChange('month', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, 'month')}
+                                    />
+                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Mes</span>
+                                </div>
+                                <span className="text-slate-300 text-lg font-light pb-4">/</span>
+                                <div className="flex-[1.5] flex flex-col gap-1">
+                                    <input
+                                        ref={yearRef}
+                                        type="text"
+                                        placeholder="AAAA"
+                                        maxLength={4}
+                                        className="block w-full rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 py-2 px-1 text-center text-sm shadow-sm font-mono font-bold"
+                                        value={dateSegments.year}
+                                        onChange={(e) => handleSegmentChange('year', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, 'year')}
+                                    />
+                                    <span className="text-[9px] text-slate-300 text-center uppercase tracking-tighter font-bold">Año</span>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex gap-2 pt-1">
                             <Button variant="outline" size="sm" onClick={() => setStatusPopupOrder(null)} className="flex-1">Cancelar</Button>

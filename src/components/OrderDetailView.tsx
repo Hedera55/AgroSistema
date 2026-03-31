@@ -39,10 +39,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
         if (order.status === 'DONE' && order.appliedAt) {
             return formatDate(order.appliedAt);
         }
-        if (order.isDateRange) {
-            return `${formatDate(order.applicationStart)} al ${formatDate(order.applicationEnd)}`;
-        }
-        return formatDate(order.applicationDate);
+        return '---';
     };
 
     return (

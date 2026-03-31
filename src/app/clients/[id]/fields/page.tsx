@@ -27,6 +27,7 @@ import { OrderDetailView } from '@/components/OrderDetailView';
 import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { HarvestDetailsView } from '@/components/HarvestDetailsView';
 import { normalizeNumber } from '@/lib/numbers';
+import { processHarvest } from '@/services/harvest';
 
 type PanelType = 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details';
 
@@ -252,229 +253,33 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
     const handleMarkHarvested = async (lot: Lot, data: any) => {
         try {
-            const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
-            const batchId = generateId();
-
-            const campaign = campaigns.find(c => c.id === campaignId);
-            const campaignName = campaign?.name || 'Común';
-
-            const cropBaseName = (lot.cropSpecies || 'Granos').replace(/^granos de /i, '');
-            const productName = cropBaseName;
-            const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
-
-            // Convention: Brand for Propia harvest is the Campaign Name
-            const propBrand = campaignName;
-
-            let product = products.find(p =>
-                p.name.toLowerCase() === productName.toLowerCase() &&
-                p.type === productType &&
-                p.brandName === propBrand &&
-                p.clientId === id
-            );
-
-            if (!product && lot.cropSpecies) {
-                product = await addProduct({
-                    clientId: id,
-                    name: productName,
-                    type: productType,
-                    brandName: propBrand,
-                    commercialName: 'Propia',
-                    unit: 'kg',
-                    createdAt: new Date().toISOString(),
-                    synced: false
-                });
-            }
-
-            if (!product) {
-                alert('No se pudo identificar el cultivo del lote.');
-                return;
-            }
-
-            const pricePerHa = normalizeNumber(laborPricePerHa);
-            const totalCost = pricePerHa * lot.hectares;
-            const normalizedTotalYield = normalizeNumber(totalYield);
-
-            // --- MOVEMENT TRACING (REVERSAL) ---
-            if (isEditingHarvestPanel && harvestPlanOrder) {
-                const oldMovements = (harvestPlanOrder as any).movements || [];
-                const allStock = await db.getAll('stock') as ClientStock[];
-
-                for (const m of oldMovements) {
-                    if (m.warehouseId && !m.deleted) {
-                        const existingStock = allStock.find(s => s.clientId === id && s.productId === m.productId && s.warehouseId === m.warehouseId);
-                        if (existingStock) {
-                            await updateStock({
-                                ...existingStock,
-                                quantity: existingStock.quantity - m.quantity,
-                                lastUpdated: new Date().toISOString()
-                            });
-                        }
-                    }
-                    // Soft delete old movement
-                    await db.put('movements', { ...m, deleted: true, updatedAt: new Date().toISOString(), synced: false, clientId: id });
-                }
-            }
-
-            // 1. Update Lot Status
-            await updateLot({
-                ...lot,
-                status: 'HARVESTED',
-                observedYield: totalYield,
-                lastHarvestId: batchId,
-                lastUpdatedBy: displayName || 'Sistema'
+            await processHarvest({
+                db,
+                clientId: id,
+                lot,
+                data,
+                campaigns,
+                products,
+                identity: { displayName: displayName || 'Sistema' },
+                updaters: {
+                    updateStock,
+                    updateLot: (l) => db.put('lots', l),
+                    addProduct
+                },
+                isEditing: isEditingHarvestPanel,
+                existingBatchId: harvestPlanOrder?.harvestBatchId,
+                existingOrder: harvestPlanOrder
             });
 
-            const movementDate = date || new Date().toISOString().split('T')[0];
-            const farm = farms.find(f => f.id === lot.farmId);
-
-            // --- AUTO-ASSIGN REMAINDER ---
-            // The HarvestWizard now handles this internally and guarantees finalDistributions is fully balanced!
-            const finalDistributions = distributions;
-
-            for (const dist of finalDistributions) {
-                if (dist.type === 'WAREHOUSE') {
-                    // Update Stock (IN)
-                    const allStock = await db.getAll('stock') as ClientStock[];
-                    const existingStock = allStock.find(s => s.clientId === id && s.productId === product!.id && s.warehouseId === dist.targetId);
-                    const currentQty = existingStock?.quantity || 0;
-
-                    await updateStock({
-                        id: existingStock?.id,
-                        clientId: id,
-                        warehouseId: dist.targetId,
-                        campaignId: campaignId || undefined,
-                        productId: product!.id,
-                        productBrand: propBrand, // Explicitly set campaign-based brand
-                        productCommercialName: 'propia',
-                        quantity: currentQty + dist.amount,
-                        source: 'HARVEST',
-                        lastUpdated: new Date().toISOString()
-                    });
-                }
-
-                // Record Movement for this distribution
-                const distSheets = (sheets || []).filter((s: any) => !s.distributionId || s.distributionId === dist.id);
-                const isFirstDist = finalDistributions.indexOf(dist) === 0;
-
-                await db.put('movements', {
-                    ...dist.logistics,
-                    id: generateId(),
-                    clientId: id,
-                    farmId: lot.farmId,
-                    lotId: lot.id,
-                    warehouseId: dist.type === 'WAREHOUSE' ? dist.targetId : undefined,
-                    productId: product!.id,
-                    productName: product!.name,
-                    productBrand: propBrand,
-                    type: 'HARVEST',
-                    quantity: dist.amount,
-                    unit: product!.unit,
-                    date: movementDate,
-                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    referenceId: lot.id,
-                    campaignId: campaignId || undefined,
-                    notes: `Cosecha de lote ${lot.name} (${farm?.name || 'Campo desconocido'}) -> Destino: ${dist.targetName}`,
-                    contractorName: contractor || undefined,
-                    harvestLaborPricePerHa: pricePerHa || undefined,
-                    harvestLaborCost: isFirstDist ? (totalCost || undefined) : 0,
-                    investorName: investor || undefined,
-                    investors: data.investors || [],
-                    receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
-                    createdBy: displayName || 'Sistema',
-                    createdAt: new Date().toISOString(),
-                    synced: false,
-                    harvestBatchId: batchId,
-                    source: 'HARVEST',
-                    transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
-                });
-            }
-
-            // 5. Update Order Status
-            if (harvestPlanOrder) {
-                await db.put('orders', {
-                    ...harvestPlanOrder,
-                    clientId: id,
-                    farmId: lot.farmId,
-                    lotId: lot.id,
-                    type: 'HARVEST',
-                    status: 'DONE',
-                    date: movementDate,
-                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    expectedYield: normalizedTotalYield,
-                    servicePrice: pricePerHa || undefined,
-                    contractorName: contractor || undefined,
-                    investorName: investor || undefined,
-                    applicatorId: contractors.find(c => c.username === contractor)?.id,
-                    items: harvestPlanOrder.items || [],
-                    treatedArea: lot.hectares,
-                    plantingDensity: harvestPlanOrder.plantingDensity || 0,
-                    plantingSpacing: harvestPlanOrder.plantingSpacing || 0,
-                    campaignId: campaignId || undefined,
-                    createdBy: harvestPlanOrder.createdBy || displayName || 'Sistema',
-                    appliedBy: displayName || 'Sistema',
-                    appliedAt: new Date().toISOString(),
-                    createdAt: harvestPlanOrder.createdAt || new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    synced: false,
-                    harvestBatchId: batchId,
-                    notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
-                });
-            } else {
-                const lastSowing = orders
-                    .filter(o => o.lotId === lot.id && o.type === 'SOWING' && (o.status === 'DONE' || o.status === 'PENDING' || o.status === 'CONFIRMED') && !o.deleted)
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-
-                await db.put('orders', {
-                    id: generateId(),
-                    clientId: id,
-                    farmId: lot.farmId,
-                    lotId: lot.id,
-                    type: 'HARVEST',
-                    status: 'DONE',
-                    date: movementDate,
-                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    expectedYield: normalizedTotalYield,
-                    servicePrice: pricePerHa,
-                    contractorName: contractor,
-                    investorName: investor,
-                    applicatorId: contractors.find(c => c.username === contractor)?.id,
-                    items: [],
-                    treatedArea: lot.hectares,
-                    plantingDensity: 0,
-                    plantingSpacing: 0,
-                    sowingOrderId: lastSowing?.id,
-                    campaignId: campaignId || undefined,
-                    createdBy: displayName || 'Sistema',
-                    appliedBy: displayName || 'Sistema',
-                    appliedAt: new Date().toISOString(),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    synced: false,
-                    harvestBatchId: batchId,
-                    notes: `Cosecha de ${lot.cropSpecies || 'Cultivo desconocido'} en ${lot.name}`
-                });
-            }
-
-            await refreshOrders();
-            await syncService.pushChanges();
-            
-            // Increment refresh key to update LotHistory immediately
-            setHistoryRefreshKey(prev => prev + 1);
-            await refreshMovements();
-            
-            // alert('Cosecha registrada con éxito.');
+            // Post-process UI state
             setIsHarvesting(false);
-            setObservedYield('');
-            setHarvestLaborPrice('');
-            setHarvestContractor('');
-            setHarvestDate('');
             setHarvestPlanOrder(null);
             setIsEditingHarvestPanel(false);
-            setSelectedHarvestInvestor('');
-            setSelectedHarvestCampaignId('');
-        } catch (error) {
-            console.error('Error marking harvested:', error);
-            alert('Error al registrar la cosecha.');
+            window.dispatchEvent(new CustomEvent('lotsUpdated'));
+            refreshOrders();
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || 'Error al procesar la cosecha.');
         }
     };
 

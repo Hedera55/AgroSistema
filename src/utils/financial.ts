@@ -59,7 +59,7 @@ export function calculateCampaignPartnerShares(movements: InventoryMovement[], o
             let amount = 0;
             if (m.type === 'SERVICE') {
                 amount = m.amount || (m.quantity * (m.purchasePrice || 0));
-            } else if (m.productId === 'CONSOLIDATED' && m.items) {
+            } else if (m.items && m.items.length > 0) {
                 amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
             } else {
                 amount = m.quantity * (m.purchasePrice || 0);

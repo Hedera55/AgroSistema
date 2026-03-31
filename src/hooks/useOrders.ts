@@ -41,6 +41,12 @@ export function useOrders(clientId: string) {
                 // REVERSAL LOGIC: Restore stock from previous movements
                 const allMovements = await db.getAll('movements');
                 const originalMovements = allMovements.filter((m: any) => m.referenceId === order.id && !m.deleted);
+                
+                // Capture original "Birth Time" from first movement
+                let birthTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
+                if (originalMovements.length > 0 && originalMovements[0].time) {
+                    birthTime = originalMovements[0].time;
+                }
 
                 for (const m of originalMovements) {
                     // Restore stock
@@ -177,6 +183,10 @@ export function useOrders(clientId: string) {
                 }
 
                 // Record Movement
+                const birthTime = (await db.getAll('movements'))
+                    .filter((m: any) => m.referenceId === order.id && !m.deleted)
+                    .find((m: any) => m.time)?.time || new Date().toTimeString().split(' ')[0].substring(0, 5);
+
                 await db.put('movements', {
                     id: generateId(),
                     clientId: order.clientId,
@@ -186,8 +196,8 @@ export function useOrders(clientId: string) {
                     type: 'OUT',
                     quantity: item.totalQuantity,
                     unit: item.unit,
-                    date: order.date,
-                    time: new Date().toTimeString().split(' ')[0].substring(0, 5),
+                    date: order.applicationDate || order.date,
+                    time: birthTime,
                     referenceId: order.id,
                     notes: `Orden Nro ${order.orderNumber ?? '-'}`,
                     createdBy: displayName,

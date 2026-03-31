@@ -255,7 +255,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 let amount = 0;
                 if (m.type === 'SERVICE') {
                     amount = m.amount || (m.quantity * (m.purchasePrice || 0));
-                } else if (m.productId === 'CONSOLIDATED' && m.items) {
+                } else if (m.items && m.items.length > 0) {
                     amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                 } else {
                     amount = m.quantity * (m.purchasePrice || 0);
@@ -386,7 +386,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
                 if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
                     if (m.type === 'SERVICE') cInvested += m.amount || (m.quantity * (m.purchasePrice || 0));
-                    else if (m.productId === 'CONSOLIDATED' && m.items) cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+                    else if (m.items && m.items.length > 0) cInvested += m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                     else cInvested += m.quantity * (m.purchasePrice || 0);
                 } else if (m.type === 'SALE') cSold += (m.quantity * (m.salePrice || 0));
             });
@@ -527,6 +527,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         };
 
         movements.forEach(m => {
+            if (m.deleted) return;
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
             if (viewCampaignId === 'none') {

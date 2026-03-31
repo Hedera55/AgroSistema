@@ -157,13 +157,13 @@ export function StockTable({
                                             ) : null}
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap text-sm text-slate-900 font-bold">
-                                            {item.productCommercialName || '-'}
+                                            {item.productCommercialName === 'Común' ? '---' : (item.productCommercialName || '---')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
                                             {products.find(p => p.id === item.productId)?.activeIngredient || item.productName}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                            {item.productBrand || '-'}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-medium italic">
+                                            {products.find(p => p.id === item.productId)?.brandName || (item.productBrand === 'Común' ? '---' : (item.productBrand || '---'))}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                             {typeLabels[item.productType as ProductType] || item.productType}

@@ -64,7 +64,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
 
         sortedMovements.forEach(m => {
             if (m.type === 'IN') {
-                if (m.productId === 'CONSOLIDATED' && m.items) {
+                if (m.items && m.items.length > 0) {
                     m.items.forEach((item: any) => {
                         // 1. Specific ID
                         const cost = item.quantity * (item.price || 0);
@@ -211,7 +211,7 @@ export default function FinancialDetailsPage({ params }: { params: Promise<{ id:
                     let concept = '';
                     let detail = '';
 
-                    if (m.productId === 'CONSOLIDATED' && m.items) {
+                    if (m.items && m.items.length > 0) {
                         amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
                         concept = 'Compra de insumos (Consolidada)';
                         detail = `Inversión: ${m.items.length} productos`;

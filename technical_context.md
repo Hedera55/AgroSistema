@@ -2,7 +2,9 @@
 To maintain fast compilation (HMR) and readable code, large pages are split "surgically":
 - **Pattern**: `src/app/clients/[id]/[page]/components/` contains local modules.
 - **Goal**: Keep `page.tsx` under 800-1000 lines as an "orchestrator" of state and handlers.
-- **Shared Components**: Move to `src/components/` only when used by 2+ distinct routes.
+- **Shared Components**: When a component is required in two or more distinct pages, it MUST be moved to the global `src/components/` directory. This ensures that any future modifications or bug fixes are automatically applied across all relevant pages, maintaining UI and logic consistency.
+- **Shared Services**: When complex business logic (e.g., saving a harvest, adjusting stock, calculating quotas) is used in two or more distinct pages, it MUST be moved to the global `src/services/` directory. This prevents "split-brain" issues and ensures data integrity.
+- **Location**: Use `src/app/clients/[id]/[page]/components/` for strictly local modules, `src/components/` for shared UI, and `src/services/` for shared business logic.
 - **Inline Multistep Wizards**: Complex creation flows (like "New Order" or "New Harvest") must be implemented as inline, conditionally rendered components (e.g., `OrderWizard` or `HarvestWizard`) at the bottom of the main list view (`page.tsx`). Avoid routing to a separate `/new/page.tsx` to maintain context and speed up the user flow.
     - **Smooth Scrolling**: When an inline wizard or detail view is opened, the system should ideally only auto-scroll if it's a creation flow. Detailed views (like `OrderDetailView`) should avoid forced scrolls to prevent user disorientation during row browsing.
 
@@ -214,7 +216,9 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Locale-Aware Parsing**: All agricultural labor prices MUST be parsed using a utility that handles both `.` and `,` as decimal separators to support the Spanish/Argentine standard. Prefer `val.replace(/\./g, '').replace(',', '.')` before calling `parseFloat`.
 - **Sync Parity**: Every harvest-related field added to the database must have a corresponding mapping in *both* directions within `sync.ts` (forward and reverse mappers) to prevent "flickering" or data loss upon page reload.
 - **Harvest Deletion & Lot State Reversion**:
-    - **IDs**: Each harvest event generates a unique `harvestBatchId` (stored in `InventoryMovement` and `Order`) and updates the lot's `lastHarvestId`.
+    - **Harvest Grouping (harvestBatchId)**: Each harvest event generates a unique `harvestBatchId` (stored in `InventoryMovement` and `Order`). This ID "glues" multiple movements (e.g., Silo A, Silo B, Partner X) into a single logical unit.
+    - **Atomic Edits**: During a harvest edit, the system uses the `harvestBatchId` to precisely locate and revert all related movements before saving the updated batch.
+    - **Legacy Support**: For movements created before this standard, the system falls back to identifying peers via `type: 'HARVEST'`, `referenceId: lotId`, and `date`.
     - **Current Harvest**: If the deleted movement's `harvestBatchId` matches the lot's `lastHarvestId`, the system performs a **full reversion**:
         - Reverts stock for all items in the batch.
         - Soft-deletes all associated movements and the unique harvest `Order`.

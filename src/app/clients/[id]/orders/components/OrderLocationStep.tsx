@@ -216,11 +216,11 @@ export function OrderLocationStep({
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-slate-700 block">{lot.name}</span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
-                                            {lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares
-                                                ? `${lotHectares[id]} / ${lot.hectares} ha`
-                                                : `${lot.hectares} ha`}
-                                        </div>
+                                        {(lotHectares[id] === undefined || lotHectares[id] === lot.hectares) && (
+                                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                                                {lot.hectares} ha
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <input
@@ -286,7 +286,11 @@ export function OrderLocationStep({
                                                 className="px-2 py-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1"
                                                 title="recortar ha"
                                             >
-                                                <span className="text-[10px] uppercase font-bold tracking-wider">recortar ha</span>
+                                                <span className="text-[10px] uppercase font-bold tracking-wider">
+                                                    {lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares
+                                                        ? `${lotHectares[id]}/${lot.hectares} ha`
+                                                        : 'recortar ha'}
+                                                </span>
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>

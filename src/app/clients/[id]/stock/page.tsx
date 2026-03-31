@@ -21,7 +21,7 @@ import { WarehouseManager } from './components/WarehouseManager';
 import { ProductCatalog } from './components/ProductCatalog';
 import { StockEntryForm } from './components/StockEntryForm';
 import { StockTable } from './components/StockTable';
-import { StockSalePanel } from './components/StockSalePanel';
+import { StockSalePanel } from '@/components/StockSalePanel';
 
 interface EnrichedStockItem extends ClientStock {
     productName: string;
@@ -693,8 +693,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
                 const priceNum = parseFloat(salePrice.replace(',', '.'));
                 if (!isNaN(qtyNum) && !isNaN(priceNum)) {
-                    // Logic: User enters Tons, we store Kg. Note reflects the user's input (Tons)
-                    setSaleNote(`${priceNum} USD/Ton, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
+                    const isGrainOrSeed = stockItem.productType === 'GRAIN' || stockItem.productType === 'SEED';
+                    // Logic: User enters Tons for grains/seeds, we store Kg. Note reflects the user's input (Tons or native units)
+                    const unitPriceLabel = isGrainOrSeed ? 'USD/Ton' : `USD/${stockItem.unit || 'ud'}`;
+                    setSaleNote(`${priceNum} ${unitPriceLabel}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
                 }
             }
         }
@@ -961,13 +963,14 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const stockItem = enrichedStock.find(s => s.id === sellingStockId);
             if (!stockItem) return;
 
-            const qtyInTons = parseFloat(saleQuantity.replace(',', '.'));
-            const priceInTons = parseFloat(salePrice.replace(',', '.'));
+            const isGrainOrSeed = stockItem.productType === 'GRAIN' || stockItem.productType === 'SEED';
+            const qtyNumRaw = parseFloat(saleQuantity.replace(',', '.'));
+            const priceNumRaw = parseFloat(salePrice.replace(',', '.'));
 
-            if (isNaN(qtyInTons) || isNaN(priceInTons)) return;
+            if (isNaN(qtyNumRaw) || isNaN(priceNumRaw)) return;
 
-            const qtyNum = qtyInTons * 1000; // Store as Kg
-            const priceNum = priceInTons / 1000; // Store as USD/Kg
+            const qtyNum = isGrainOrSeed ? qtyNumRaw * 1000 : qtyNumRaw;
+            const priceNum = isGrainOrSeed ? priceNumRaw / 1000 : priceNumRaw;
 
             // Record Movement
             const movementId = generateId();
@@ -1037,7 +1040,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 amount: qtyNum * priceNum,
                 salePrice: priceNum,
                 date: new Date().toISOString().split('T')[0],
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 referenceId: `SALE-${movementId}`,
                 campaignId: stockItem.campaignId, // Propagate campaign from stock
                 notes: saleNote || `${priceNum} USD/ ${stockItem.unit}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`,
@@ -1442,7 +1445,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                                                 if (item) {
                                                     setSellingStockId(item.id);
-                                                    setSaleQuantity(item.quantity.toString());
+                                                    const isGrainOrSeed = item.productType === 'GRAIN' || item.productType === 'SEED';
+                                                    setSaleQuantity(isGrainOrSeed ? (item.quantity / 1000).toString() : item.quantity.toString());
                                                 }
                                             } else {
                                                 alert('Por favor selecciona un solo insumo para vender.');
