@@ -690,13 +690,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         if (sellingStockId && saleQuantity && salePrice) {
             const stockItem = enrichedStock.find(s => s.id === sellingStockId);
             if (stockItem) {
-                const qtyNum = parseFloat(saleQuantity.replace(',', '.'));
-                const priceNum = parseFloat(salePrice.replace(',', '.'));
-                if (!isNaN(qtyNum) && !isNaN(priceNum)) {
+                // Global rule: Prefer val.replace(/\./g, '').replace(',', '.') before calling parseFloat
+                const priceNum = parseFloat(salePrice.replace(/\./g, '').replace(',', '.'));
+                if (!isNaN(priceNum)) {
                     const isGrainOrSeed = stockItem.productType === 'GRAIN' || stockItem.productType === 'SEED';
-                    // Logic: User enters Tons for grains/seeds, we store Kg. Note reflects the user's input (Tons or native units)
                     const unitPriceLabel = isGrainOrSeed ? 'USD/Ton' : `USD/${stockItem.unit || 'ud'}`;
-                    setSaleNote(`${priceNum} ${unitPriceLabel}, USD ${(qtyNum * priceNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total`);
+                    // We only show the unit price in the note as per user request
+                    setSaleNote(`${salePrice} ${unitPriceLabel}`);
                 }
             }
         }

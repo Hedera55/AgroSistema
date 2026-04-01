@@ -512,9 +512,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
         if (m.type === 'SALE' || m.type === 'OUT') {
             const productType = productsData[m.productId]?.type;
-            const isGrainOrSeed = productType === 'GRAIN' || productType === 'SEED';
-            setSaleQuantity(isGrainOrSeed ? (m.quantity / 1000).toString() : m.quantity.toString());
-            setSalePrice(isGrainOrSeed ? ((m.salePrice || 0) * 1000).toString() : m.salePrice?.toString() || '');
+            const isGrainOrSeedSale = (productType === 'GRAIN' || productType === 'SEED') && m.type === 'SALE';
+            setSaleQuantity(isGrainOrSeedSale ? (m.quantity / 1000).toString() : m.quantity.toString());
+            setSalePrice(isGrainOrSeedSale ? ((m.salePrice || 0) * 1000).toString() : m.salePrice?.toString() || '');
             const logs = m as any;
             setSaleTruckDriver(logs.truckDriver || '');
             setSalePlateNumber(logs.plateNumber || '');
@@ -560,7 +560,22 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         }
         setShowEditForm(true);
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, [clientId, router]);
+    }, [clientId, router, productsData]);
+
+    // Auto-update Sale Note during history edit
+    useEffect(() => {
+        if (editingMovement?.type === 'SALE' && salePrice) {
+            const product = productsData[editingMovement.productId];
+            if (product) {
+                const priceNum = parseFloat(salePrice.replace(/\./g, '').replace(',', '.'));
+                if (!isNaN(priceNum)) {
+                    const isGrainOrSeed = product.type === 'GRAIN' || product.type === 'SEED';
+                    const unitPriceLabel = isGrainOrSeed ? 'USD/Ton' : `USD/${product.unit || 'ud'}`;
+                    setNote(`${salePrice} ${unitPriceLabel}`);
+                }
+            }
+        }
+    }, [editingMovement, salePrice, productsData]);
 
     const handleEditSave = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -568,7 +583,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         const allItemsToProcess = [...stockItems];
         if (activeStockItem.productId && activeStockItem.quantity) allItemsToProcess.push(activeStockItem);
         const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
-        if (validItems.length === 0) return;
+        
+        const isSaleOrOut = editingMovement.type === 'SALE' || editingMovement.type === 'OUT';
+        if (!isSaleOrOut && validItems.length === 0) return;
 
         if (!selectedWarehouseId) {
             alert("Seleccione un destino");
@@ -580,12 +597,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
                 const isSale = editingMovement.type === 'SALE';
                 const productType = productsData[editingMovement.productId]?.type;
-                const isGrainOrSeed = productType === 'GRAIN' || productType === 'SEED';
+                const isGrainOrSeedSale = (productType === 'GRAIN' || productType === 'SEED') && isSale;
                 const qtyNumRaw = normalizeNumber(saleQuantity);
                 const priceNumRaw = normalizeNumber(salePrice);
                 
-                const qtyNum = isGrainOrSeed ? qtyNumRaw * 1000 : qtyNumRaw;
-                const priceNum = isGrainOrSeed ? priceNumRaw / 1000 : priceNumRaw;
+                const qtyNum = isGrainOrSeedSale ? qtyNumRaw * 1000 : qtyNumRaw;
+                const priceNum = isGrainOrSeedSale ? priceNumRaw / 1000 : priceNumRaw;
 
                 let currentStockState = [...stock];
 

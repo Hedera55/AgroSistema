@@ -233,24 +233,21 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     if (parsed && parsed.name) pName = parsed.name;
                 } catch (e) { }
             }
-            if (pName.toLowerCase().trim() === 'sin asignar' || pName.toLowerCase().trim() === 'sin_asignar') return 'Sin Asignar';
+            const trimmed = pName.toLowerCase().trim();
+            if (trimmed === 'sin asignar' || trimmed === 'sin_asignar' || trimmed === 'sinasignar') return 'Sin Asignar';
             return pName;
         };
 
-        const currentCampaigns = campaigns.filter(c => viewCampaignId === 'all' || c.id === viewCampaignId);
-
+        // --- PASS 1: Tally all investments and base harvests ---
         movements.forEach((m: InventoryMovement) => {
             if (m.deleted) return;
-            if (viewCampaignId === 'none') {
-                if (m.campaignId) return;
-            } else if (viewCampaignId !== 'all' && m.campaignId !== viewCampaignId) return;
+            if (viewCampaignId === 'none' && m.campaignId) return;
+            if (viewCampaignId !== 'all' && viewCampaignId !== 'none' && m.campaignId !== viewCampaignId) return;
 
             const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
             if (isTransfer) return;
 
-            const campaign = campaigns.find(c => c.id === m.campaignId);
-            const campaignMode = campaign?.mode || 'MONEY';
-
+            // 1.1 Tally Investments (IN / PURCHASE / SERVICE)
             if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
                 let amount = 0;
                 if (m.type === 'SERVICE') {
@@ -276,51 +273,17 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         }
                     });
                 }
-            } else if (m.type === 'SALE') {
-                const saleValue = (m.quantity * (m.salePrice || 0));
-                sold += saleValue;
+            }
 
-                // Track sold harvested grain for MIXED mode
-                // Robust check for harvest source: explicit tag OR existence of harvest movement for this product/campaign
-                // Only perform this lookup if source is null/undefined as requested by user
-                let isHarvestSource = m.source === 'HARVEST';
-                if (!isHarvestSource && !m.source && m.campaignId) {
-                    const hasBeenHarvested = !!harvestByCampaignCrop[m.campaignId]?.[m.productName || 'Granos'];
-                    if (hasBeenHarvested) isHarvestSource = true;
-                }
-
-                if (m.campaignId && isHarvestSource) {
-                    const crop = (m.productName || 'Granos').toLowerCase().trim();
-                    if (!soldHarvestByCampaignCrop[m.campaignId]) soldHarvestByCampaignCrop[m.campaignId] = {};
-                    soldHarvestByCampaignCrop[m.campaignId][crop] = (soldHarvestByCampaignCrop[m.campaignId][crop] || 0) + m.quantity;
-                }
-
-                // Income distribution: Sales income is distributed proportionally to investment in that campaign
-                if (m.campaignId && totalInvestmentByCampaign[m.campaignId] > 0) {
-                    const campaignId = m.campaignId;
-                    const cInvestment = investmentByCampaignPartner[campaignId] || {};
-                    Object.entries(cInvestment).forEach(([pName, pInvested]) => {
-                        const ratio = pInvested / totalInvestmentByCampaign[campaignId];
-                        perPartnerIncome[pName] = (perPartnerIncome[pName] || 0) + (saleValue * ratio);
-                    });
-                } else {
-                    // Fallback to "Sin Asignar" if no campaign or no investment detected
-                    perPartnerIncome['Sin Asignar'] = (perPartnerIncome['Sin Asignar'] || 0) + saleValue;
-                }
-            } else if (m.type === 'OUT' && m.campaignId) {
-                // Physical withdrawal from a campaign
-                const pName = getPartnerName(m.receiverName || m.investorName);
-                const crop = m.productName || 'Granos';
-                if (!withdrawalsByPartnerCrop[pName]) withdrawalsByPartnerCrop[pName] = {};
-                withdrawalsByPartnerCrop[pName][crop] = (withdrawalsByPartnerCrop[pName][crop] || 0) + m.quantity;
-            } else if (m.type === 'HARVEST' && m.campaignId) {
-                // Tracking total harvest for grain allocation
+            // 1.2 Tally Total Harvest
+            if (m.type === 'HARVEST' && m.campaignId) {
                 const crop = m.productName || 'Granos';
                 if (!harvestByCampaignCrop[m.campaignId]) harvestByCampaignCrop[m.campaignId] = {};
                 harvestByCampaignCrop[m.campaignId][crop] = (harvestByCampaignCrop[m.campaignId][crop] || 0) + m.quantity;
             }
         });
 
+        // 1.3 Tally Order Costs (Treated as investments)
         orders.forEach((o: Order) => {
             if (o.deleted) return;
             if (viewCampaignId !== 'all' && o.campaignId !== viewCampaignId) return;
@@ -344,7 +307,55 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             }
         });
 
-        // Derive grain assignments per partner
+        // --- PASS 2: Distribute sales and track physical grain exits ---
+        movements.forEach((m: InventoryMovement) => {
+            if (m.deleted) return;
+            if (viewCampaignId === 'none' && m.campaignId) return;
+            if (viewCampaignId !== 'all' && viewCampaignId !== 'none' && m.campaignId !== viewCampaignId) return;
+
+            const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+            if (isTransfer) return;
+
+            if (m.type === 'SALE') {
+                const saleValue = (m.quantity * (m.salePrice || 0));
+                sold += saleValue;
+
+                // Track sold harvested grain for MIXED mode logic
+                let isHarvestSource = m.source === 'HARVEST';
+                if (!isHarvestSource && !m.source && m.campaignId) {
+                    const hasBeenHarvested = !!harvestByCampaignCrop[m.campaignId]?.[m.productName || 'Granos'];
+                    if (hasBeenHarvested) isHarvestSource = true;
+                }
+
+                if (m.campaignId && isHarvestSource) {
+                    const crop = (m.productName || 'Granos').toLowerCase().trim();
+                    if (!soldHarvestByCampaignCrop[m.campaignId]) soldHarvestByCampaignCrop[m.campaignId] = {};
+                    soldHarvestByCampaignCrop[m.campaignId][crop] = (soldHarvestByCampaignCrop[m.campaignId][crop] || 0) + m.quantity;
+                }
+
+                // Income distribution: Sales income is distributed proportionally to FINAL investment in that campaign
+                if (m.campaignId && totalInvestmentByCampaign[m.campaignId] > 0) {
+                    const campaignId = m.campaignId;
+                    const cInvestment = investmentByCampaignPartner[campaignId] || {};
+                    Object.entries(cInvestment).forEach(([pName, pInvested]) => {
+                        const ratio = pInvested / totalInvestmentByCampaign[campaignId];
+                        perPartnerIncome[pName] = (perPartnerIncome[pName] || 0) + (saleValue * ratio);
+                    });
+                } else {
+                    perPartnerIncome['Sin Asignar'] = (perPartnerIncome['Sin Asignar'] || 0) + saleValue;
+                }
+            } else if ((m.type === 'OUT' || (m.type === 'HARVEST' && !m.warehouseId)) && m.campaignId) {
+                // Physical withdrawal from a campaign (either standard OUT or partner distribution during HARVEST)
+                const pName = getPartnerName(m.receiverName || m.investorName);
+                if (pName !== 'Sin Asignar') {
+                    const crop = m.productName || 'Granos';
+                    if (!withdrawalsByPartnerCrop[pName]) withdrawalsByPartnerCrop[pName] = {};
+                    withdrawalsByPartnerCrop[pName][crop] = (withdrawalsByPartnerCrop[pName][crop] || 0) + m.quantity;
+                }
+            }
+        });
+
+        // --- FINALIZATION: Derive grain assignments per partner ---
         const grainAssignments: Record<string, Record<string, number>> = {}; // [partner][crop] = KG
         Object.keys(investmentByCampaignPartner).forEach(campId => {
             const campaignInfo = campaigns.find(c => c.id === campId);
@@ -360,6 +371,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             Object.entries(cHarvests).forEach(([crop, totalKg]) => {
                 const normalizedCrop = crop.toLowerCase().trim();
                 const soldKg = cSalesHarvestCount[normalizedCrop] || 0;
+                // In MIXED mode, sales reduce the available grain assignment for partners
                 const netKg = campaignInfo.mode === 'MIXED' ? Math.max(0, totalKg - soldKg) : totalKg;
 
                 Object.entries(cInvestments).forEach(([pName, pInvested]) => {
@@ -757,7 +769,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             {/* Financial History */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Historial de Movimientos</h3>
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Movimientos monetarios</h3>
                 </div>
                 <div
                     className="overflow-x-auto"
