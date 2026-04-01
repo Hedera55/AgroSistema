@@ -113,3 +113,65 @@ export function calculateCampaignPartnerShares(movements: InventoryMovement[], o
 
     return shares;
 }
+
+/**
+ * Calculates the total monetary investment (USD) per campaign and per partner.
+ * This is used to recalculate participation % in real-time when new costs (like harvest labor) are added.
+ */
+export function calculateCampaignPartnerInvestment(movements: InventoryMovement[], orders: Order[]): Record<string, { totalUSD: number, partnersUSD: Record<string, number> }> {
+    const investmentByCampaign: Record<string, { totalUSD: number, partnersUSD: Record<string, number> }> = {};
+
+    movements.forEach(m => {
+        if (m.deleted) return;
+        const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
+        if (isTransfer) return;
+
+        if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
+            let amount = 0;
+            if (m.type === 'SERVICE') {
+                amount = m.amount || (m.quantity * (m.purchasePrice || 0));
+            } else if (m.items && m.items.length > 0) {
+                amount = m.items.reduce((acc: number, it: any) => acc + ((it.price || 0) * (it.quantity || 0)), 0);
+            } else {
+                amount = m.quantity * (m.purchasePrice || 0);
+            }
+
+            if (amount > 0 && m.campaignId) {
+                if (!investmentByCampaign[m.campaignId]) {
+                    investmentByCampaign[m.campaignId] = { totalUSD: 0, partnersUSD: {} };
+                }
+                
+                const distributors = (m.investors && m.investors.length > 0) 
+                    ? m.investors.map((inv: any) => ({ name: getPartnerName(inv.name), amount: amount * (inv.percentage / 100) }))
+                    : [{ name: getPartnerName(m.investorName), amount }];
+
+                distributors.forEach((d: any) => {
+                    investmentByCampaign[m.campaignId!].totalUSD += d.amount;
+                    investmentByCampaign[m.campaignId!].partnersUSD[d.name] = (investmentByCampaign[m.campaignId!].partnersUSD[d.name] || 0) + d.amount;
+                });
+            }
+        }
+    });
+
+    orders.forEach(o => {
+        if (o.deleted) return;
+        if (o.servicePrice && o.servicePrice > 0 && o.campaignId) {
+            const amount = (o.servicePrice * o.treatedArea);
+            
+            if (!investmentByCampaign[o.campaignId]) {
+                investmentByCampaign[o.campaignId] = { totalUSD: 0, partnersUSD: {} };
+            }
+
+            const distributors = (o.investors && o.investors.length > 0)
+                ? o.investors.map((inv: any) => ({ name: getPartnerName(inv.name), amount: amount * (inv.percentage / 100) }))
+                : [{ name: getPartnerName(o.investorName), amount }];
+
+            distributors.forEach((d: any) => {
+                investmentByCampaign[o.campaignId!].totalUSD += d.amount;
+                investmentByCampaign[o.campaignId!].partnersUSD[d.name] = (investmentByCampaign[o.campaignId!].partnersUSD[d.name] || 0) + d.amount;
+            });
+        }
+    });
+
+    return investmentByCampaign;
+}

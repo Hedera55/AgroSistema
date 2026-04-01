@@ -60,11 +60,8 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
             <div className="bg-slate-50 px-8 py-4 border-b border-slate-200 flex justify-between items-center">
                 <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
                     <h3 className="font-bold text-slate-800 text-lg flex-shrink-0">
-                        Detalles
+                        Detalles de <span className="text-blue-600">cosecha</span>
                     </h3>
-                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-100 text-blue-700 flex-shrink-0">
-                        Cosecha
-                    </span>
                     {farmName && lotName && (
                         <div className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-100 flex items-center gap-1.5 min-w-0 transition-all">
                             <span className="text-[10px] font-black uppercase tracking-widest truncate">{farmName} - {lotName}</span>
@@ -209,35 +206,40 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
 
                 <div className="px-8 pb-12">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Distribución de Cosecha</h3>
-                    <div className="space-y-8">
-                        {harvestMovements.length > 0 ? harvestMovements.map((m: any) => (
-                            <div
-                                key={m.id}
-                                className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-8 cursor-pointer hover:opacity-80 transition-opacity"
-                                onClick={() => onSelectMovement?.(m)}
-                            >
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Destino</label>
-                                    <p className="text-sm font-bold text-slate-700">
-                                        {m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Cantidad</label>
-                                    <p className="text-sm font-bold text-blue-600">
-                                        {m.quantity.toLocaleString()} {m.unit}
-                                    </p>
-                                </div>
-                                <div className="hidden lg:flex items-center justify-end text-slate-300">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                                </div>
+                    
+                    {harvestMovements.length > 0 ? (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 px-2 pb-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Destino</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Cantidad</label>
+                                <div className="hidden lg:block"></div>
                             </div>
-                        )) : (
-                            <div className="text-slate-400 italic text-xs">
-                                No hay distribuciones registradas.
+                            
+                            <div className="space-y-1">
+                                {harvestMovements.map((m: any) => (
+                                    <div
+                                        key={m.id}
+                                        className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors group"
+                                        onClick={() => onSelectMovement?.(m)}
+                                    >
+                                        <p className="text-sm font-bold text-slate-700 truncate">
+                                            {m.receiverName || warehouses.find(w => w.id === m.warehouseId)?.name || 'Desconocido'}
+                                        </p>
+                                        <p className="text-sm font-bold text-blue-600">
+                                            {m.quantity.toLocaleString()} {m.unit}
+                                        </p>
+                                        <div className="hidden lg:flex items-center justify-end text-slate-300 group-hover:text-blue-400 transition-colors">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    ) : (
+                        <div className="text-slate-400 italic text-xs px-2">
+                            No hay distribuciones registradas.
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

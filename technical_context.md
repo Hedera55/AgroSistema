@@ -224,7 +224,27 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
         - Soft-deletes all associated movements and the unique harvest `Order`.
         - Reverts the lot status to `SOWED` (Sembrado) and clears `observedYield` and `lastHarvestId`.
     - **Historicals**: Deleting a historical harvest (that no longer matches `lastHarvestId`) is **blocked** to prevent state corruption.
-    - **User Alert**: "No se puede. Opción: Editar el rinde total a 0". This preserves history while allowing for correction.
+    - **User Alert**: "No se puede. Opción: Editar el rinde total a 0". Este preserva el historial permitiendo la corrección manual.
+
+## 📊 Dynamic Harvest Quotas & Participation Logic
+### Real-Time Participation Recalculation
+- **Calculation Rule**: The participation percentage of a partner in a "Mixta" or "Grain" campaign is calculated dynamically within the `HarvestWizard` in real-time.
+- **Labor Cost Incorporation**: The cost of the current harvest labor (Price per Ha × Lot Hectares) is treated as a **fresh investment**. 
+    - `Dynamic Total USD = Historical Campaign Investment + Current Labor Cost`.
+    - `Dynamic Partner USD = Historical Partner Investment + (Current Labor Cost × Partner's % share of labor)`.
+    - `Participation % = (Dynamic Partner USD / Dynamic Total USD) * 100`.
+- **Benefit**: This ensures that even if a campaign has zero initial investment, paying for the harvest labor immediately generates a valid participation quota.
+
+### Quota Calculation Pool
+- **Source of Truth**: The total yield used for quota distribution includes:
+    1. The sum of all **previous confirmed harvests** for the same campaign.
+    2. The **Current Yield** (`observedYield`) entered in Step 1 of the wizard.
+- **Rounding Rule (Safety)**: To prevent any partner from taking more grain than mathematically allowed, **ALL** kg-based calculations (Quota, Remaining, Total Assigned) MUST use `Math.floor()`.
+
+### "Tope de Cupo" (Down Arrow) Behavior
+- **Logic**: The fill button (`↓`) in the distribution list caps the amount at the partner's quota.
+- **Formula**: `Math.min(Available Yield + Current Amount, Partner Quota)`.
+- **Correction Utility**: If a partner's allocation is currently in red (Exceeded), the button remains enabled and acts as a "Fix" tool, resetting the amount back down to the maximum allowed quota.
 
 ## 👥 User Roles & Permissions
 - **CONTRATISTA**: Can only see orders where `applicatorId` matches their internal `profileId`.

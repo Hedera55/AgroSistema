@@ -33,6 +33,8 @@ interface HarvestWizardProps {
     partners: { name: string, cuit?: string }[];
     investors: { name: string, percentage: number }[];
     movements: InventoryMovement[];
+    campaignShares?: Record<string, Record<string, number>>;
+    campaignInvestments?: Record<string, { totalUSD: number, partnersUSD: Record<string, number> }>;
     onCancel: () => void;
     onComplete: (data: HarvestData) => void;
     initialDate: string;
@@ -63,7 +65,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     isExecutingPlan,
     initialDistributions,
     initialTransportSheets,
-    defaultWhId
+    defaultWhId,
+    campaignShares = {},
+    campaignInvestments = {}
 }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
@@ -151,21 +155,49 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         return opts;
     }, [distributions, customProfiles, selectedProfileId]);
 
-    const totalYieldNum = normalizeNumber(observedYield) || 0;
-    const assignedYield = distributions.reduce((sum, d) => sum + d.amount, 0);
-    const availableYield = totalYieldNum - assignedYield;
+    const totalYieldNum = Math.floor(normalizeNumber(observedYield) || 0);
+    const assignedYield = Math.floor(distributions.reduce((sum, d) => sum + d.amount, 0));
+    const availableYield = Math.floor(totalYieldNum - assignedYield);
 
     // --- Helper for Quota Logic ---
     const getPartnerQuotaInfo = (partnerName: string) => {
         if (!selectedHarvestCampaignId) return null;
 
-        const investor = investors.find(i => i.name === partnerName);
-        if (!investor) return null;
+        const campaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
+        const isMixedOrGrain = campaign?.mode === 'MIXED' || campaign?.mode === 'GRAIN';
+        
+        let percentage = 0;
+        const legacyInvestor = investors.find(i => i.name === partnerName);
+        
+        if (isMixedOrGrain) {
+            // Factor in Harvest Labor Cost for real-time participation update
+            const historical = campaignInvestments[selectedHarvestCampaignId] || { totalUSD: 0, partnersUSD: {} };
+            const laborPrice = normalizeNumber(harvestLaborPrice) || 0;
+            const currentLaborCost = laborPrice * (lot.hectares || 0);
+            
+            // Calculate partner's share of current labor cost
+            const partnerLaborAllocation = selectedHarvestInvestors.find(i => i.name === partnerName);
+            const partnerLaborShare = currentLaborCost * ((partnerLaborAllocation?.percentage || 0) / 100);
+            
+            const dynamicTotalUSD = historical.totalUSD + currentLaborCost;
+            const dynamicPartnerUSD = (historical.partnersUSD[partnerName] || 0) + partnerLaborShare;
+            
+            if (dynamicTotalUSD > 0) {
+                percentage = (dynamicPartnerUSD / dynamicTotalUSD) * 100;
+            } else if (campaignShares[selectedHarvestCampaignId]?.[partnerName] !== undefined) {
+                percentage = campaignShares[selectedHarvestCampaignId][partnerName];
+            }
+        } else if (legacyInvestor) {
+            percentage = legacyInvestor.percentage;
+        }
+
+        if (percentage === 0 && !legacyInvestor) return null;
 
         const previousHarvested = movements
-            .filter(m => m.campaignId === selectedHarvestCampaignId && m.type === 'HARVEST' && m.referenceId !== lot.id)
+            .filter(m => m.campaignId === selectedHarvestCampaignId && m.type === 'HARVEST' && m.referenceId !== lot.id && !m.deleted)
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
+        // Include the current yield from Step 1 in the total pool
         const totalCampaignYield = previousHarvested + totalYieldNum;
 
         const previousRetired = movements
@@ -173,17 +205,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                 m.campaignId === selectedHarvestCampaignId &&
                 m.receiverName === partnerName &&
                 (m.type === 'HARVEST' || m.type === 'OUT') &&
-                m.referenceId !== lot.id
+                m.referenceId !== lot.id &&
+                !m.deleted
             )
             .reduce((acc, m) => acc + (m.quantity || 0), 0);
 
-        const maxAllotment = totalCampaignYield * (investor.percentage / 100);
-        const remaining = maxAllotment - previousRetired;
+        const totalAllotment = Math.floor(totalCampaignYield * (percentage / 100));
+        const remaining = Math.floor(totalAllotment - previousRetired);
 
         return {
-            percentage: investor.percentage,
-            remaining: Math.max(0, remaining),
-            totalAllotment: maxAllotment,
+            percentage,
+            remaining, // Based on floor rounding
+            totalAllotment,
             previousRetired
         };
     };
@@ -231,36 +264,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         const newId = `dist_${Date.now()}`;
         const type = option.type as 'WAREHOUSE' | 'PARTNER';
 
-        let amount = availableYield;
-        if (type === 'PARTNER') {
-            const info = getPartnerQuotaInfo(option.name as string);
-            if (info) {
-                amount = Math.min(availableYield, info.remaining);
-            }
-        }
-
         setDistributions(prev => [...prev, {
             id: newId,
             type: type,
             targetId: type === 'WAREHOUSE' ? (option.value as string).replace('W_', '') : (option.value as string).replace('P_', ''),
             targetName: option.name as string,
-            amount: amount,
+            amount: 0,
             logistics: {} // gets populated via general defaults on save or overrides
         }]);
         setSelectedDistribOption('');
     };
 
     const handleUpdateDistributionAmount = (id: string, newAmount: number) => {
-        const dist = distributions.find(d => d.id === id);
-        if (dist?.type === 'PARTNER') {
-            const info = getPartnerQuotaInfo(dist.targetName);
-            if (info && newAmount > info.remaining + 0.1) { // 0.1 margin for float
-                if (!confirm(`⚠️ El monto asignado (${newAmount.toLocaleString()} kg) supera el cupo restante del socio (${info.remaining.toLocaleString()} kg, Cuota: ${info.percentage}%).\n\n¿Desea forzar esta cantidad?`)) {
-                    return;
-                }
-            }
-        }
-
         setDistributions(prev => prev.map(d => {
             if (d.id === id) {
                 return { ...d, amount: newAmount };
@@ -278,8 +293,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         const dist = distributions.find(d => d.id === id);
         if (!dist) return;
 
-        // If it's a partner, we should still respect the quota alert logic in handleUpdateDistributionAmount
-        handleUpdateDistributionAmount(id, dist.amount + availableYield);
+        if (dist.type === 'PARTNER') {
+            const info = getPartnerQuotaInfo(dist.targetName);
+            if (info) {
+                // If they have more than the quota, take it back to the quota
+                // If they have less, fill up to the quota (or available yield)
+                const maxInTruck = availableYield + dist.amount;
+                handleUpdateDistributionAmount(id, Math.floor(Math.min(maxInTruck, info.remaining)));
+                return;
+            }
+        }
+
+        handleUpdateDistributionAmount(id, Math.floor(dist.amount + availableYield));
     };
 
     const handleDeleteDistribution = (id: string) => {
@@ -312,36 +337,48 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         return isNaN(lastNum) ? '1' : String(lastNum + 1);
     };
 
-    const handleAddSheet = () => {
-        // Start from the selected profile's data
-        let templateData: Partial<TransportSheet> = {};
+    const applyProfileData = (sheet: TransportSheet, profile: Partial<TransportSheet>) => {
+        const skipFields = ['id', 'dischargeNumber', 'grossWeight', 'tareWeight', 'netWeight', 'departureTime'];
+        const updatedSheet = { ...sheet };
 
+        Object.entries(profile).forEach(([key, value]) => {
+            if (skipFields.includes(key)) return;
+
+            // Rule: Overwrite only if profile has a non-empty value
+            if (value !== undefined && value !== null && value !== '' && value !== 0) {
+                (updatedSheet as any)[key] = value;
+            }
+        });
+
+        return updatedSheet;
+    };
+
+    const handleAddSheet = () => {
         // Check custom profiles first (includes 'general' if the user saved over it)
         const customProfile = customProfiles.find(p => p.id === selectedProfileId);
+        let profileData: Partial<TransportSheet> = {};
+
         if (customProfile) {
-            templateData = { ...customProfile.data };
+            profileData = { ...customProfile.data };
         } else {
             // It's a distribution-based profile — pre-fill destination
             const dist = distributions.find(d => d.id === selectedProfileId);
             if (dist) {
-                templateData = {
+                profileData = {
                     distributionId: dist.id,
                     destinationCompany: dist.targetName
                 };
             }
         }
 
-        // Pre-fill farm origin if available
-        if (!templateData.originAddress && farm?.address) {
-            templateData.originAddress = farm.address;
-        }
-
-        const newSheet: TransportSheet = {
-            ...templateData,
+        const newSheet: TransportSheet = applyProfileData({
             id: `sheet_${Date.now()}`,
             dischargeNumber: getNextDischargeNumber(),
             profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL'
-        };
+        } as TransportSheet, {
+            originAddress: farm?.address || '',
+            ...profileData
+        });
 
         setTransportSheets(prev => [...prev, newSheet]);
         setActiveSheetIndex(transportSheets.length); // Navigate to new sheet
@@ -612,35 +649,63 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                     {dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
                                                     {dist.type === 'PARTNER' && (() => {
                                                         const info = getPartnerQuotaInfo(dist.targetName);
-                                                        return info ? ` • Cupo: ${Math.round(info.remaining).toLocaleString()} kg (${info.percentage}%)` : '';
+                                                        if (!info) return '';
+                                                        const isExceeded = dist.amount > info.remaining + 0.1;
+                                                        return (
+                                                            <span className={isExceeded ? 'text-red-500 font-black' : ''}>
+                                                                {` • Cupo: ${Math.floor(info.remaining).toLocaleString()} kg (${info.percentage.toFixed(1)}%)`}
+                                                            </span>
+                                                        );
                                                     })()}
                                                 </span>
                                             </div>
                                             <div className="w-32">
                                                 <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        inputMode="decimal"
-                                                        value={dist.amount || ''}
-                                                        onChange={e => handleUpdateDistributionAmountString(dist.id, e.target.value)}
-                                                        className="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded text-right pr-6 font-bold text-blue-600"
-                                                        placeholder="0"
-                                                    />
-                                                    <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">kg</span>
+                                                    {(() => {
+                                                        const info = getPartnerQuotaInfo(dist.targetName);
+                                                        const isExceeded = dist.type === 'PARTNER' && info && dist.amount > info.remaining + 0.1;
+                                                        return (
+                                                            <>
+                                                                <input
+                                                                    type="text"
+                                                                    inputMode="decimal"
+                                                                    value={dist.amount || ''}
+                                                                    onChange={e => handleUpdateDistributionAmountString(dist.id, e.target.value)}
+                                                                    className={`w-full px-2 py-1 text-sm bg-white border rounded text-right pr-6 font-bold shadow-sm transition-all ${
+                                                                        isExceeded 
+                                                                        ? '!border-red-500 !text-red-600 !bg-red-50 focus:ring-red-500' 
+                                                                        : 'border-slate-200 text-blue-600 focus:ring-blue-500'
+                                                                    }`}
+                                                                    placeholder="0"
+                                                                />
+                                                                <span className={`absolute right-2 top-1.5 text-xs font-bold transition-colors ${
+                                                                    isExceeded ? 'text-red-400' : 'text-slate-400'
+                                                                }`}>kg</span>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleFillRemainder(dist.id)}
-                                                disabled={availableYield <= 0}
-                                                className={`w-7 h-7 flex items-center justify-center rounded border transition-colors ${availableYield > 0
-                                                        ? 'text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-50 cursor-pointer'
-                                                        : 'text-slate-300 bg-slate-50/50 border-slate-100 cursor-default opacity-50'
-                                                    }`}
-                                                title={availableYield > 0 ? "Asignar remanente a este destino" : "No hay remanente disponible"}
-                                            >
-                                                ↓
-                                            </button>
+                                            {(() => {
+                                                const info = getPartnerQuotaInfo(dist.targetName);
+                                                const isExceeded = dist.type === 'PARTNER' && info && dist.amount > info.remaining + 0.1;
+                                                const canFill = availableYield > 0 || isExceeded;
+                                                
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleFillRemainder(dist.id)}
+                                                        disabled={!canFill}
+                                                        className={`w-7 h-7 flex items-center justify-center rounded border transition-colors ${canFill
+                                                                ? 'text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-50 cursor-pointer'
+                                                                : 'text-slate-300 bg-slate-50/50 border-slate-100 cursor-default opacity-50'
+                                                            }`}
+                                                        title={isExceeded ? "Ajustar al cupo máximo" : (availableYield > 0 ? "Asignar remanente a este destino" : "No hay remanente disponible")}
+                                                    >
+                                                        ↓
+                                                    </button>
+                                                );
+                                            })()}
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteDistribution(dist.id)}
@@ -688,6 +753,32 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                 }
                                             } else {
                                                 setSelectedProfileId(val);
+                                                
+                                                // Apply profile immediately to current sheet
+                                                const customP = customProfiles.find(p => p.id === val);
+                                                let pData: Partial<TransportSheet> = {};
+                                                
+                                                if (customP) {
+                                                    pData = customP.data;
+                                                } else {
+                                                    const dist = distributions.find(d => d.id === val);
+                                                    if (dist) {
+                                                        pData = {
+                                                            distributionId: dist.id,
+                                                            destinationCompany: dist.targetName,
+                                                            // Could also pull logistics from the distribution object if we store it there
+                                                        };
+                                                    }
+                                                }
+                                                
+                                                if (pData) {
+                                                    setTransportSheets(prev => prev.map((s, idx) => {
+                                                        if (idx === activeSheetIndex) {
+                                                            return applyProfileData(s, pData);
+                                                        }
+                                                        return s;
+                                                    }));
+                                                }
                                             }
                                         }}
                                     >
@@ -887,6 +978,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         </span>
                     )}
 
+                    {step === 2 && !selectedHarvestCampaignId && (
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-3">
+                            Falta asignar campaña, no se cuentan los cupos asignados
+                        </span>
+                    )}
+
                     <div className="flex items-center gap-3 ml-auto">
                         <button
                             type="button"
@@ -909,6 +1006,19 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     if (!observedYield || parseFloat(observedYield) <= 0) return alert('Ingrese la producción total');
                                     setStep(2);
                                 } else if (step === 2) {
+                                    // Check for exceeded quotas
+                                    const exceededPartner = distributions.find(d => {
+                                        if (d.type !== 'PARTNER') return false;
+                                        const info = getPartnerQuotaInfo(d.targetName);
+                                        return info && d.amount > info.remaining + 0.1;
+                                    });
+
+                                    if (exceededPartner) {
+                                        const info = getPartnerQuotaInfo(exceededPartner.targetName);
+                                        if (info && !confirm(`⚠️ El socio ${exceededPartner.targetName} está recibiendo más de su cuota (${Math.round(info.remaining).toLocaleString()} kg). ¿Desea continuar de todos modos?`)) {
+                                            return;
+                                        }
+                                    }
                                     setStep(3);
                                 } else if (step === 3) {
                                     setStep(4);

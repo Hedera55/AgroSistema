@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState, useRef, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useFarms, useLots, useAllLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -28,11 +29,17 @@ import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { HarvestDetailsView } from '@/components/HarvestDetailsView';
 import { normalizeNumber } from '@/lib/numbers';
 import { processHarvest } from '@/services/harvest';
+import { 
+    calculateInvestorBreakdown, 
+    calculateCampaignPartnerShares,
+    calculateCampaignPartnerInvestment 
+} from '@/utils/financial';
 
 type PanelType = 'observations' | 'crop_assign' | 'history' | 'sowing_details' | 'harvest_details';
 
 export default function FieldsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
+    const router = useRouter();
     const { role, isMaster, profile, displayName } = useAuth();
     const { farms, addFarm, updateFarm, deleteFarm, loading: farmsLoading } = useFarms(id);
     const { warehouses } = useWarehouses(id);
@@ -41,6 +48,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const { orders, refreshOrders } = useOrders(id);
     const { campaigns, loading: campaignsLoading } = useCampaigns(id);
     const { movements } = useClientMovements(id);
+    const campaignShares = useMemo(() =>
+        calculateCampaignPartnerShares(movements, orders)
+        , [movements, orders]);
+
+    const campaignInvestments = useMemo(() =>
+        calculateCampaignPartnerInvestment(movements, orders)
+        , [movements, orders]);
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -1753,6 +1767,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             warehouses={warehouses}
                             partners={client?.partners || []}
                             investors={client?.investors || []}
+                            campaignShares={campaignShares}
+                            campaignInvestments={campaignInvestments}
                             movements={movements}
                             onCancel={() => {
                                 setIsHarvesting(false);
