@@ -373,7 +373,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                         <div className="flex flex-col items-end text-right">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</label>
                             {order.investors.map((inv, i) => (
-                                <p key={i} className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                                <p key={i} className="text-xs font-bold text-indigo-600 uppercase tracking-tight">
                                     {inv.name} <span className="text-slate-400 font-medium">({inv.percentage}%)</span>
                                 </p>
                             ))}
@@ -381,7 +381,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
                     ) : order.investorName && (
                         <div className="flex flex-col items-end text-right">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</label>
-                            <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{order.investorName}</p>
+                            <p className="text-xs font-bold text-indigo-600 uppercase tracking-tight">{order.investorName}</p>
                         </div>
                     )}
                 </div>

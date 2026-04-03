@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/Button';
 import { normalizeNumber } from '@/lib/numbers';
 import { useMovementEditor } from '@/hooks/useMovementEditor';
 import { getMovementBadgeStyles } from '@/lib/movementStyles';
+import { OrderWizard } from '../../orders/components/OrderWizard';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -48,6 +49,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [selectedSubMovement, setSelectedSubMovement] = useState<any>(null);
     const [harvestMovements, setHarvestMovements] = useState<InventoryMovement[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<(Order & { farmName?: string; lotName?: string; hectares?: number }) | null>(null);
+    const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
     const [showHarvestWizard, setShowHarvestWizard] = useState(false);
     const router = useRouter();
     const { lots: allLotsFull } = useLots(clientId);
@@ -848,6 +850,18 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         if (dispCommName === 'Comun' || dispCommName === 'Común') dispCommName = '---';
 
                                         const enrichedOrder = m.referenceId ? ordersData.find(o => o.id === m.referenceId) : null;
+                                        
+                                        let pagadoPorDisplay = '-';
+                                        const effectiveInvestors = (enrichedOrder?.investors && enrichedOrder.investors.length > 0) ? enrichedOrder.investors : (m.investors || []);
+                                        const effectiveInvestorName = enrichedOrder?.investorName ? enrichedOrder.investorName : m.investorName;
+                                        if (effectiveInvestors.length > 1) {
+                                            pagadoPorDisplay = 'Varios';
+                                        } else if (effectiveInvestors.length === 1) {
+                                            pagadoPorDisplay = effectiveInvestors[0].name;
+                                        } else if (effectiveInvestorName) {
+                                            pagadoPorDisplay = effectiveInvestorName;
+                                        }
+
                                         const handleRowClick = async () => {
                                             if (isSelected) {
                                                 setSelectedMovement(null);
@@ -894,7 +908,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                     <td className="px-6 py-2 text-right font-mono text-slate-900 font-bold whitespace-nowrap">{showValue ? <span className={m.type === 'IN' ? 'text-red-500' : 'text-emerald-600'}>USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.sellerName || '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">
-                                                        {m.investorName ? m.investorName : (m.investors && m.investors.length > 1 ? 'Varios' : (m.investors?.[0]?.name || '-'))}
+                                                        {pagadoPorDisplay}
                                                     </td>
                                                     <td className="px-6 py-2 text-[11px] font-medium text-slate-600 min-w-[140px] whitespace-nowrap">
                                                         {m.isTransfer ? `${warehousesKey[m.warehouseId || '']} → ${warehousesKey[m.partnerId || '']}` : 
@@ -932,19 +946,19 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 </tr>
                                                 {isSelected && (
                                                     <>
-                                                        {(m.items && m.items.length > 1 || (m.investors && m.investors.length > 1)) && (
+                                                        {(m.items && m.items.length > 1 || (effectiveInvestors.length > 1)) && (
                                                             <>
                                                                 {/* Parallel Header for Items and Investors */}
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
                                                                     <td colSpan={1}></td>
-                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.items && m.items.length > 0 ? 'Insumos' : ''}</td>
                                                                     <td colSpan={1}></td>
                                                                     <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
                                                                 </tr>
 
                                                                 {/* Parallel Zipped Rows */}
                                                                 {(() => {
-                                                                    const maxRows = Math.max(m.items?.length || 0, (m.investors && m.investors.length > 1 ? m.investors.length : 0));
+                                                                    const maxRows = Math.max(m.items?.length || 0, effectiveInvestors.length > 1 ? effectiveInvestors.length : 0);
                                                                     const rows = [];
                                                                     for (let i = 0; i < maxRows; i++) {
                                                                         const it = m.items?.[i];
@@ -968,7 +982,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                             if (!itCommName || itCommName === '---' || itCommName === 'Comun') itCommName = 'Propia';
                                                                         }
 
-                                                                        const inv = (m.investors && m.investors.length > 1) ? m.investors[i] : null;
+                                                                        const inv = (effectiveInvestors.length > 1) ? effectiveInvestors[i] : null;
 
                                                                         rows.push(
                                                                             <tr key={`${m.id}-parallel-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
@@ -1021,28 +1035,55 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <>
                                                                 <tr className="bg-slate-100/60 border-y border-slate-200/50">
                                                                     <td colSpan={1}></td>
-                                                                    <td colSpan={15} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                    <td colSpan={1}></td>
+                                                                    <td colSpan={7} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado por</td>
                                                                 </tr>
-                                                                {m.orderRows.map((om: InventoryMovement, i: number) => {
-                                                                    const omProd = productsData[om.productId];
-                                                                    let omBrand = omProd?.brandName && omProd.brandName !== '---' ? omProd.brandName : (om.productBrand || '-');
-                                                                    let omCommName = omProd?.commercialName && omProd.commercialName !== '---' ? omProd.commercialName : (om.productCommercialName || '-');
-                                                                    if (omBrand === 'Comun' || omBrand === 'Común') omBrand = '-';
-                                                                    if (omCommName === 'Comun' || omCommName === 'Común') omCommName = '-';
-                                                                    return (
-                                                                        <tr key={`${m.id}-order-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
-                                                                            <td colSpan={1}></td>
-                                                                            <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {om.productName || omProd?.name || 'Insumo'}</td>
-                                                                            <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omBrand}</td>
-                                                                            <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omCommName}</td>
-                                                                            <td colSpan={1}></td>
-                                                                            <td className="px-6 py-1 text-right font-mono font-bold text-slate-500">{Math.abs(Number(om.quantity))} {om.unit}</td>
-                                                                            <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
-                                                                            <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
-                                                                            <td colSpan={8}></td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
+                                                                {(() => {
+                                                                    const effInv = enrichedOrder?.investors || [];
+                                                                    const maxRows = Math.max(m.orderRows.length, effInv.length > 1 ? effInv.length : 0);
+                                                                    const rows = [];
+                                                                    for (let i = 0; i < maxRows; i++) {
+                                                                        const om = m.orderRows[i];
+                                                                        const inv = effInv.length > 1 ? effInv[i] : null;
+
+                                                                        let omProd = null, omBrand = '-', omCommName = '-';
+                                                                        if (om) {
+                                                                            omProd = productsData[om.productId];
+                                                                            omBrand = omProd?.brandName && omProd.brandName !== '---' ? omProd.brandName : (om.productBrand || '-');
+                                                                            omCommName = omProd?.commercialName && omProd.commercialName !== '---' ? omProd.commercialName : (om.productCommercialName || '-');
+                                                                            if (omBrand === 'Comun' || omBrand === 'Común') omBrand = '-';
+                                                                            if (omCommName === 'Comun' || omCommName === 'Común') omCommName = '-';
+                                                                        }
+
+                                                                        rows.push(
+                                                                            <tr key={`${m.id}-order-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
+                                                                                <td colSpan={1}></td>
+                                                                                {om ? (
+                                                                                    <>
+                                                                                        <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {om.productName || omProd?.name || 'Insumo'}</td>
+                                                                                        <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omBrand}</td>
+                                                                                        <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omCommName}</td>
+                                                                                        <td colSpan={1}></td>
+                                                                                        <td className="px-6 py-1 text-right font-mono font-bold text-slate-500">{Math.abs(Number(om.quantity))} {om.unit}</td>
+                                                                                        <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
+                                                                                        <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <td colSpan={7}></td>
+                                                                                )}
+                                                                                <td colSpan={1}></td>
+                                                                                {inv ? (
+                                                                                    <td className="px-6 py-2 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {inv.name} <span className="text-slate-400 font-medium ml-2">({inv.percentage}%)</span></td>
+                                                                                ) : (
+                                                                                    <td></td>
+                                                                                )}
+                                                                                <td colSpan={6}></td>
+                                                                            </tr>
+                                                                        );
+                                                                    }
+                                                                    return rows;
+                                                                })()}
                                                             </>
                                                         )}
 
@@ -1125,10 +1166,27 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         order={selectedOrder} 
                         client={client} 
                         onClose={() => setSelectedOrder(null)} 
-                        onEdit={() => router.push(`/clients/${clientId}/orders/new?editId=${selectedOrder.id}`)}
+                        onEdit={() => {
+                            setSelectedOrder(null);
+                            setEditingOrderId(selectedOrder.id);
+                        }}
                         warehouses={warehousesFull} 
                         createdBy={displayName || 'Sistema'} 
                         isReadOnly={isReadOnly} 
+                    />
+                </div>
+            )}
+
+            {editingOrderId && (
+                <div className="mt-4 animate-slideUp">
+                    <OrderWizard
+                        clientId={clientId}
+                        editId={editingOrderId}
+                        onClose={() => setEditingOrderId(null)}
+                        onOrderCreated={async () => {
+                            setEditingOrderId(null);
+                            await loadData();
+                        }}
                     />
                 </div>
             )}

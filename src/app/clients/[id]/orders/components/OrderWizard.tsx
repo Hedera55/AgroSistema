@@ -486,12 +486,13 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
             }
 
             const order: Order = {
+                ...(preloadedOrder || {}),
                 id: editId || generateId(),
                 orderNumber: nextOrderNumber,
                 type: containsSeeds ? 'SOWING' : 'APPLICATION',
-                status: 'PENDING',
+                status: editId && preloadedOrder ? preloadedOrder.status : 'PENDING',
                 date: date,
-                time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                time: editId && preloadedOrder ? preloadedOrder.time : new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 applicationDate: isDateRange ? undefined : applicationDate,
                 applicationStart: isDateRange ? appStart : undefined,
                 applicationEnd: isDateRange ? appEnd : undefined,
@@ -520,9 +521,9 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                 investorName: selectedInvestors.length > 0 ? selectedInvestors[0].name : '',
                 investors: selectedInvestors,
                 campaignId: selectedCampaignId || undefined,
-                createdAt: new Date().toISOString(),
+                createdAt: (editId && preloadedOrder && preloadedOrder.createdAt) ? preloadedOrder.createdAt : new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                createdBy: displayName || 'Sistema',
+                createdBy: (editId && preloadedOrder && preloadedOrder.createdBy) ? preloadedOrder.createdBy : (displayName || 'Sistema'),
                 updatedBy: displayName || 'Sistema',
                 synced: false
             };
