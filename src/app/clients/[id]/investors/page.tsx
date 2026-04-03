@@ -19,6 +19,7 @@ import { MovementDetailsView } from '@/components/MovementDetailsView';
 import { OrderDetailView } from '@/components/OrderDetailView';
 import { StockSalePanel } from '@/components/StockSalePanel';
 import { StockEntryForm } from '@/app/clients/[id]/stock/components/StockEntryForm';
+import { getMovementBadgeStyles } from '@/lib/movementStyles';
 
 export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -41,6 +42,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const [editingPartnerIdx, setEditingPartnerIdx] = useState<number | null>(null);
     const [backupPartner, setBackupPartner] = useState<{ name: string; cuit?: string } | null>(null);
     const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+    const [showHarvestWarning, setShowHarvestWarning] = useState(false);
 
     // Campaigns state
     const { campaigns, addCampaign, updateCampaign, deleteCampaign, loading: campaignsLoading } = useCampaigns(id);
@@ -506,6 +508,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             date: string,
             time: string,
             type: 'PURCHASE' | 'SALE' | 'SERVICE',
+            originType?: string,
             description: string,
             amount: number,
             detail?: string
@@ -578,6 +581,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         date: normalizedDate,
                         time: normalizedTime,
                         type: 'PURCHASE',
+                        originType: 'PURCHASE',
                         description: `Compra: ${desc}`,
                         amount: totalAmount,
                         detail: m.items.map((i: any) => `${i.productName}: ${i.quantity} ${i.unit || ''} x USD ${i.price}`).join(', ')
@@ -590,6 +594,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         date: normalizedDate,
                         time: normalizedTime,
                         type: 'PURCHASE',
+                        originType: 'PURCHASE',
                         description: `Compra: ${product?.name || 'Insumo'}`,
                         amount: m.quantity * purchasePrice,
                         detail: `${product?.name || 'Insumo'}: ${m.quantity} ${product?.unit || 'u.'} x USD ${purchasePrice.toLocaleString()}`
@@ -603,6 +608,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     date: normalizedDate,
                     time: normalizedTime,
                     type: 'SALE',
+                    originType: 'SALE',
                     description: `Venta: ${product?.name || 'Insumo'}`,
                     amount: m.quantity * salePrice,
                     detail: `${product?.name || 'Insumo'}: ${m.quantity} ${product?.unit || 'u.'} x USD ${salePrice.toLocaleString()}`
@@ -614,6 +620,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     date: normalizedDate,
                     time: normalizedTime,
                     type: 'SERVICE',
+                    originType: 'SERVICE',
                     description: `Servicio: ${m.notes || 'Sin descripción'}`,
                     amount: amount,
                     detail: m.notes || 'Pago de servicio ad-hoc'
@@ -630,6 +637,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     date: normalizedDate,
                     time: normalizedTime,
                     type: 'SERVICE',
+                    originType: o.type,
                     description: o.type === 'HARVEST' ? 'Servicio de cosecha' :
                         (o.type === 'SOWING' ? 'Siembra' : 'Pulverización') +
                         `: Orden No ${o.orderNumber || '---'} (${o.treatedArea} ha)`,
@@ -717,6 +725,10 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
         return finalRows;
     }, [stats, partners]);
+
+    const hasHarvestDesfase = useMemo(() => {
+        return investorBreakdown.some(inv => inv.cropName !== '-' && inv.withdrawn > inv.assigned);
+    }, [investorBreakdown]);
 
     if (loading || movementsLoading || productsLoading || ordersLoading) {
         return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
@@ -825,7 +837,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                     if (ord) { setSelectedOrder(ord); setSelectedMovement(null); }
                                                 }
                                             }}
-                                            className="cursor-pointer transition-colors hover:bg-slate-50"
+                                            className={`cursor-pointer transition-colors hover:bg-slate-50 ${(selectedMovement?.id === item.id || selectedOrder?.id === item.id) ? 'bg-emerald-50/50' : ''}`}
                                         >
                                             <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
                                                 <div className="flex flex-col">
@@ -836,10 +848,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' :
-                                                    item.type === 'PURCHASE' ? 'bg-orange-100 text-orange-700' :
-                                                        'bg-blue-100 text-blue-700'
-                                                    }`}>
+                                                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${getMovementBadgeStyles(item.originType || item.type, item.description).classes}`}>
                                                     {item.type === 'SALE' ? 'Ingreso' : 'Egreso'}
                                                 </span>
                                             </td>
@@ -1071,7 +1080,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {/* Investors Table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="relative">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
                         Desglose por Socio {(() => {
@@ -1195,7 +1205,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto" ref={partnersScrollRef}>
+                    <div className="overflow-visible" ref={partnersScrollRef}>
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
@@ -1206,6 +1216,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                     <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cultivo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Asignada</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cosecha Retirada</th>
+                                    <th className="w-1"></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">
@@ -1237,6 +1248,17 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono font-bold text-orange-600">
                                                 {inv.cropName !== '-' ? `${inv.withdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg` : '-'}
                                             </td>
+                                            <td className="relative w-0 p-0 border-none">
+                                                {inv.cropName !== '-' && inv.withdrawn > inv.assigned && (
+                                                    <span 
+                                                        className="absolute -right-8 top-1/2 -translate-y-1/2 text-red-600 font-black text-2xl hover:scale-110 transition-transform inline-block whitespace-nowrap z-10 cursor-pointer"
+                                                        onClick={() => setShowHarvestWarning(!showHarvestWarning)}
+                                                        title="Advertencia de descalce: Por vender después de retirar cosecha, ahora hay un extra de cosecha asignada. Presione para ver detalle."
+                                                    >
+                                                        !
+                                                    </span>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))
                                 )}
@@ -1245,6 +1267,15 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                     </div>
                 )}
             </div>
+            {hasHarvestDesfase && showHarvestWarning && (
+                <div className="mt-4 px-2">
+                    <p className="text-red-600 font-bold text-base italic leading-snug animate-fadeIn">
+                        Por vender después de retirar cosecha, hay un extra de cosecha asignada. 
+                        Hay que arreglar con el socio y retocar los datos.
+                    </p>
+                </div>
+            )}
+        </div>
 
             {/* Investment Breakdown at the bottom */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -1381,12 +1412,12 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                             setSelectedWarehouseId={editor.setSelectedWarehouseId} 
                             availableProducts={products} 
                             activeStockItem={editor.activeStockItem as any} 
-                            updateActiveStockItem={(field: string, value: string) => editor.setActiveStockItem((prev: any) => ({ ...prev, [field]: value }))} 
+                            updateActiveStockItem={editor.updateActiveStockItem} 
                             stockItems={editor.stockItems as any} 
                             setStockItems={editor.setStockItems as any} 
-                            addStockToBatch={() => {}} 
-                            editBatchItem={() => {}} 
-                            removeBatchItem={() => {}} 
+                            addStockToBatch={editor.addStockToBatch} 
+                            editBatchItem={editor.editBatchItem} 
+                            removeBatchItem={editor.removeBatchItem} 
                             availableSellers={[]} 
                             selectedSeller={editor.selectedSeller} 
                             setSelectedSeller={editor.setSelectedSeller} 

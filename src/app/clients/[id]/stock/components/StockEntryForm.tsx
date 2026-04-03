@@ -14,10 +14,24 @@ interface SegmentedDateInputProps {
 }
 
 function SegmentedDateInput({ label, value, onChange }: SegmentedDateInputProps) {
-    const parts = value.split(' ');
-    const d = parts[0] || '';
-    const m = parts[1] || '';
-    const y = parts[2] || '';
+    let d = '', m = '', y = '';
+    
+    // Support both ISO (YYYY-MM-DD) and legacy space-separated format (DD MM YY)
+    if (value && value.includes('-')) {
+        const isoParts = value.split('-');
+        if (isoParts.length === 3) {
+            y = isoParts[0].slice(-2);
+            m = isoParts[1];
+            d = isoParts[2];
+        } else {
+            d = value; // Fallback
+        }
+    } else {
+        const parts = (value || '').split(' ');
+        d = parts[0] || '';
+        m = parts[1] || '';
+        y = parts[2] || '';
+    }
 
     const dRef = React.useRef<HTMLInputElement>(null);
     const mRef = React.useRef<HTMLInputElement>(null);
@@ -240,6 +254,23 @@ const StockEntryFormInternal = memo(({
         availableProducts.find(p => p.id === activeStockItem.productId)
         , [availableProducts, activeStockItem.productId]);
 
+    // Auto-calculate quantity from presentation fields
+    useEffect(() => {
+        if (activeStockItem.presentationAmount && activeStockItem.presentationContent) {
+            const amount = parseFloat(activeStockItem.presentationAmount.toString().replace(',', '.'));
+            const content = parseFloat(activeStockItem.presentationContent.toString().replace(',', '.'));
+            
+            if (!isNaN(amount) && !isNaN(content)) {
+                const total = amount * content;
+                const currentTotal = activeStockItem.quantity || '0';
+                // Use a small epsilon for float comparison or just string comparison if we want precision
+                if (total.toString() !== currentTotal) {
+                    updateActiveStockItem('quantity', total.toString());
+                }
+            }
+        }
+    }, [activeStockItem.presentationAmount, activeStockItem.presentationContent, activeStockItem.quantity, updateActiveStockItem]);
+
     const productOptions = useMemo(() => [
         <option key="prod-default" value="">Seleccione...</option>,
         ...filteredProducts.map(p => {
@@ -254,6 +285,13 @@ const StockEntryFormInternal = memo(({
             );
         })
     ], [filteredProducts]);
+
+    const [triedToAdd, setTriedToAdd] = useState(false);
+    useEffect(() => {
+        if (triedToAdd && activeStockItem.productId && activeStockItem.quantity && activeStockItem.price) {
+            setTriedToAdd(false);
+        }
+    }, [activeStockItem, triedToAdd]);
 
     const sellerOptions = useMemo(() => [
         <option key="sell-default" value="">Seleccione...</option>,
@@ -293,7 +331,12 @@ const StockEntryFormInternal = memo(({
 
     const insumoRef = useRef<HTMLSelectElement>(null);
     const handleAddItem = () => {
+        if (!activeStockItem.productId || !activeStockItem.quantity || !activeStockItem.price) {
+            setTriedToAdd(true);
+            return;
+        }
         addStockToBatch();
+        setTriedToAdd(false);
         setTimeout(() => {
             insumoRef.current?.focus();
         }, 0);
@@ -304,9 +347,11 @@ const StockEntryFormInternal = memo(({
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-semibold text-slate-900">
                     <span>
-                        {activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos'
-                            ? 'Gestión de Galpón (Granos)'
-                            : 'Cargar Compra de Insumo'}
+                        {isEditing 
+                            ? 'Editar compra' 
+                            : (activeWarehouseIds.length === 1 && warehouses.find(w => w.id === activeWarehouseIds[0])?.name === 'Acopio de Granos'
+                                ? 'Gestión de Galpón (Granos)'
+                                : 'Cargar compra de insumo')}
                     </span>
                 </h2>
                 <button
@@ -330,7 +375,7 @@ const StockEntryFormInternal = memo(({
                         <select
                             ref={insumoRef}
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                            value={activeStockItem.productId}
+                            value={activeStockItem.productId || ''}
                             onChange={e => updateActiveStockItem('productId', e.target.value)}
                             required={stockItems.length === 0}
                         >
@@ -346,8 +391,8 @@ const StockEntryFormInternal = memo(({
                         <input
                             type="text"
                             inputMode="decimal"
-                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                            value={activeStockItem.price}
+                            className={`block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 transition-colors ${triedToAdd && !activeStockItem.price ? 'bg-red-50 border-red-300' : ''}`}
+                            value={activeStockItem.price || ''}
                             onChange={e => updateActiveStockItem('price', e.target.value.replace(',', '.'))}
                         />
                     </div>
@@ -359,7 +404,7 @@ const StockEntryFormInternal = memo(({
                         <input
                             type="text"
                             list={`pres-list-${activeProduct?.id || 'default'}`}
-                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
+                            className={`block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 transition-colors ${triedToAdd && !activeStockItem.presentationLabel ? 'bg-red-50 border-red-300' : ''}`}
                             value={activeStockItem.presentationLabel || ''}
                             onChange={e => {
                                 const val = e.target.value;
@@ -405,7 +450,7 @@ const StockEntryFormInternal = memo(({
                         <input
                             type="text"
                             inputMode="decimal"
-                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
+                            className={`block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 transition-colors ${triedToAdd && !activeStockItem.presentationContent ? 'bg-red-50 border-red-300' : ''}`}
                             value={activeStockItem.presentationContent || ''}
                             onChange={e => updateActiveStockItem('presentationContent', e.target.value.replace(',', '.'))}
                             placeholder="Ej: 20"
@@ -421,7 +466,7 @@ const StockEntryFormInternal = memo(({
                         <input
                             type="text"
                             inputMode="decimal"
-                            className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 font-bold text-emerald-600"
+                            className={`block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11 font-bold text-emerald-600 transition-colors ${triedToAdd && !activeStockItem.presentationAmount ? 'bg-red-50 border-red-300' : ''}`}
                             value={activeStockItem.presentationAmount || ''}
                             onChange={e => updateActiveStockItem('presentationAmount', e.target.value.replace(',', '.'))}
                             placeholder="Ej: 5"
@@ -434,8 +479,19 @@ const StockEntryFormInternal = memo(({
                             {activeProduct && <span>({activeProduct.unit})</span>}
                         </label>
                         <div className="flex items-center justify-between h-11 px-4 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 font-black text-sm">
-                            <span>{activeStockItem.quantity || '0'} </span>
-                            <span>{activeProduct?.unit || ''}</span>
+                            {(!activeStockItem.presentationAmount && !activeStockItem.presentationContent) ? (
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-black text-emerald-700"
+                                    value={activeStockItem.quantity || ''}
+                                    onChange={e => updateActiveStockItem('quantity', e.target.value.replace(',', '.'))}
+                                    placeholder="0"
+                                />
+                            ) : (
+                                <span>{activeStockItem.quantity || '0'} </span>
+                            )}
+                            <span className="shrink-0">{activeProduct?.unit || ''}</span>
                         </div>
                     </div>
 
@@ -528,7 +584,7 @@ const StockEntryFormInternal = memo(({
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vendedor</label>
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                            value={selectedSeller}
+                            value={selectedSeller || ''}
                             onChange={e => {
                                 if (e.target.value === 'ADD_NEW') {
                                     setShowSellerInput(true);
@@ -609,7 +665,7 @@ const StockEntryFormInternal = memo(({
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Campaña</label>
                         <select
                             className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-11"
-                            value={selectedCampaignId}
+                            value={selectedCampaignId || ''}
                             onChange={e => setSelectedCampaignId?.(e.target.value)}
                         >
                             {campaignOptions}

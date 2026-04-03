@@ -5,6 +5,7 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Shared Components**: When a component is required in two or more distinct pages, it MUST be moved to the global `src/components/` directory. This ensures that any future modifications or bug fixes are automatically applied across all relevant pages, maintaining UI and logic consistency.
 - **Shared Services**: When complex business logic (e.g., saving a harvest, adjusting stock, calculating quotas) is used in two or more distinct pages, it MUST be moved to the global `src/services/` directory. This prevents "split-brain" issues and ensures data integrity.
 - **Shared Hooks**: When a custom React hook (e.g., `useInventory`, `useMovementEditor`) manages state and business logic that is shared or required across multiple pages, it MUST be moved to the global `src/hooks/` directory. This keeps the orchestrator pages lean and ensures state consistency.
+- **Visual Identity (Colors)**: Movement types and accounting badges follow a strict global color mapping defined in `src/lib/movementStyles.ts`. See the "Global UI Standard" section for the full mapping.
 - **Location**: Use `src/app/clients/[id]/[page]/components/` for strictly local modules, `src/components/` for shared UI, `src/services/` for shared business logic, and `src/hooks/` for shared stateful logic.
 - **Inline Multistep Wizards**: Complex creation flows (like "New Order" or "New Harvest") must be implemented as inline, conditionally rendered components (e.g., `OrderWizard` or `HarvestWizard`) at the bottom of the main list view (`page.tsx`). Avoid routing to a separate `/new/page.tsx` to maintain context and speed up the user flow.
     - **Smooth Scrolling**: When an inline wizard or detail view is opened, the system should ideally only auto-scroll if it's a creation flow. Detailed views (like `OrderDetailView`) should avoid forced scrolls to prevent user disorientation during row browsing.
@@ -43,6 +44,25 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
     - **Right-Aligned**: Only weights (Kg/Tons) should remain right-aligned for digit alignment.
 - **Aesthetic Refinement (The "Sunk-in" Look)**: When a "sunken" or recessed effect is requested for inputs, use a centered inset shadow (e.g., `!shadow-[inset_0_0_6px_rgba(0,0,0,0.25)]`) and a transparent border (`!border-transparent`).
 - **Override Note**: Many times, default component styles (like `shadow-sm` or `border-slate-200`) in the base `Input.tsx` are very "sticky". You MUST use the `!` modifier (e.g., `!shadow-...`) for custom formatting to take effect.
+
+### Movement Type Color Coding (Visual Identity)
+To ensure semantic consistency across the Galpón (Stock) and Contaduría (Accounting) modules, all movement types follow a unified color scheme managed by the central utility `src/lib/movementStyles.ts`:
+
+- **LIME (`bg-lime-100 text-lime-800`)**: Positive cash flow or outgoing product.
+  - Labels: `E-VENTA`, `E-RETIRO`, `INGRESO` (Money).
+  - Context: Sales, product withdrawals.
+- **ORANGE (`bg-orange-100 text-orange-800`)**: Negative cash flow or incoming product.
+  - Labels: `I-COMPRA`, `EGRESO` (Money for purchase).
+  - Context: Input purchases.
+- **DARK GREEN (`bg-emerald-100 text-emerald-800`)**: Labor-intensive services (non-harvest).
+  - Labels: `E-SIEMBRA`, `E-APLICACIÓN`.
+  - Context: Sowing and Spraying labor costs.
+- **BLUE (`bg-blue-100 text-blue-800`)**: Harvest-related events.
+  - Labels: `I-COSECHA`, `SERVICIO DE COSECHA`.
+  - Context: Grain ingress and harvest labor costs.
+- **INDIGO (`bg-indigo-100 text-indigo-800`)**: Logistic-only movements.
+  - Label: `TRANSFERENCIA`.
+  - Context: Transfers between warehouses.
 
 ### Layout & Width Standards
 - **Standard Width**: Most pages MUST follow a `max-w-7xl mx-auto` constraint to maintain a clean, centered reading column and consistent alignment.

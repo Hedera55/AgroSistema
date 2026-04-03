@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { normalizeNumber } from '@/lib/numbers';
 import { useMovementEditor } from '@/hooks/useMovementEditor';
+import { getMovementBadgeStyles } from '@/lib/movementStyles';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -85,21 +86,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         }
     });
 
-    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
-        editor.setActiveStockItem((prev: any) => {
-            const newState = { ...prev, [field]: value };
-            if (field === 'presentationContent' || field === 'presentationAmount') {
-                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
-                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
-                const content = normalizeNumber(contentVal);
-                const amount = normalizeNumber(amountVal);
-                if (content && amount) {
-                    newState.quantity = (content * amount).toString();
-                }
-            }
-            return newState;
-        });
-    }, [editor]);
+    // Redundant local updateActiveStockItem removed - now using editor hook
 
     // Recalcular Fuerte states
     const [showRecalculateModal, setShowRecalculateModal] = useState(false);
@@ -720,7 +707,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha</th>
+                                    <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Fecha <br /> de carga</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Insumo</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase">Marca</th>
                                     <th className="px-6 py-2 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">N. Comercial</th>
@@ -752,6 +739,15 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         }
                                     });
 
+                                    // Pre-calculate order groups (E-SIEMBRA / E-APLICACIÓN)
+                                    const orderGroups = new Map<string, InventoryMovement[]>();
+                                    movements.forEach(mv => {
+                                        if (mv.type === 'OUT' && mv.referenceId && !mv.referenceId.startsWith('MOVE-') && ordersKey[mv.referenceId] && !mv.deleted) {
+                                            if (!orderGroups.has(mv.referenceId)) orderGroups.set(mv.referenceId, []);
+                                            orderGroups.get(mv.referenceId)!.push(mv);
+                                        }
+                                    });
+
                                     movements.forEach((m: InventoryMovement) => {
                                         if (processedIds.has(m.id)) return;
 
@@ -774,6 +770,20 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                             }
                                         }
 
+                                        // Group Order movements (E-SIEMBRA / E-APLICACIÓN with 2+ items)
+                                        if (m.type === 'OUT' && m.referenceId && !m.referenceId.startsWith('MOVE-') && ordersKey[m.referenceId]) {
+                                            const group = orderGroups.get(m.referenceId);
+                                            if (group && group.length > 1) {
+                                                groupedMovements.push({
+                                                    ...m,
+                                                    isOrderGroup: true,
+                                                    orderRows: group
+                                                });
+                                                group.forEach(gm => processedIds.add(gm.id));
+                                                return;
+                                            }
+                                        }
+
                                         if (m.referenceId?.startsWith('MOVE-')) {
                                             const partner = movements.find((p: InventoryMovement) => p.id !== m.id && p.referenceId === m.referenceId && p.productId === m.productId);
                                             if (partner) {
@@ -789,15 +799,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                     return groupedMovements.map((m) => {
                                         const { date, time } = formatDate(m.createdAt || m.date, m.time);
                                         const label = getMovementLabel(m);
-                                        const isSelected = (selectedMovement?.movement?.id === m.id) || (selectedOrder?.id === m.referenceId);
+                                        const isSelected = (selectedMovement?.movement?.id === m.id) || (selectedOrder?.id === m.referenceId) || (m.isOrderGroup && m.orderRows?.some((r: any) => selectedOrder?.id === r.referenceId));
                                         const isConsolidated = m.items && m.items.length > 1;
                                         const singleItem = (m.items && m.items.length === 1) ? m.items[0] : null;
 
-                                        let labelClass = 'bg-orange-100 text-orange-800';
-                                        if (label === 'TRANSFERENCIA') labelClass = 'bg-indigo-100 text-indigo-800';
-                                        else if (label === 'I-COSECHA') labelClass = 'bg-blue-100 text-blue-800';
-                                        else if (label === 'E-VENTA' || label === 'E-RETIRO') labelClass = 'bg-lime-100 text-lime-800';
-                                        else if (label === 'E-SIEMBRA' || label === 'E-APLICACIÓN') labelClass = 'bg-emerald-100 text-emerald-800';
+                                        const labelClass = getMovementBadgeStyles(m.type, m.notes, label).classes;
 
                                         let showValue = (m.type === 'IN' && !m.isTransfer && m.type !== 'HARVEST') || (m.type === 'SALE');
                                         let totalValue = 0, unitPrice = 0;
@@ -812,7 +818,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                         }
 
                                         const productObj = productsData[m.productId];
-                                        let dispName = isConsolidated ? 'Varios' : (singleItem?.productName || m.productName || productObj?.name || 'Insumo');
+                                        let dispName = (isConsolidated || m.isOrderGroup) ? 'Varios' : (singleItem?.productName || m.productName || productObj?.name || 'Insumo');
                                         if (dispName.toLowerCase().includes('soja')) dispName = 'Soja';
 
                                         // Enrich brand & commercial name from live data
@@ -880,10 +886,10 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                 <tr onClick={handleRowClick} className={`group cursor-pointer transition-colors ${isSelected ? 'bg-emerald-100/80 hover:bg-emerald-100/90' : 'hover:bg-slate-50'}`}>
                                                     <td className="px-6 py-2 whitespace-nowrap"><div className="text-slate-900 font-medium">{date}</div><div className="text-[10px] text-slate-400 font-mono uppercase">{time}</div></td>
                                                     <td className="px-6 py-2 font-bold text-slate-900">{dispName}</td>
-                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (dispBrand || '-')}</td>
-                                                    <td className="px-6 py-2 text-sm text-slate-500">{isConsolidated ? '-' : (dispCommName || '-')}</td>
+                                                    <td className="px-6 py-2 text-sm text-slate-500">{(isConsolidated || m.isOrderGroup) ? '-' : (dispBrand || '-')}</td>
+                                                    <td className="px-6 py-2 text-sm text-slate-500">{(isConsolidated || m.isOrderGroup) ? '-' : (dispCommName || '-')}</td>
                                                     <td className="px-6 py-2 text-center whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${labelClass}`}>{label}</span></td>
-                                                    <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{isConsolidated ? '---' : `${Math.abs(Number(singleItem ? singleItem.quantity : m.quantity))} ${singleItem ? singleItem.unit : m.unit}`}</td>
+                                                    <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{(isConsolidated || m.isOrderGroup) ? '---' : `${Math.abs(Number(singleItem ? singleItem.quantity : m.quantity))} ${singleItem ? singleItem.unit : m.unit}`}</td>
                                                     <td className="px-6 py-2 text-right font-mono text-slate-600">{showValue && !isConsolidated ? `USD ${unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '---'}</td>
                                                     <td className="px-6 py-2 text-right font-mono text-slate-900 font-bold whitespace-nowrap">{showValue ? <span className={m.type === 'IN' ? 'text-red-500' : 'text-emerald-600'}>USD {totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 text-[10px] font-bold uppercase truncate max-w-[120px]">{m.sellerName || '-'}</td>
@@ -896,7 +902,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                             <span className="text-slate-900 font-bold">
                                                                 Varios
                                                             </span>
-                                                         ) : (warehousesKey[m.warehouseId || ''] || m.receiverName || '-'))}
+                                                         ) : m.isOrderGroup ? '-' : (warehousesKey[m.warehouseId || ''] || m.receiverName || '-'))}
                                                     </td>
                                                     <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">{m.facturaDate ? formatDate(m.facturaDate).date : '-'}</td>
                                                     <td className="px-6 py-2 text-slate-500 whitespace-nowrap text-[11px] font-mono">{m.dueDate ? formatDate(m.dueDate).date : '-'}</td>
@@ -1009,6 +1015,34 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                                                         </td>
                                                                     </tr>
                                                                 ))}
+                                                            </>
+                                                        )}
+                                                        {m.isOrderGroup && m.orderRows && (
+                                                            <>
+                                                                <tr className="bg-slate-100/60 border-y border-slate-200/50">
+                                                                    <td colSpan={1}></td>
+                                                                    <td colSpan={15} className="px-10 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumos</td>
+                                                                </tr>
+                                                                {m.orderRows.map((om: InventoryMovement, i: number) => {
+                                                                    const omProd = productsData[om.productId];
+                                                                    let omBrand = omProd?.brandName && omProd.brandName !== '---' ? omProd.brandName : (om.productBrand || '-');
+                                                                    let omCommName = omProd?.commercialName && omProd.commercialName !== '---' ? omProd.commercialName : (om.productCommercialName || '-');
+                                                                    if (omBrand === 'Comun' || omBrand === 'Común') omBrand = '-';
+                                                                    if (omCommName === 'Comun' || omCommName === 'Común') omCommName = '-';
+                                                                    return (
+                                                                        <tr key={`${m.id}-order-${i}`} className="bg-slate-100/60 text-[11px] border-b border-slate-200/30">
+                                                                            <td colSpan={1}></td>
+                                                                            <td className="px-6 py-1 font-bold text-slate-600 pl-10 whitespace-nowrap">↳ {om.productName || omProd?.name || 'Insumo'}</td>
+                                                                            <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omBrand}</td>
+                                                                            <td className="px-6 py-1 text-slate-400 font-bold uppercase">{omCommName}</td>
+                                                                            <td colSpan={1}></td>
+                                                                            <td className="px-6 py-1 text-right font-mono font-bold text-slate-500">{Math.abs(Number(om.quantity))} {om.unit}</td>
+                                                                            <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
+                                                                            <td className="px-6 py-1 text-right font-mono text-slate-400">---</td>
+                                                                            <td colSpan={8}></td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
                                                             </>
                                                         )}
 
@@ -1270,21 +1304,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             setSelectedWarehouseId={editor.setSelectedWarehouseId} 
                             availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} 
                             activeStockItem={editor.activeStockItem as any} 
-                            updateActiveStockItem={updateActiveStockItem} 
+                            updateActiveStockItem={editor.updateActiveStockItem} 
                             stockItems={editor.stockItems} 
-                            setStockItems={editor.setStockItems} 
-                            addStockToBatch={() => { 
-                                if (editor.activeStockItem.productId && editor.activeStockItem.quantity) { 
-                                    editor.setStockItems((prev: any) => [...prev, editor.activeStockItem]); 
-                                    editor.setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); 
-                                } 
-                            }} 
-                            editBatchItem={(idx: number) => { 
-                                const item = editor.stockItems[idx]; 
-                                editor.setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); 
-                                editor.setStockItems((prev: any) => prev.filter((_:any, i:any) => i !== idx)); 
-                            }} 
-                            removeBatchItem={(idx: number) => editor.setStockItems((prev: any) => prev.filter((_:any, i:any) => i !== idx))} 
+                            setStockItems={editor.setStockItems as any} 
+                            addStockToBatch={editor.addStockToBatch} 
+                            editBatchItem={editor.editBatchItem} 
+                            removeBatchItem={editor.removeBatchItem} 
                             availableSellers={availableSellers} 
                             selectedSeller={editor.selectedSeller} 
                             setSelectedSeller={editor.setSelectedSeller} 

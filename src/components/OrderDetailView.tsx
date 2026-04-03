@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Order, Client } from '@/types';
 import { usePDF } from '@/hooks/usePDF';
 import { useAuth } from '@/hooks/useAuth';
+import { getMovementBadgeStyles } from '@/lib/movementStyles';
 
 interface OrderDetailViewProps {
     order: Order & { farmName?: string; lotName?: string; hectares?: number };
@@ -21,6 +22,8 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
     const { role } = useAuth();
     const [showFullNote, setShowFullNote] = useState(false);
     const { generateOrderPDF, generateRemitoPDF, generateInsumosPDF } = usePDF();
+
+    const styles = getMovementBadgeStyles(order.type, order.notes || '');
 
     const formatDate = (dateStr?: string) => {
         if (!dateStr || typeof dateStr !== 'string') return dateStr || '---';
@@ -42,15 +45,19 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
         return '---';
     };
 
+    const borderColor = styles.color === 'emerald' ? 'border-t-emerald-500' :
+                       styles.color === 'lime' ? 'border-t-lime-500' :
+                       styles.color === 'orange' ? 'border-t-orange-500' :
+                       styles.color === 'blue' ? 'border-t-blue-500' :
+                       styles.color === 'indigo' ? 'border-t-indigo-500' : 'border-t-slate-500';
+
     return (
-        <div className={`bg-white rounded-3xl shadow-xl border border-slate-200 w-full overflow-hidden animate-slideUp flex flex-col max-h-[800px] border-t-4 ${order.type === 'HARVEST' ? 'border-t-blue-500' : 'border-t-emerald-500'}`}>
+        <div className={`bg-white rounded-3xl shadow-xl border border-slate-200 w-full overflow-hidden animate-slideUp flex flex-col max-h-[800px] border-t-4 ${borderColor}`}>
             {/* Header */}
             <div className="bg-slate-50 px-8 py-6 border-b border-slate-200 flex justify-between items-start">
                 <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${order.type === 'SOWING' ? 'bg-emerald-100 text-emerald-700' :
-                            order.type === 'HARVEST' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                            }`}>
+                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${styles.classes}`}>
                             {order.type === 'SOWING' ? 'Siembra' : order.type === 'HARVEST' ? 'Cosecha' : 'Pulverización'}
                         </span>
                         <h3 className="font-bold text-slate-900 text-lg">Orden #{order.orderNumber || '---'}</h3>

@@ -55,8 +55,17 @@ export function useMovementEditor(clientId: string, {
     const [saleFreightTariff, setSaleFreightTariff] = useState('');
 
     // PURCHASE/IN Specific
-    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; presentationLabel?: string; presentationContent?: string; presentationAmount?: string; }[]>([]);
-    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' });
+    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; productCommercialName?: string; presentationLabel?: string; presentationContent?: string; presentationAmount?: string; }[]>([]);
+    const [activeStockItem, setActiveStockItem] = useState({ 
+        productId: '', 
+        quantity: '', 
+        price: '', 
+        tempBrand: '', 
+        productCommercialName: '', // Added for Galpon compatibility
+        presentationLabel: '', 
+        presentationContent: '', 
+        presentationAmount: '' 
+    });
     const [facturaDate, setFacturaDate] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [selectedSeller, setSelectedSeller] = useState('');
@@ -116,7 +125,8 @@ export function useMovementEditor(clientId: string, {
                 presentationAmount: it.presentationAmount?.toString() || ''
             })));
             
-            setFacturaDate(m.date || '');
+            setFacturaDate(m.facturaDate || '');
+            setDueDate(m.dueDate || '');
             setSelectedSeller(m.sellerName || '');
         }
         setShowEditForm(true);
@@ -169,6 +179,8 @@ export function useMovementEditor(clientId: string, {
                     departureDateTime: saleDepartureDateTime || undefined,
                     distanceKm: saleDistanceKm ? normalizeNumber(saleDistanceKm) : undefined,
                     freightTariff: saleFreightTariff ? normalizeNumber(saleFreightTariff) : undefined,
+                    facturaDate: toISODate(facturaDate),
+                    dueDate: toISODate(dueDate),
                 };
 
                 // 3. Apply New Stock
@@ -211,6 +223,9 @@ export function useMovementEditor(clientId: string, {
                     notes: note,
                     investors: selectedInvestors,
                     updatedAt: new Date().toISOString(),
+                    facturaDate: toISODate(facturaDate),
+                    dueDate: toISODate(dueDate),
+                    sellerName: selectedSeller,
                     synced: false
                 };
 
@@ -250,6 +265,58 @@ export function useMovementEditor(clientId: string, {
         }
     }, [editingMovement, salePrice, productsData]);
 
+    const addStockToBatch = useCallback(() => {
+        if (!activeStockItem.productId || !activeStockItem.quantity) return;
+        setStockItems(prev => [...prev, activeStockItem]);
+        setActiveStockItem({ 
+            productId: '', 
+            quantity: '', 
+            price: '', 
+            tempBrand: '', 
+            productCommercialName: '',
+            presentationLabel: '', 
+            presentationContent: '', 
+            presentationAmount: '' 
+        });
+    }, [activeStockItem]);
+
+    const updateActiveStockItem = useCallback((field: string, value: any) => {
+        setActiveStockItem(prev => ({ ...prev, [field]: value }));
+    }, []);
+
+    const editBatchItem = useCallback((idx: number) => {
+        const itemToEdit = stockItems[idx];
+        if (!itemToEdit) return;
+
+        // If there's already an item being edited/created in the form, preserve it by returning it to the list
+        if (activeStockItem.productId) {
+            setStockItems(prev => {
+                // Remove the one we want to edit AND add back the current active one
+                const filtered = prev.filter((_, i) => i !== idx);
+                return [...filtered, { ...activeStockItem }];
+            });
+        } else {
+            // Just remove the one we want to edit
+            setStockItems(prev => prev.filter((_, i) => i !== idx));
+        }
+
+        // Fill form with the item to edit
+        setActiveStockItem({
+            productId: itemToEdit.productId || '',
+            quantity: itemToEdit.quantity?.toString() || '',
+            price: itemToEdit.price?.toString() || '',
+            tempBrand: itemToEdit.tempBrand || '',
+            productCommercialName: itemToEdit.productCommercialName || '', // Added
+            presentationLabel: itemToEdit.presentationLabel || '',
+            presentationContent: itemToEdit.presentationContent?.toString() || '',
+            presentationAmount: itemToEdit.presentationAmount?.toString() || ''
+        });
+    }, [stockItems, activeStockItem]);
+
+    const removeBatchItem = useCallback((idx: number) => {
+        setStockItems(prev => prev.filter((_, i) => i !== idx));
+    }, []);
+
     return {
         editingMovement,
         setEditingMovement,
@@ -285,8 +352,31 @@ export function useMovementEditor(clientId: string, {
         // Purchase States
         stockItems, setStockItems,
         activeStockItem, setActiveStockItem,
+        updateActiveStockItem,
+        addStockToBatch, editBatchItem, removeBatchItem,
         facturaDate, setFacturaDate,
         dueDate, setDueDate,
         selectedSeller, setSelectedSeller
     };
+}
+
+/**
+ * Converts a segmented date string "DD MM YY" to ISO "YYYY-MM-DD"
+ */
+function toISODate(segmented: string): string {
+    if (!segmented) return '';
+    // If already ISO (contains dashes and 4-digit year), return as is
+    if (segmented.includes('-') && segmented.split('-')[0].length === 4) return segmented;
+    
+    // Handle space-separated format from UI
+    const parts = segmented.split(' ').filter(p => p.trim() !== '');
+    if (parts.length !== 3) return segmented; // Fallback
+    
+    let [d, m, y] = parts;
+    d = d.padStart(2, '0');
+    m = m.padStart(2, '0');
+    // Assume 20xx for 2-digit years
+    const fullYear = y.length === 2 ? `20${y}` : y;
+    
+    return `${fullYear}-${m}-${d}`;
 }

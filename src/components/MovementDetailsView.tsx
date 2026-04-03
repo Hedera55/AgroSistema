@@ -1,5 +1,6 @@
 import React from 'react';
 import { InventoryMovement, Order, Client, Warehouse, Campaign } from '@/types';
+import { getMovementBadgeStyles } from '@/lib/movementStyles';
 
 interface MovementDetailsViewProps {
     movement: InventoryMovement;
@@ -45,19 +46,24 @@ export function MovementDetailsView({
         logistics.distanceKm !== undefined ||
         logistics.freightTariff !== undefined;
 
+    const styles = getMovementBadgeStyles(movement.type, movement.notes || '', typeLabel);
+
     const getBadgeColors = () => {
-        if (typeLabel.includes('COMPRA')) return 'bg-orange-100 text-orange-700 border-orange-200';
-        if (typeLabel.includes('VENTA')) return 'bg-lime-100 text-lime-700 border-lime-200';
-        if (typeLabel.includes('TRANSFERENCIA')) return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-        if (typeLabel.includes('RETIRO') || typeLabel.includes('EGRESO') || typeLabel.includes('COSECHA')) return 'bg-blue-100 text-blue-700 border-blue-200';
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+        const borderColor = styles.color === 'emerald' ? 'border-emerald-200' :
+                          styles.color === 'lime' ? 'border-lime-200' :
+                          styles.color === 'orange' ? 'border-orange-200' :
+                          styles.color === 'blue' ? 'border-blue-200' :
+                          styles.color === 'indigo' ? 'border-indigo-200' : 'border-slate-200';
+        return `${styles.classes} border ${borderColor}`;
     };
 
     const getBorderColor = () => {
-        if (typeLabel.includes('COMPRA')) return 'border-t-orange-500';
-        if (typeLabel.includes('VENTA')) return 'border-t-lime-500';
-        if (typeLabel.includes('TRANSFERENCIA')) return 'border-t-indigo-500';
-        return 'border-t-blue-500';
+        if (styles.color === 'emerald') return 'border-t-emerald-500';
+        if (styles.color === 'lime') return 'border-t-lime-500';
+        if (styles.color === 'orange') return 'border-t-orange-500';
+        if (styles.color === 'blue') return 'border-t-blue-500';
+        if (styles.color === 'indigo') return 'border-t-indigo-500';
+        return 'border-t-slate-500';
     };
 
     return (

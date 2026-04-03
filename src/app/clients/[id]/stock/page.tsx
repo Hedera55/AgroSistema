@@ -22,6 +22,7 @@ import { ProductCatalog } from './components/ProductCatalog';
 import { StockEntryForm } from './components/StockEntryForm';
 import { StockTable } from './components/StockTable';
 import { StockSalePanel } from '@/components/StockSalePanel';
+import { useMovementEditor } from '@/hooks/useMovementEditor';
 
 interface EnrichedStockItem extends ClientStock {
     productName: string;
@@ -58,6 +59,17 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const { movements, loading: movementsLoading, refresh: movementsRefresh } = useClientMovements(id);
     const { campaigns, loading: campaignsLoading } = useCampaigns(id);
     const { orders } = useOrders(id);
+
+    const editor = useMovementEditor(id, {
+        productsData: Object.fromEntries(products.map(p => [p.id, p])),
+        campaigns: campaigns || [],
+        stock: stock || [],
+        updateStock: updateStock,
+        onSuccess: () => {
+            setShowStockForm(false);
+            movementsRefresh();
+        }
+    });
 
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(id));
 
@@ -97,60 +109,10 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     const [showSellerDelete, setShowSellerDelete] = useState(false);
     const [unitInputValue, setUnitInputValue] = useState('');
     const [sellerInputValue, setSellerInputValue] = useState('');
-    const [note, setNote] = useState('');
-    const [noteConfirmed, setNoteConfirmed] = useState(false);
-    // const [selectedInvestor, setSelectedInvestor] = useState(''); -> Replaced by selectedInvestors array
-    const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
-    const [showNote, setShowNote] = useState(false);
     const [isDuplicate, setIsDuplicate] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
     const [newProductPresentations, setNewProductPresentations] = useState<{ label: string; content: number }[]>([]);
-
-    // Multi-product entry state
-    const [activeStockItem, setActiveStockItem] = useState({
-        productId: '',
-        quantity: '',
-        price: '',
-        tempBrand: '',
-        productCommercialName: '',
-        presentationLabel: '',
-        presentationContent: '',
-        presentationAmount: ''
-    });
-
-    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
-        setActiveStockItem(prev => {
-            const newState = { ...prev, [field]: value };
-
-            // Auto-calculate quantity if presentation content or amount changes
-            if (field === 'presentationContent' || field === 'presentationAmount') {
-                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
-                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
-
-                const content = parseFloat(contentVal.toString().replace(',', '.'));
-                const amount = parseFloat(amountVal.toString().replace(',', '.'));
-
-                if (!isNaN(content) && !isNaN(amount)) {
-                    newState.quantity = (content * amount).toString();
-                }
-            }
-
-            return newState;
-        });
-    }, []);
-
-
-    const [stockItems, setStockItems] = useState<{
-        productId: string;
-        quantity: string;
-        price: string;
-        tempBrand: string;
-        productCommercialName?: string;
-        presentationLabel?: string;
-        presentationContent?: string;
-        presentationAmount?: string;
-    }[]>([]);
 
     // Factura upload state
     const [sellingStockId, setSellingStockId] = useState<string | null>(null);
@@ -299,23 +261,29 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
     // Persistence for form state
     useEffect(() => {
-        const savedNote = sessionStorage.getItem(`stock_note_${id}`);
-        const savedShowNote = sessionStorage.getItem(`stock_showNote_${id}`);
+        const savedNote = localStorage.getItem(`stock_note_${id}`);
+        const savedShowNote = localStorage.getItem(`stock_showNote_${id}`);
 
-        if (savedNote) setNote(savedNote);
-        if (savedShowNote === 'true') setShowNote(true);
+        if (savedNote) editor.setNote(savedNote);
+        if (savedShowNote === 'true') editor.setShowNote(true);
 
-        const savedShowStockForm = sessionStorage.getItem(`stock_showStockForm_${id}`);
-        const savedShowProductForm = sessionStorage.getItem(`stock_showProductForm_${id}`);
-        const savedShowCatalog = sessionStorage.getItem(`stock_showCatalog_${id}`);
-        const savedShowWarehouses = sessionStorage.getItem(`stock_showWarehouses_${id}`);
-        const savedActiveW = sessionStorage.getItem(`stock_activeW_${id}`);
+        const savedShowStockForm = localStorage.getItem(`stock_showStockForm_${id}`);
+        const savedShowProductForm = localStorage.getItem(`stock_showProductForm_${id}`);
+        const savedShowCatalog = localStorage.getItem(`stock_showCatalog_${id}`);
+        const savedShowWarehouses = localStorage.getItem(`stock_showWarehouses_${id}`);
+        const savedActiveW = localStorage.getItem(`stock_activeW_${id}`);
 
         if (savedShowStockForm === 'true') setShowStockForm(true);
         if (savedShowProductForm === 'true') setShowProductForm(true);
         if (savedShowCatalog === 'true') setShowCatalog(true);
         if (savedShowWarehouses === 'true') setShowWarehouses(true);
-        if (savedActiveW) setActiveWarehouseIds(JSON.parse(savedActiveW));
+        if (savedActiveW) {
+            try {
+                setActiveWarehouseIds(JSON.parse(savedActiveW));
+            } catch (e) {
+                console.error("Error parsing savedActiveW", e);
+            }
+        }
     }, [id]);
 
     const toggleWarehouseSelection = React.useCallback((warehouseId: string) => {
@@ -331,23 +299,23 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
     }, []);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showStockForm_${id}`, showStockForm.toString());
+        localStorage.setItem(`stock_showStockForm_${id}`, showStockForm.toString());
     }, [showStockForm, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showProductForm_${id}`, showProductForm.toString());
+        localStorage.setItem(`stock_showProductForm_${id}`, showProductForm.toString());
     }, [showProductForm, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showCatalog_${id}`, showCatalog.toString());
+        localStorage.setItem(`stock_showCatalog_${id}`, showCatalog.toString());
     }, [showCatalog, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showWarehouses_${id}`, showWarehouses.toString());
+        localStorage.setItem(`stock_showWarehouses_${id}`, showWarehouses.toString());
     }, [showWarehouses, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_activeW_${id}`, JSON.stringify(activeWarehouseIds));
+        localStorage.setItem(`stock_activeW_${id}`, JSON.stringify(activeWarehouseIds));
     }, [activeWarehouseIds, id]);
 
     // Default selection when id changes
@@ -374,13 +342,13 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
 
     useEffect(() => {
-        if (note) sessionStorage.setItem(`stock_note_${id}`, note);
+        if (editor.note) sessionStorage.setItem(`stock_note_${id}`, editor.note);
         else sessionStorage.removeItem(`stock_note_${id}`);
-    }, [note, id]);
+    }, [editor.note, id]);
 
     useEffect(() => {
-        sessionStorage.setItem(`stock_showNote_${id}`, showNote.toString());
-    }, [showNote, id]);
+        sessionStorage.setItem(`stock_showNote_${id}`, editor.showNote.toString());
+    }, [editor.showNote, id]);
 
 
     // Load available units from Client persistence
@@ -486,12 +454,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 const newSellers = [...availableSellers, formatted];
                 setAvailableSellers(newSellers);
                 saveClientSellers(newSellers);
-                updateActiveStockItem('seller', formatted);
+                editor.updateActiveStockItem('seller', formatted);
             }
             setSellerInputValue('');
             setShowSellerInput(false);
         }
-    }, [sellerInputValue, availableSellers, saveClientSellers, updateActiveStockItem]);
+    }, [sellerInputValue, availableSellers, saveClientSellers, editor.updateActiveStockItem]);
 
     // Filter products: show ONLY client-specific ones (Strict Per-Client Isolation)
     const availableProducts = useMemo(() => {
@@ -759,9 +727,9 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         e.preventDefault();
 
         // Include active items if present
-        const allItemsToProcess = [...stockItems];
-        if (activeStockItem.productId && activeStockItem.quantity) {
-            allItemsToProcess.push(activeStockItem);
+        const allItemsToProcess = [...editor.stockItems];
+        if (editor.activeStockItem.productId && editor.activeStockItem.quantity) {
+            allItemsToProcess.push(editor.activeStockItem);
         }
 
         const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
@@ -876,7 +844,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     quantity: qtyNum,
                     unit: product?.unit || 'L',
                     price: priceNum,
-                    sellerName: selectedSeller || undefined,
+                    sellerName: editor.selectedSeller || undefined,
                     presentationLabel: pLabel || undefined,
                     presentationContent: pContent || 0,
                     presentationAmount: pAmount || 0,
@@ -903,15 +871,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 date: dateStr,
                 time: timeStr,
                 referenceId: `PURCHASE-${movementId}`,
-                notes: note || '-',
+                notes: editor.note || '-',
                 facturaImageUrl: facturaUrl || undefined,
                 createdBy: displayName || 'Sistema',
                 createdAt: now.toISOString(),
                 synced: false,
-                investors: selectedInvestors,
-                sellerName: selectedSeller || undefined,
-                facturaDate: facturaDate || undefined,
-                dueDate: dueDate || undefined,
+                investors: editor.selectedInvestors,
+                sellerName: editor.selectedSeller || undefined,
+                facturaDate: editor.facturaDate || undefined,
+                dueDate: editor.dueDate || undefined,
                 campaignId: selectedCampaignId || undefined,
                 items: movementItems,
                 source: 'PURCHASE',
@@ -926,8 +894,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             syncService.pushChanges();
 
             // Reset
-            setStockItems([]);
-            setActiveStockItem({
+            editor.setStockItems([]);
+            editor.setActiveStockItem({
                 productId: '',
                 quantity: '',
                 price: '',
@@ -938,21 +906,20 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 presentationAmount: ''
             });
             setSelectedWarehouseId('');
-            setNote('');
-            setNoteConfirmed(false);
-            setShowNote(false);
-            setFacturaDate('');
-            setDueDate('');
+            editor.setNote('');
+            editor.setShowNote(false);
+            editor.setFacturaDate('');
+            editor.setDueDate('');
             setSelectedCampaignId('');
-            setSelectedInvestors([]);
-            setSelectedSeller('');
+            editor.setSelectedInvestors([]);
+            editor.setSelectedSeller('');
             setShowStockForm(false);
         } catch (error) {
             console.error(error);
         } finally {
             setIsSubmitting(false);
         }
-    }, [id, stockItems, activeStockItem, facturaFile, uploadFactura, stock, availableProducts, selectedWarehouseId, selectedCampaignId, updateStock, selectedSeller, note, displayName, selectedInvestors, facturaDate, dueDate, movementsRefresh, setShowStockForm]);
+    }, [id, editor, facturaFile, uploadFactura, stock, availableProducts, selectedWarehouseId, selectedCampaignId, updateStock, displayName, movementsRefresh, setShowStockForm]);
 
     const handleSaleSubmit = React.useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1316,53 +1283,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         }
     }, [stock, updateStock, deleteStock]);
 
-    const addStockToBatch = React.useCallback(() => {
-        if (!activeStockItem.productId || !activeStockItem.quantity) return;
-
-        // Normalize commas to dots before adding to batch
-        const normalizedItem = {
-            ...activeStockItem,
-            quantity: activeStockItem.quantity.replace(',', '.'),
-            price: activeStockItem.price.replace(',', '.'),
-            presentationContent: activeStockItem.presentationContent.replace(',', '.'),
-            presentationAmount: activeStockItem.presentationAmount.replace(',', '.')
-        };
-
-        setStockItems(prev => [...prev, { ...normalizedItem }]);
-        setActiveStockItem({
-            productId: '',
-            quantity: '',
-            price: '',
-            tempBrand: '',
-            productCommercialName: '',
-            presentationLabel: '',
-            presentationContent: '',
-            presentationAmount: ''
-        });
-    }, [activeStockItem]);
-
-    const removeBatchItem = React.useCallback((idx: number) => {
-        setStockItems(prev => prev.filter((_, i) => i !== idx));
-    }, []);
-
-    const editBatchItem = React.useCallback((idx: number) => {
-        setStockItems(prev => {
-            const itemToEdit = prev[idx];
-            if (itemToEdit) {
-                setActiveStockItem({
-                    productId: itemToEdit.productId,
-                    quantity: itemToEdit.quantity,
-                    price: itemToEdit.price,
-                    tempBrand: itemToEdit.tempBrand,
-                    productCommercialName: itemToEdit.productCommercialName || '',
-                    presentationLabel: itemToEdit.presentationLabel || '',
-                    presentationContent: itemToEdit.presentationContent || '',
-                    presentationAmount: itemToEdit.presentationAmount || ''
-                });
-            }
-            return prev.filter((_, i) => i !== idx);
-        });
-    }, []);
+    // Redundant local batch methods removed - now using editor hook
 
     const handleImportProducts = React.useCallback(async (importedProducts: any[]) => {
         setIsSubmitting(true);
@@ -1702,16 +1623,16 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     selectedWarehouseId={selectedWarehouseId}
                     setSelectedWarehouseId={setSelectedWarehouseId}
                     availableProducts={availableProducts}
-                    activeStockItem={activeStockItem}
-                    updateActiveStockItem={updateActiveStockItem}
-                    stockItems={stockItems}
-                    setStockItems={setStockItems}
-                    addStockToBatch={addStockToBatch}
-                    editBatchItem={editBatchItem}
-                    removeBatchItem={removeBatchItem}
+                    activeStockItem={editor.activeStockItem}
+                    updateActiveStockItem={editor.updateActiveStockItem}
+                    stockItems={editor.stockItems}
+                    setStockItems={editor.setStockItems as any}
+                    addStockToBatch={editor.addStockToBatch}
+                    editBatchItem={editor.editBatchItem}
+                    removeBatchItem={editor.removeBatchItem}
                     availableSellers={availableSellers}
-                    selectedSeller={selectedSeller}
-                    setSelectedSeller={setSelectedSeller}
+                    selectedSeller={editor.selectedSeller}
+                    setSelectedSeller={editor.setSelectedSeller}
                     showSellerInput={showSellerInput}
                     setShowSellerInput={setShowSellerInput}
                     sellerInputValue={sellerInputValue}
@@ -1721,24 +1642,24 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                     setShowSellerDelete={setShowSellerDelete}
                     setAvailableSellers={setAvailableSellers}
                     saveClientSellers={saveClientSellers}
-                    selectedInvestors={selectedInvestors}
-                    setSelectedInvestors={setSelectedInvestors}
+                    selectedInvestors={editor.selectedInvestors}
+                    setSelectedInvestors={editor.setSelectedInvestors}
                     client={client}
-                    showNote={showNote}
-                    setShowNote={setShowNote}
-                    note={note}
-                    setNote={setNote}
-                    setNoteConfirmed={setNoteConfirmed}
+                    showNote={editor.showNote}
+                    setShowNote={editor.setShowNote}
+                    note={editor.note}
+                    setNote={editor.setNote}
+                    setNoteConfirmed={() => {}} // Placeholder if not used anymore
                     facturaFile={facturaFile}
                     setFacturaFile={setFacturaFile}
                     handleFacturaChange={handleFacturaChange}
                     handleStockSubmit={handleStockSubmit}
                     isSubmitting={isSubmitting}
                     facturaUploading={facturaUploading}
-                    facturaDate={facturaDate}
-                    setFacturaDate={setFacturaDate}
-                    dueDate={dueDate}
-                    setDueDate={setDueDate}
+                    facturaDate={editor.facturaDate}
+                    setFacturaDate={editor.setFacturaDate}
+                    dueDate={editor.dueDate}
+                    setDueDate={editor.setDueDate}
                     campaigns={campaigns}
                     selectedCampaignId={selectedCampaignId}
                     setSelectedCampaignId={setSelectedCampaignId}

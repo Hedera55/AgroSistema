@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { OrderItem, Product, Warehouse, ProductType, OrderType } from '@/types';
@@ -142,6 +143,8 @@ export function OrderRecipeStep({
         items: productStock.filter(s => s.warehouseId === w.id)
     })).filter(w => w.items.length > 0);
 
+    const [dosageError, setDosageError] = useState(false);
+
     const normalizedDosage = currDosage.replace(',', '.');
     const requiredTotal = (parseFloat(normalizedDosage) || 0) * (selectedLot.hectares || 0);
 
@@ -176,6 +179,15 @@ export function OrderRecipeStep({
 
     const isMaiz = selectedProduct?.name.toUpperCase().includes('MAIZ');
     const bagsCount = isMaiz && currDosage ? (parseFloat(currDosage.replace(',', '.')) / 80000).toFixed(2) : null;
+
+    const onAddClick = () => {
+        if (!isMechanicalLabor && !currDosage) {
+            setDosageError(true);
+            return;
+        }
+        setDosageError(false);
+        handleAddItem();
+    };
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -217,6 +229,7 @@ export function OrderRecipeStep({
                                         setCurrProdId(e.target.value);
                                     }
                                     setSubQuantities({});
+                                    setDosageError(false);
                                 }}
                             >
                                 <option value="">Seleccionar...</option>
@@ -238,7 +251,7 @@ export function OrderRecipeStep({
                         {!isMechanicalLabor ? (
                             <div className="md:col-span-3">
                                 <div className="flex flex-col">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">
+                                    <label className={`block text-[10px] font-black uppercase tracking-widest mb-1.5 leading-none ${dosageError ? 'text-red-500' : 'text-slate-400'}`}>
                                         {selectedProduct?.type === 'SEED' ? 'Densidad' : 'Dosis'}
                                     </label>
                                     <div className="relative flex items-center h-[46px]">
@@ -255,12 +268,13 @@ export function OrderRecipeStep({
                                                     cleaned = cleaned.substring(0, firstIdx + 1) + cleaned.substring(firstIdx + 1).replace(/[.,]/g, '');
                                                 }
                                                 setCurrDosage(cleaned);
+                                                if (cleaned) setDosageError(false);
                                             }}
-                                            className="h-[46px] pr-12"
+                                            className={`h-[46px] pr-12 transition-colors ${dosageError ? 'bg-red-50 border-red-500 focus:ring-red-500' : ''}`}
                                         />
                                         {(currProdId) && (
                                             <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                                                <span className="text-[10px] font-black text-slate-400 uppercase">
+                                                <span className={`text-[10px] font-black uppercase ${dosageError ? 'text-red-400' : 'text-slate-400'}`}>
                                                     {isMaiz ? (bagsCount ? `${selectedProduct?.unit || 'sem'}/ha (${bagsCount} bolsas)` : `${selectedProduct?.unit || 'sem'}/ha`) : (selectedProduct?.type === 'SEED' ? 'KG/ha' : `${selectedProduct?.unit || 'u'}/ha`)}
                                                 </span>
                                             </div>
@@ -408,7 +422,7 @@ export function OrderRecipeStep({
                                 ✕ Cancelar
                             </button>
                             <button
-                                onClick={handleAddItem}
+                                onClick={onAddClick}
                                 disabled={(!isMechanicalLabor && !currProdId) || (isMechanicalLabor && !mechanicalLaborName)}
                                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-30 transition-all shadow-sm"
                             >
