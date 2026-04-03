@@ -25,6 +25,7 @@ import { processHarvest } from '@/services/harvest';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { normalizeNumber } from '@/lib/numbers';
+import { useMovementEditor } from '@/hooks/useMovementEditor';
 
 export default function StockHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: clientId } = use(params);
@@ -53,72 +54,52 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const isReadOnly = role === 'CLIENT' || (!isMaster && !profile?.assigned_clients?.includes(clientId));
 
     // Edit state
-    const [showEditForm, setShowEditForm] = useState(false);
-    const [editingMovement, setEditingMovement] = useState<InventoryMovement | null>(null);
     const [client, setClient] = useState<Client | null>(null);
     const { stock, updateStock } = useClientStock(clientId);
     const { warehouses: warehousesList } = useWarehouses(clientId);
     const { products: allProductsList } = useInventory();
     const [contractors, setContractors] = useState<any[]>([]);
 
-    // StockEntryForm Required States
-    const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
-    const [activeStockItem, setActiveStockItem] = useState({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' });
-
-    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
-        setActiveStockItem(prev => {
-            const newState = { ...prev, [field]: value };
-
-            // Auto-calculate quantity if presentation content or amount changes
-            if (field === 'presentationContent' || field === 'presentationAmount') {
-                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
-                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
-
-                const content = normalizeNumber(contentVal);
-                const amount = normalizeNumber(amountVal);
-
-                if (content && amount) {
-                    newState.quantity = (content * amount).toString();
-                }
-            }
-
-            return newState;
-        });
-    }, []);
-    const [stockItems, setStockItems] = useState<{ productId: string; quantity: string; price: string; tempBrand: string; presentationLabel?: string; presentationContent?: string; presentationAmount?: string; }[]>([]);
-    const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
-    const [facturaDate, setFacturaDate] = useState('');
-    const [dueDate, setDueDate] = useState('');
-    const [selectedSeller, setSelectedSeller] = useState('');
-    const [note, setNote] = useState('');
-    const [showNote, setShowNote] = useState(false);
     const [facturaFile, setFacturaFile] = useState<File | null>(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [facturaUploading, setFacturaUploading] = useState(false);
     const [availableSellers, setAvailableSellers] = useState<string[]>([]);
     const [showSellerInput, setShowSellerInput] = useState(false);
     const [showSellerDelete, setShowSellerDelete] = useState(false);
     const [sellerInputValue, setSellerInputValue] = useState('');
     const { campaigns } = useCampaigns(clientId);
-    const [selectedCampaignId, setSelectedCampaignId] = useState('');
-    // Logistics & Sale Edit States
-    const [saleQuantity, setSaleQuantity] = useState('');
-    const [salePrice, setSalePrice] = useState('');
-    const [saleTruckDriver, setSaleTruckDriver] = useState('');
-    const [salePlateNumber, setSalePlateNumber] = useState('');
-    const [saleTrailerPlate, setSaleTrailerPlate] = useState('');
-    const [saleDestinationCompany, setSaleDestinationCompany] = useState('');
-    const [saleDestinationAddress, setSaleDestinationAddress] = useState('');
-    const [saleTransportCompany, setSaleTransportCompany] = useState('');
-    const [saleDischargeNumber, setSaleDischargeNumber] = useState('');
-    const [saleHumidity, setSaleHumidity] = useState('');
-    const [saleHectoliterWeight, setSaleHectoliterWeight] = useState('');
-    const [saleGrossWeight, setSaleGrossWeight] = useState('');
-    const [saleTareWeight, setSaleTareWeight] = useState('');
-    const [salePrimarySaleCuit, setSalePrimarySaleCuit] = useState('');
-    const [saleDepartureDateTime, setSaleDepartureDateTime] = useState('');
-    const [saleDistanceKm, setSaleDistanceKm] = useState('');
-    const [saleFreightTariff, setSaleFreightTariff] = useState('');
+
+    const editor = useMovementEditor(clientId, {
+        productsData,
+        campaigns,
+        stock,
+        updateStock,
+        onSuccess: async () => {
+            await loadData();
+            if (selectedMovement?.movement?.id === editor.editingMovement?.id) {
+                const freshMovements = await db.getAll('movements');
+                const freshMov = freshMovements.find((m: any) => m.id === editor.editingMovement?.id);
+                if (freshMov) {
+                    setSelectedMovement((prev: any) => prev ? { ...prev, movement: freshMov } : null);
+                }
+            }
+        }
+    });
+
+    const updateActiveStockItem = React.useCallback((field: string, value: string) => {
+        editor.setActiveStockItem((prev: any) => {
+            const newState = { ...prev, [field]: value };
+            if (field === 'presentationContent' || field === 'presentationAmount') {
+                const contentVal = (field === 'presentationContent' ? value : (prev.presentationContent || ''));
+                const amountVal = (field === 'presentationAmount' ? value : (prev.presentationAmount || ''));
+                const content = normalizeNumber(contentVal);
+                const amount = normalizeNumber(amountVal);
+                if (content && amount) {
+                    newState.quantity = (content * amount).toString();
+                }
+            }
+            return newState;
+        });
+    }, [editor]);
 
     // Recalcular Fuerte states
     const [showRecalculateModal, setShowRecalculateModal] = useState(false);
@@ -496,324 +477,19 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             } else {
                 setHarvestMovements([]);
             }
-            setEditingMovement(m);
-            setShowHarvestWizard(true);
+            editor.startEdit(m);
+            setTimeout(() => {
+                editor.setShowEditForm(false);
+                setShowHarvestWizard(true);
+            }, 0);
             return;
         }
 
-        setEditingMovement(m);
-        setSelectedWarehouseId(m.warehouseId || '');
-        setNote(m.notes || '');
-        setFacturaDate(m.facturaDate || '');
-        setDueDate(m.dueDate || '');
-        setSelectedSeller(m.sellerName || '');
-        setSelectedCampaignId(m.campaignId || '');
-        setSelectedInvestors(m.investors || []);
-
-        if (m.type === 'SALE' || m.type === 'OUT') {
-            const productType = productsData[m.productId]?.type;
-            const isGrainOrSeedSale = (productType === 'GRAIN' || productType === 'SEED') && m.type === 'SALE';
-            setSaleQuantity(isGrainOrSeedSale ? (m.quantity / 1000).toString() : m.quantity.toString());
-            setSalePrice(isGrainOrSeedSale ? ((m.salePrice || 0) * 1000).toString() : m.salePrice?.toString() || '');
-            const logs = m as any;
-            setSaleTruckDriver(logs.truckDriver || '');
-            setSalePlateNumber(logs.plateNumber || '');
-            setSaleTrailerPlate(logs.trailerPlate || '');
-            setSaleDestinationCompany(logs.destinationCompany || logs.deliveryLocation || '');
-            setSaleDestinationAddress(logs.destinationAddress || '');
-            setSaleTransportCompany(logs.transportCompany || '');
-            setSaleDischargeNumber(logs.dischargeNumber || '');
-            setSaleHumidity(logs.humidity?.toString() || '');
-            setSaleHectoliterWeight(logs.hectoliterWeight?.toString() || '');
-            setSaleGrossWeight(logs.grossWeight?.toString() || '');
-            setSaleTareWeight(logs.tareWeight?.toString() || '');
-            setSalePrimarySaleCuit(logs.primarySaleCuit || '');
-            setSaleDepartureDateTime(logs.departureDateTime || '');
-            setSaleDistanceKm(logs.distanceKm?.toString() || '');
-            setSaleFreightTariff(logs.freightTariff?.toString() || '');
-
-            setShowEditForm(true);
+        editor.startEdit(m);
+        setTimeout(() => {
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-            return;
-        }
-
-        if (m.items && m.items.length > 0) {
-            setStockItems(m.items.map(it => ({
-                productId: it.productId,
-                quantity: it.quantity.toString(),
-                price: it.price?.toString() || '',
-                tempBrand: it.productBrand || '',
-                presentationLabel: it.presentationLabel || '',
-                presentationContent: it.presentationContent?.toString() || '',
-                presentationAmount: it.presentationAmount?.toString() || ''
-            })));
-        } else {
-            setStockItems([{
-                productId: m.productId,
-                quantity: m.quantity.toString(),
-                price: (m.purchasePrice || m.salePrice || 0).toString(),
-                tempBrand: m.productBrand || '',
-                presentationLabel: '',
-                presentationContent: '',
-                presentationAmount: ''
-            }]);
-        }
-        setShowEditForm(true);
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, [clientId, router, productsData]);
-
-    // Auto-update Sale Note during history edit
-    useEffect(() => {
-        if (editingMovement?.type === 'SALE' && salePrice) {
-            const product = productsData[editingMovement.productId];
-            if (product) {
-                const priceNum = parseFloat(salePrice.replace(/\./g, '').replace(',', '.'));
-                if (!isNaN(priceNum)) {
-                    const isGrainOrSeed = product.type === 'GRAIN' || product.type === 'SEED';
-                    const unitPriceLabel = isGrainOrSeed ? 'USD/Ton' : `USD/${product.unit || 'ud'}`;
-                    setNote(`${salePrice} ${unitPriceLabel}`);
-                }
-            }
-        }
-    }, [editingMovement, salePrice, productsData]);
-
-    const handleEditSave = React.useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingMovement) return;
-        const allItemsToProcess = [...stockItems];
-        if (activeStockItem.productId && activeStockItem.quantity) allItemsToProcess.push(activeStockItem);
-        const validItems = allItemsToProcess.filter(item => item.productId && item.quantity);
-        
-        const isSaleOrOut = editingMovement.type === 'SALE' || editingMovement.type === 'OUT';
-        if (!isSaleOrOut && validItems.length === 0) return;
-
-        if (!selectedWarehouseId) {
-            alert("Seleccione un destino");
-            return;
-        }
-
-        setIsSubmitting(true);
-        try {
-            if (editingMovement.type === 'OUT' || editingMovement.type === 'SALE') {
-                const isSale = editingMovement.type === 'SALE';
-                const productType = productsData[editingMovement.productId]?.type;
-                const isGrainOrSeedSale = (productType === 'GRAIN' || productType === 'SEED') && isSale;
-                const qtyNumRaw = normalizeNumber(saleQuantity);
-                const priceNumRaw = normalizeNumber(salePrice);
-                
-                const qtyNum = isGrainOrSeedSale ? qtyNumRaw * 1000 : qtyNumRaw;
-                const priceNum = isGrainOrSeedSale ? priceNumRaw / 1000 : priceNumRaw;
-
-                let currentStockState = [...stock];
-
-                // Revert old quantity
-                const oldSt = currentStockState.find((s: ClientStock) =>
-                    s.productId === editingMovement.productId &&
-                    s.warehouseId === editingMovement.warehouseId &&
-                    (s.productBrand || '').toLowerCase().trim() === (editingMovement.productBrand || '').toLowerCase().trim() &&
-                    (s.campaignId || undefined) === (editingMovement.campaignId || undefined) &&
-                    (s.presentationLabel || '') === ((editingMovement as any).presentationLabel || '') &&
-                    (s.presentationContent || 0) === ((editingMovement as any).presentationContent || 0)
-                );
-
-                if (oldSt) {
-                    const updatedOldSt = { ...oldSt, quantity: oldSt.quantity + editingMovement.quantity };
-                    await updateStock(updatedOldSt);
-                    currentStockState = currentStockState.map(s => s.id === oldSt.id ? updatedOldSt : s);
-                }
-
-                // Apply new quantity
-                const newSt = currentStockState.find((s: ClientStock) =>
-                    s.productId === editingMovement.productId &&
-                    s.warehouseId === selectedWarehouseId &&
-                    (s.productBrand || '').toLowerCase().trim() === (editingMovement.productBrand || '').toLowerCase().trim() &&
-                    (s.campaignId || undefined) === (selectedCampaignId || undefined) &&
-                    (s.presentationLabel || '') === ((editingMovement as any).presentationLabel || '') &&
-                    (s.presentationContent || 0) === ((editingMovement as any).presentationContent || 0)
-                );
-
-                if (newSt) {
-                    await updateStock({ ...newSt, quantity: newSt.quantity - qtyNum });
-                } else {
-                    await updateStock({
-                        id: generateId(),
-                        clientId,
-                        warehouseId: selectedWarehouseId || undefined,
-                        productId: editingMovement.productId,
-                        productBrand: editingMovement.productBrand || '',
-                        campaignId: selectedCampaignId || undefined,
-                        quantity: -qtyNum,
-                        lastUpdated: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                        presentationLabel: (editingMovement as any).presentationLabel || undefined,
-                        presentationContent: (editingMovement as any).presentationContent || undefined,
-                    });
-                }
-
-                await db.put('movements', {
-                    ...editingMovement,
-                    warehouseId: selectedWarehouseId || undefined,
-                    campaignId: selectedCampaignId || undefined,
-                    quantity: qtyNum,
-                    salePrice: isSale ? priceNum : undefined,
-                    amount: qtyNum * priceNum,
-                    notes: note,
-                    updatedAt: new Date().toISOString(),
-                    synced: false,
-                    // Flattened Properties
-                    truckDriver: saleTruckDriver || undefined,
-                    plateNumber: salePlateNumber || undefined,
-                    trailerPlate: saleTrailerPlate || undefined,
-                    destinationCompany: saleDestinationCompany || undefined,
-                    destinationAddress: saleDestinationAddress || undefined,
-                    transportCompany: saleTransportCompany || undefined,
-                    dischargeNumber: saleDischargeNumber || undefined,
-                    humidity: saleHumidity ? normalizeNumber(saleHumidity) : undefined,
-                    hectoliterWeight: saleHectoliterWeight ? normalizeNumber(saleHectoliterWeight) : undefined,
-                    grossWeight: saleGrossWeight ? normalizeNumber(saleGrossWeight) : undefined,
-                    tareWeight: saleTareWeight ? normalizeNumber(saleTareWeight) : undefined,
-                    primarySaleCuit: salePrimarySaleCuit || undefined,
-                    departureDateTime: saleDepartureDateTime || undefined,
-                    distanceKm: saleDistanceKm ? normalizeNumber(saleDistanceKm) : undefined,
-                    freightTariff: saleFreightTariff ? normalizeNumber(saleFreightTariff) : undefined,
-                } as any);
-                await loadData();
-                setShowEditForm(false);
-                setEditingMovement(null);
-                syncService.pushChanges();
-                
-                // Refresh modal state if it's open
-                if (selectedMovement?.movement?.id === editingMovement.id) {
-                    const freshMovements = await db.getAll('movements') as InventoryMovement[];
-                    const freshMov = freshMovements.find(m => m.id === editingMovement.id);
-                    if (freshMov) {
-                        setSelectedMovement((prev: any) => prev ? { ...prev, movement: freshMov } : null);
-                    }
-                }
-                return;
-            }
-
-            if (editingMovement.type === 'IN' || editingMovement.type === 'HARVEST') {
-                let currentStockState = [...stock];
-                const oldItems = editingMovement.items || [{
-                    productId: editingMovement.productId,
-                    quantity: editingMovement.quantity,
-                    productBrand: editingMovement.productBrand,
-                    presentationLabel: (editingMovement as any).presentationLabel,
-                    presentationContent: (editingMovement as any).presentationContent,
-                    presentationAmount: (editingMovement as any).presentationAmount
-                }];
-                for (const it of oldItems) {
-                    const st = currentStockState.find((s: ClientStock) =>
-                        s.productId === it.productId &&
-                        s.warehouseId === editingMovement.warehouseId &&
-                        (s.campaignId || undefined) === (editingMovement.campaignId || undefined) &&
-                        (s.productBrand || '').toLowerCase().trim() === (it.productBrand || '').toLowerCase().trim() &&
-                        (s.presentationLabel || '') === (it.presentationLabel || '') &&
-                        (s.presentationContent || 0) === (it.presentationContent || 0)
-                    );
-                    if (st) {
-                        const updatedSt = { ...st, quantity: st.quantity - it.quantity };
-                        await updateStock(updatedSt);
-                        currentStockState = currentStockState.map(s => s.id === st.id ? updatedSt : s);
-                    }
-                }
-                const now = new Date();
-                const movementItems: MovementItem[] = [];
-                for (const item of validItems) {
-                    const product = productsData[item.productId];
-                    const isHarvest = editingMovement.type === 'HARVEST';
-                    const camp = campaigns.find(c => c.id === selectedCampaignId);
-                    const campaignName = camp?.name || '---';
-
-                    // Update Product metadata if it's a harvest and campaign changed
-                    if (isHarvest && product && selectedCampaignId !== editingMovement.campaignId) {
-                        const updatedProduct = { ...product, brandName: campaignName, updatedAt: now.toISOString() };
-                        await db.put('products', updatedProduct);
-                    }
-
-                    const qtyNum = normalizeNumber(item.quantity);
-                    const priceNum = item.price ? normalizeNumber(item.price) : 0;
-                    const pLabel = (item.presentationLabel || '').trim();
-                    const pContent = item.presentationContent ? normalizeNumber(item.presentationContent) : 0;
-                    const pAmount = item.presentationAmount ? normalizeNumber(item.presentationAmount) : 0;
-                    const pBrand = isHarvest ? campaignName : (item.tempBrand || product?.brandName || '').toLowerCase().trim();
-
-                    const existing = currentStockState.find((s: ClientStock) =>
-                        s.productId === item.productId &&
-                        s.warehouseId === selectedWarehouseId &&
-                        (s.campaignId || undefined) === (selectedCampaignId || undefined) &&
-                        (s.productBrand || '').toLowerCase().trim() === pBrand.toLowerCase().trim() &&
-                        (s.presentationLabel || '') === pLabel &&
-                        (s.presentationContent || 0) === pContent
-                    );
-
-                    const stockId = existing ? existing.id : generateId();
-                    const newQuantity = (existing ? existing.quantity : 0) + qtyNum;
-                    const newPresentationAmount = existing ? (existing.presentationAmount || 0) + pAmount : pAmount;
-
-                    const newItem = {
-                        id: stockId, clientId, warehouseId: selectedWarehouseId || undefined, productId: item.productId, 
-                        productBrand: isHarvest ? campaignName : (item.tempBrand || product?.brandName || '---'),
-                        campaignId: selectedCampaignId || undefined,
-                        quantity: newQuantity,
-                        lastUpdated: now.toISOString(), updatedAt: now.toISOString(),
-                        presentationLabel: pLabel || undefined, presentationContent: pContent || undefined,
-                        presentationAmount: newPresentationAmount
-                    };
-
-                    await updateStock(newItem);
-                    currentStockState = existing ? currentStockState.map(s => s.id === stockId ? newItem : s) : [...currentStockState, newItem];
-
-                    movementItems.push({
-                        id: generateId(), productId: item.productId, productName: product?.name || 'Unknown', productCommercialName: product?.commercialName || '---',
-                        productBrand: isHarvest ? campaignName : (item.tempBrand || product?.brandName || '---'), 
-                        quantity: qtyNum, unit: product?.unit || 'L', price: priceNum,
-                        sellerName: selectedSeller || undefined, presentationLabel: pLabel || undefined, presentationContent: pContent || 0, presentationAmount: pAmount || 0
-                    });
-                }
-
-                const singleValidItem = validItems.length === 1 ? validItems[0] : null;
-                const rootPurchasePrice = singleValidItem && singleValidItem.price ? normalizeNumber(singleValidItem.price) : undefined;
-
-                await db.put('movements', {
-                    ...editingMovement,
-                    warehouseId: selectedWarehouseId || undefined,
-                    campaignId: selectedCampaignId || undefined,
-                    notes: note,
-                    facturaDate: facturaDate || undefined,
-                    dueDate: dueDate || undefined,
-                    investors: selectedInvestors,
-                    sellerName: selectedSeller || undefined,
-                    items: movementItems,
-                    updatedAt: now.toISOString(),
-                    synced: false,
-                    amount: movementItems.reduce((acc, it) => acc + (it.quantity * (it.price || 0)), 0),
-                    quantity: validItems.length === 1 ? normalizeNumber(singleValidItem!.quantity) : validItems.length,
-                    unit: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.unit || 'L') : 'items',
-                    productId: validItems.length === 1 ? singleValidItem!.productId : 'CONSOLIDATED',
-                    productName: validItems.length === 1 ? (productsData[singleValidItem!.productId]?.name || 'Unknown') : 'Compra de insumos',
-                    productBrand: validItems.length === 1 ? singleValidItem!.tempBrand : undefined,
-                    purchasePrice: rootPurchasePrice
-                });
-                await loadData();
-                setShowEditForm(false);
-                setEditingMovement(null);
-                syncService.pushChanges();
-                return;
-            }
-        } catch (error) {
-            console.error(error);
-            alert('Error al guardar los cambios');
-        } finally {
-            setIsSubmitting(false);
-        }
-    }, [
-        editingMovement, stockItems, activeStockItem, saleQuantity, salePrice, stock, selectedWarehouseId, note, saleTruckDriver,
-        salePlateNumber, saleTrailerPlate, saleDestinationCompany, saleDestinationAddress, saleTransportCompany, saleDischargeNumber,
-        saleHumidity, saleHectoliterWeight, saleGrossWeight, saleTareWeight, salePrimarySaleCuit, saleDepartureDateTime, saleDistanceKm,
-        saleFreightTariff, loadData, updateStock, productsData, clientId, selectedSeller, facturaDate, dueDate, selectedInvestors, selectedCampaignId
-    ]);
+        }, 50);
+    }, [clientId, router, productsData, editor]);
 
     const handleRecalcularFuerte = async () => {
         if (!recalculateCampaignId) return alert('Seleccione una campaña de partida.');
@@ -1423,11 +1099,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 </div>
             )}
 
-            {showHarvestWizard && editingMovement && (
+            {showHarvestWizard && editor.editingMovement && (
                 <HarvestWizard
                     // Use allLotsFull if lot id matches
-                    lot={allLotsFull.find(l => l.id === editingMovement.referenceId?.split('_')[0]) || lots.find(l => l.id === editingMovement.referenceId?.split('_')[0]) || {} as any}
-                    farm={farms.find(f => f.lots?.some((l: any) => l.id === editingMovement.referenceId?.split('_')[0])) || farms.find(f => f.id === (editingMovement as any).farmId) || null as any}
+                    lot={allLotsFull.find(l => l.id === editor.editingMovement?.referenceId?.split('_')[0]) || lots.find(l => l.id === editor.editingMovement?.referenceId?.split('_')[0]) || {} as any}
+                    farm={farms.find(f => f.lots?.some((l: any) => l.id === editor.editingMovement?.referenceId?.split('_')[0])) || farms.find(f => f.id === (editor.editingMovement as any)?.farmId) || null as any}
                     contractors={contractors} // Dynamically loaded contractors
                     campaigns={campaigns}
                     warehouses={warehousesList} // Fixes unfiltered warehouses crash, now properly restricted to current client
@@ -1435,12 +1111,12 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     partners={client?.partners || []}
                     investors={client?.investors || []}
                     movements={movements}
-                    onCancel={() => { setShowHarvestWizard(false); setEditingMovement(null); setHarvestMovements([]); }}
+                    onCancel={() => { setShowHarvestWizard(false); editor.setEditingMovement(null); setHarvestMovements([]); }}
                     onComplete={async (data) => {
                         try {
-                             if (!editingMovement) return;
+                             if (!editor.editingMovement) return;
                              const { date } = data;
-                             const lotId = editingMovement.referenceId?.split('_')[0] || '';
+                             const lotId = editor.editingMovement?.referenceId?.split('_')[0] || '';
                              const lot = allLotsFull.find((l: any) => l.id === lotId) || lots.find(l => l.id === lotId) || {} as any;
 
                              await processHarvest({
@@ -1457,20 +1133,20 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                                      addProduct: (p) => db.put('products', p).then(() => p as Product)
                                  },
                                  isEditing: true,
-                                 existingBatchId: editingMovement.harvestBatchId,
-                                 existingOrder: ordersData.find((o: any) => o.harvestBatchId === editingMovement.harvestBatchId && !o.deleted)
+                                 existingBatchId: editor.editingMovement?.harvestBatchId,
+                                 existingOrder: ordersData.find((o: any) => o.harvestBatchId === editor.editingMovement?.harvestBatchId && !o.deleted)
                              });
 
                              syncService.pushChanges();
                              setShowHarvestWizard(false); 
-                             setEditingMovement(null); 
+                             editor.setEditingMovement(null); 
                             
                             // Refresh modal state if it's open
                             const freshMovements = await db.getAll('movements');
                             const related = freshMovements.filter((mov: any) =>
-                                mov.referenceId === editingMovement.referenceId &&
+                                mov.referenceId === editor.editingMovement?.referenceId &&
                                 mov.clientId === clientId &&
-                                mov.date === (date || editingMovement.date) &&
+                                mov.date === (date || editor.editingMovement?.date) &&
                                 !mov.deleted
                             );
                             
@@ -1487,9 +1163,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                             console.error(error); alert("Error al actualizar la cosecha.");
                         }
                     }}
-                    initialDate={editingMovement.date}
-                    initialContractor={editingMovement.contractorName || ''}
-                    initialLaborPrice={editingMovement.harvestLaborPricePerHa ? String(editingMovement.harvestLaborPricePerHa) : editingMovement.harvestLaborCost ? String(editingMovement.harvestLaborCost) : ''}
+                    initialDate={editor.editingMovement?.date}
+                    initialContractor={editor.editingMovement?.contractorName || ''}
+                    initialLaborPrice={editor.editingMovement?.harvestLaborPricePerHa ? String(editor.editingMovement?.harvestLaborPricePerHa) : editor.editingMovement?.harvestLaborCost ? String(editor.editingMovement?.harvestLaborCost) : ''}
                     initialYield={String(harvestMovements.reduce((sum, m) => sum + Math.abs(m.quantity), 0))}
                     isExecutingPlan={false} // Editing an existing one
                     // Map ALL related peer harvest movements (they are all type: HARVEST)
@@ -1521,72 +1197,138 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 />
             )}
 
-            {showEditForm && (
+            {editor.showEditForm && editor.editingMovement && (
                 <div className="mt-8 animate-slideUp">
-
-                    {(editingMovement?.type === 'SALE' || editingMovement?.type === 'OUT') ? (
+                    {(editor.editingMovement.type === 'SALE' || editor.editingMovement.type === 'OUT') ? (
                         <StockSalePanel
-                            titleOverride={editingMovement?.type === 'SALE' ? "Editar Venta" : "Editar Retiro"}
+                            titleOverride={editor.editingMovement?.type === 'SALE' ? "Editar Venta" : "Editar Retiro"}
                             stockItem={{
-                                productId: editingMovement.productId,
-                                productName: productsData[editingMovement.productId]?.name || editingMovement.productName,
-                                productType: productsData[editingMovement.productId]?.type,
-                                productBrand: productsData[editingMovement.productId]?.brandName || editingMovement.productBrand,
-                                productCommercialName: productsData[editingMovement.productId]?.commercialName || (editingMovement as any).productCommercialName,
-                                quantity: (stock.find(s => s.productId === editingMovement.productId)?.quantity || 0) + editingMovement.quantity,
-                                unit: editingMovement.unit,
-                                warehouseId: selectedWarehouseId,
-                                warehouseName: warehousesKey[selectedWarehouseId] || 'Galpón'
+                                productId: editor.editingMovement.productId,
+                                productName: productsData[editor.editingMovement.productId]?.name || editor.editingMovement.productName,
+                                productType: productsData[editor.editingMovement.productId]?.type,
+                                productBrand: productsData[editor.editingMovement.productId]?.brandName || editor.editingMovement.productBrand,
+                                productCommercialName: productsData[editor.editingMovement.productId]?.commercialName || (editor.editingMovement as any).productCommercialName,
+                                quantity: (stock.find(s => s.productId === editor.editingMovement!.productId)?.quantity || 0) + editor.editingMovement.quantity,
+                                unit: editor.editingMovement.unit,
+                                warehouseId: editor.selectedWarehouseId,
+                                warehouseName: warehousesKey[editor.selectedWarehouseId] || 'Galpón'
                             }}
-                            onClose={() => { setShowEditForm(false); setEditingMovement(null); }}
-                            onSubmit={handleEditSave}
-                            saleQuantity={saleQuantity} 
-                            setSaleQuantity={setSaleQuantity}
-                            salePrice={salePrice}
-                            setSalePrice={setSalePrice}
-                            isSubmitting={isSubmitting}
+                            onClose={() => { editor.setShowEditForm(false); editor.setEditingMovement(null); }}
+                            onSubmit={async (e) => { e?.preventDefault(); await editor.saveEdit(); }}
+                            saleQuantity={editor.saleQuantity} 
+                            setSaleQuantity={editor.setSaleQuantity}
+                            salePrice={editor.salePrice}
+                            setSalePrice={editor.setSalePrice}
+                            isSubmitting={editor.isSubmitting}
                             facturaUploading={facturaUploading}
-                            saleTruckDriver={saleTruckDriver}
-                            setSaleTruckDriver={setSaleTruckDriver}
-                            salePlateNumber={salePlateNumber}
-                            setSalePlateNumber={setSalePlateNumber}
-                            saleTrailerPlate={saleTrailerPlate}
-                            setSaleTrailerPlate={setSaleTrailerPlate}
-                            saleDestinationCompany={saleDestinationCompany}
-                            setSaleDestinationCompany={setSaleDestinationCompany}
-                            saleDestinationAddress={saleDestinationAddress}
-                            setSaleDestinationAddress={setSaleDestinationAddress}
-                            salePrimarySaleCuit={salePrimarySaleCuit}
-                            setSalePrimarySaleCuit={setSalePrimarySaleCuit}
-                            saleTransportCompany={saleTransportCompany}
-                            setSaleTransportCompany={setSaleTransportCompany}
-                            saleDischargeNumber={saleDischargeNumber}
-                            setSaleDischargeNumber={setSaleDischargeNumber}
-                            saleHumidity={saleHumidity}
-                            setSaleHumidity={setSaleHumidity}
-                            saleHectoliterWeight={saleHectoliterWeight}
-                            setSaleHectoliterWeight={setSaleHectoliterWeight}
-                            saleGrossWeight={saleGrossWeight}
-                            setSaleGrossWeight={setSaleGrossWeight}
-                            saleTareWeight={saleTareWeight}
-                            setSaleTareWeight={setSaleTareWeight}
-                            saleDistanceKm={saleDistanceKm}
-                            setSaleDistanceKm={setSaleDistanceKm}
-                            saleDepartureDateTime={saleDepartureDateTime}
-                            setSaleDepartureDateTime={setSaleDepartureDateTime}
-                            saleFreightTariff={saleFreightTariff}
-                            setSaleFreightTariff={setSaleFreightTariff}
-                            showSaleNote={showNote}
-                            setShowSaleNote={setShowNote}
-                            saleNote={note}
-                            setSaleNote={setNote}
+                            saleTruckDriver={editor.saleTruckDriver}
+                            setSaleTruckDriver={editor.setSaleTruckDriver}
+                            salePlateNumber={editor.salePlateNumber}
+                            setSalePlateNumber={editor.setSalePlateNumber}
+                            saleTrailerPlate={editor.saleTrailerPlate}
+                            setSaleTrailerPlate={editor.setSaleTrailerPlate}
+                            saleDestinationCompany={editor.saleDestinationCompany}
+                            setSaleDestinationCompany={editor.setSaleDestinationCompany}
+                            saleDestinationAddress={editor.saleDestinationAddress}
+                            setSaleDestinationAddress={editor.setSaleDestinationAddress}
+                            salePrimarySaleCuit={editor.salePrimarySaleCuit}
+                            setSalePrimarySaleCuit={editor.setSalePrimarySaleCuit}
+                            saleTransportCompany={editor.saleTransportCompany}
+                            setSaleTransportCompany={editor.setSaleTransportCompany}
+                            saleDischargeNumber={editor.saleDischargeNumber}
+                            setSaleDischargeNumber={editor.setSaleDischargeNumber}
+                            saleHumidity={editor.saleHumidity}
+                            setSaleHumidity={editor.setSaleHumidity}
+                            saleHectoliterWeight={editor.saleHectoliterWeight}
+                            setSaleHectoliterWeight={editor.setSaleHectoliterWeight}
+                            saleGrossWeight={editor.saleGrossWeight}
+                            setSaleGrossWeight={editor.setSaleGrossWeight}
+                            saleTareWeight={editor.saleTareWeight}
+                            setSaleTareWeight={editor.setSaleTareWeight}
+                            saleDistanceKm={editor.saleDistanceKm}
+                            setSaleDistanceKm={editor.setSaleDistanceKm}
+                            saleDepartureDateTime={editor.saleDepartureDateTime}
+                            setSaleDepartureDateTime={editor.setSaleDepartureDateTime}
+                            saleFreightTariff={editor.saleFreightTariff}
+                            setSaleFreightTariff={editor.setSaleFreightTariff}
+                            showSaleNote={editor.showNote}
+                            setShowSaleNote={editor.setShowNote}
+                            saleNote={editor.note}
+                            setSaleNote={editor.setNote}
                             saleFacturaFile={facturaFile}
                             setSaleFacturaFile={setFacturaFile}
                             saleRemitoFile={null}
                             setSaleRemitoFile={() => {}}
                         />
                     ) : (
-                        <StockEntryForm showStockForm={true} setShowStockForm={() => { setShowEditForm(false); setEditingMovement(null); }} warehouses={warehousesFull} activeWarehouseIds={selectedWarehouseId ? [selectedWarehouseId] : []} selectedWarehouseId={selectedWarehouseId} setSelectedWarehouseId={setSelectedWarehouseId} availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} activeStockItem={activeStockItem as any} updateActiveStockItem={updateActiveStockItem} stockItems={stockItems} setStockItems={setStockItems} addStockToBatch={() => { if (activeStockItem.productId && activeStockItem.quantity) { setStockItems(prev => [...prev, activeStockItem]); setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); } }} editBatchItem={(idx) => { const item = stockItems[idx]; setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); setStockItems(prev => prev.filter((_, i) => i !== idx)); }} removeBatchItem={(idx) => setStockItems(prev => prev.filter((_, i) => i !== idx))} availableSellers={availableSellers} selectedSeller={selectedSeller} setSelectedSeller={setSelectedSeller} showSellerInput={showSellerInput} setShowSellerInput={setShowSellerInput} sellerInputValue={sellerInputValue} setSellerInputValue={setSellerInputValue} handleAddSeller={() => { if (sellerInputValue.trim()) { setAvailableSellers(prev => [...prev, sellerInputValue.trim()]); setSelectedSeller(sellerInputValue.trim()); setSellerInputValue(''); setShowSellerInput(false); } }} showSellerDelete={showSellerDelete} setShowSellerDelete={setShowSellerDelete} setAvailableSellers={setAvailableSellers} saveClientSellers={() => { }} selectedInvestors={selectedInvestors} setSelectedInvestors={setSelectedInvestors} client={client} showNote={showNote} setShowNote={setShowNote} note={note} setNote={setNote} setNoteConfirmed={() => { }} facturaFile={facturaFile} setFacturaFile={setFacturaFile} handleFacturaChange={(e) => { if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); }} handleStockSubmit={handleEditSave} isSubmitting={isSubmitting} facturaUploading={facturaUploading} campaigns={campaigns} selectedCampaignId={selectedCampaignId} setSelectedCampaignId={setSelectedCampaignId} facturaDate={facturaDate} setFacturaDate={setFacturaDate} dueDate={dueDate} setDueDate={setDueDate} isEditing={!!editingMovement} />
+                        <StockEntryForm 
+                            showStockForm={true} 
+                            setShowStockForm={editor.setShowEditForm} 
+                            warehouses={warehousesFull} 
+                            activeWarehouseIds={editor.selectedWarehouseId ? [editor.selectedWarehouseId] : []} 
+                            selectedWarehouseId={editor.selectedWarehouseId} 
+                            setSelectedWarehouseId={editor.setSelectedWarehouseId} 
+                            availableProducts={Object.values(productsData).filter(p => p.clientId === clientId)} 
+                            activeStockItem={editor.activeStockItem as any} 
+                            updateActiveStockItem={updateActiveStockItem} 
+                            stockItems={editor.stockItems} 
+                            setStockItems={editor.setStockItems} 
+                            addStockToBatch={() => { 
+                                if (editor.activeStockItem.productId && editor.activeStockItem.quantity) { 
+                                    editor.setStockItems((prev: any) => [...prev, editor.activeStockItem]); 
+                                    editor.setActiveStockItem({ productId: '', quantity: '', price: '', tempBrand: '', presentationLabel: '', presentationContent: '', presentationAmount: '' }); 
+                                } 
+                            }} 
+                            editBatchItem={(idx: number) => { 
+                                const item = editor.stockItems[idx]; 
+                                editor.setActiveStockItem({ ...item, presentationLabel: item.presentationLabel || '', presentationContent: item.presentationContent || '', presentationAmount: item.presentationAmount || '' }); 
+                                editor.setStockItems((prev: any) => prev.filter((_:any, i:any) => i !== idx)); 
+                            }} 
+                            removeBatchItem={(idx: number) => editor.setStockItems((prev: any) => prev.filter((_:any, i:any) => i !== idx))} 
+                            availableSellers={availableSellers} 
+                            selectedSeller={editor.selectedSeller} 
+                            setSelectedSeller={editor.setSelectedSeller} 
+                            showSellerInput={showSellerInput} 
+                            setShowSellerInput={setShowSellerInput} 
+                            sellerInputValue={sellerInputValue} 
+                            setSellerInputValue={setSellerInputValue} 
+                            handleAddSeller={() => { 
+                                if (sellerInputValue.trim()) { 
+                                    setAvailableSellers((prev: any) => [...prev, sellerInputValue.trim()]); 
+                                    editor.setSelectedSeller(sellerInputValue.trim()); 
+                                    setSellerInputValue(''); 
+                                    setShowSellerInput(false); 
+                                } 
+                            }} 
+                            showSellerDelete={showSellerDelete} 
+                            setShowSellerDelete={setShowSellerDelete} 
+                            setAvailableSellers={setAvailableSellers} 
+                            saveClientSellers={() => { }} 
+                            selectedInvestors={editor.selectedInvestors} 
+                            setSelectedInvestors={editor.setSelectedInvestors} 
+                            client={client!} 
+                            showNote={editor.showNote} 
+                            setShowNote={editor.setShowNote} 
+                            note={editor.note} 
+                            setNote={editor.setNote} 
+                            setNoteConfirmed={() => { }} 
+                            facturaFile={facturaFile} 
+                            setFacturaFile={setFacturaFile} 
+                            handleFacturaChange={(e: any) => { 
+                                if (e.target.files?.[0]) setFacturaFile(e.target.files[0]); 
+                            }} 
+                            handleStockSubmit={async (e: any) => { e?.preventDefault(); await editor.saveEdit(); }} 
+                            isSubmitting={editor.isSubmitting} 
+                            facturaUploading={facturaUploading} 
+                            campaigns={campaigns} 
+                            selectedCampaignId={editor.selectedCampaignId} 
+                            setSelectedCampaignId={editor.setSelectedCampaignId} 
+                            facturaDate={editor.facturaDate} 
+                            setFacturaDate={editor.setFacturaDate} 
+                            dueDate={editor.dueDate} 
+                            setDueDate={editor.setDueDate} 
+                            isEditing={true} 
+                        />
                     )}
                 </div>
             )}

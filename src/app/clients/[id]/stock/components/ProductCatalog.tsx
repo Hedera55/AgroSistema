@@ -179,9 +179,6 @@ function ProductCatalogInternal({
                                                     }
 
                                                     let confirmMessage = `¿Importar ${validProducts.length} insumos? Se agregarán al catálogo existente.`;
-                                                    if (discarded > 0) {
-                                                        confirmMessage += `\n(Se descartarán ${discarded} insumo(s) de cosecha propia y no serán importados)`;
-                                                    }
 
                                                     if (confirm(confirmMessage)) {
                                                         await importProducts(validProducts);

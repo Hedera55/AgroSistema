@@ -4,7 +4,8 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Goal**: Keep `page.tsx` under 800-1000 lines as an "orchestrator" of state and handlers.
 - **Shared Components**: When a component is required in two or more distinct pages, it MUST be moved to the global `src/components/` directory. This ensures that any future modifications or bug fixes are automatically applied across all relevant pages, maintaining UI and logic consistency.
 - **Shared Services**: When complex business logic (e.g., saving a harvest, adjusting stock, calculating quotas) is used in two or more distinct pages, it MUST be moved to the global `src/services/` directory. This prevents "split-brain" issues and ensures data integrity.
-- **Location**: Use `src/app/clients/[id]/[page]/components/` for strictly local modules, `src/components/` for shared UI, and `src/services/` for shared business logic.
+- **Shared Hooks**: When a custom React hook (e.g., `useInventory`, `useMovementEditor`) manages state and business logic that is shared or required across multiple pages, it MUST be moved to the global `src/hooks/` directory. This keeps the orchestrator pages lean and ensures state consistency.
+- **Location**: Use `src/app/clients/[id]/[page]/components/` for strictly local modules, `src/components/` for shared UI, `src/services/` for shared business logic, and `src/hooks/` for shared stateful logic.
 - **Inline Multistep Wizards**: Complex creation flows (like "New Order" or "New Harvest") must be implemented as inline, conditionally rendered components (e.g., `OrderWizard` or `HarvestWizard`) at the bottom of the main list view (`page.tsx`). Avoid routing to a separate `/new/page.tsx` to maintain context and speed up the user flow.
     - **Smooth Scrolling**: When an inline wizard or detail view is opened, the system should ideally only auto-scroll if it's a creation flow. Detailed views (like `OrderDetailView`) should avoid forced scrolls to prevent user disorientation during row browsing.
 
@@ -91,12 +92,23 @@ To maintain fast compilation (HMR) and readable code, large pages are split "sur
 - **Filtering**: `availableProducts` in the stock entry form must be filtered by the current `clientId` to prevent cross-client data selection.
 - **Autocomplete (Presentations)**: The "Presentación" field must provide an autocomplete dropdown suggesting `standardPresentations` from the product catalog. Selecting an option automatically populates both the label and content fields.
 
+### Stock Valuation (PPP) Sourcing
+The system uses a dual-sourcing logic for calculating the **Precio Promedio Ponderado (PPP)** in the Galpón (Stock) view:
+- **Harvested Products (Grains/Seeds)**: Valued using the average **selling price** from `SALE` movements. 
+- **Inputs (Insumos)**: Valued using the average **purchase price** from `PURCHASE` movements.
+- **Identification**: The code identifying harvested items MUST check `(product.type === 'GRAIN' || product.type === 'SEED') && item.source === 'HARVEST'`.
+
 ## Navigation & Order Logic
 
 ### 🛡️ Exact ID Persistence (Editing Reliability)
 - **Problem**: Previously, editing an order used "Property-based Reverse Matching" (`productId`, `warehouseId`, `presentation`). This was ambiguous if multiple batches existed or if a quantity was zero, leading to "phantom duplicates" or missing values in the edit flow.
 - **Solution**: Transitioned to **Deterministic ID Tracking**:
     - **Implementation**: The `OrderItem` type now includes a `stockId`. 
+
+#### 🚜 Harvest Batch Persistence
+- **Rule**: All features that implement or call the `HarvestWizard` (e.g., Fields Page, Stock History) for **editing** MUST preserve and pass the `harvestBatchId`.
+- **Reason**: The `processHarvest` service uses this ID to identify and soft-delete previous movements. If the ID is lost, the service treats the edit as a new harvest, resulting in duplicate movements and incorrect stock levels.
+- **Implementation**: Ensure that grouped harvest events in UI components (like `LotHistory.tsx`) explicitly include the `harvestBatchId` in their data structure so it can be passed back to the service during the save operation.
     - **Creation**: When an item is added to an order, it is stamped with the unique `stockId` from the original stock record.
     - **Editing**: The system uses `st.id === i.stockId` as the **primary lookup** to reload multipliers.
     - **Fallback**: Property-based matching is only used as a fallback for historical orders (backward compatibility).

@@ -50,6 +50,7 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                     if (!groups[key]) {
                         groups[key] = {
                             id: m.id, // Use first one's ID
+                            harvestBatchId: m.harvestBatchId,
                             date: m.date,
                             time: m.time,
                             type: 'HARVEST',

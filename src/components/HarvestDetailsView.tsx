@@ -169,7 +169,10 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Rinde total</label>
                         <p className="text-sm font-bold text-blue-600">
-                            {harvestMovement.quantity?.toLocaleString()} {harvestMovement.unit}
+                            {(() => {
+                                const totalYieldSum = (harvestMovements || []).reduce((sum, m) => sum + (m.quantity || 0), 0);
+                                return `${totalYieldSum.toLocaleString()} ${harvestMovement.unit}`;
+                            })()}
                         </p>
                     </div>
                     <div className="hidden lg:block"></div>

@@ -599,7 +599,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
             const brand = (item.productBrand || product?.brandName || '').toLowerCase().trim();
             const normalizedName = (product?.name || '').toLowerCase().trim();
 
-            const isPropia = (product?.type === 'GRAIN' || product?.type === 'SEED') && brand === 'propia';
+            const isPropia = (product?.type === 'GRAIN' || product?.type === 'SEED') && item.source === 'HARVEST';
 
             // Find specific PPP for this presentation
             const pKeySpecific = getPresentKey(item.productId, item);
@@ -1445,8 +1445,7 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
 
                                                 if (item) {
                                                     setSellingStockId(item.id);
-                                                    const isGrainOrSeed = item.productType === 'GRAIN' || item.productType === 'SEED';
-                                                    setSaleQuantity(isGrainOrSeed ? (item.quantity / 1000).toString() : item.quantity.toString());
+                                                    setSaleQuantity('');
                                                 }
                                             } else {
                                                 alert('Por favor selecciona un solo insumo para vender.');

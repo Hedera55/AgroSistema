@@ -366,7 +366,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             if (dist) {
                 profileData = {
                     distributionId: dist.id,
-                    destinationCompany: dist.targetName
                 };
             }
         }
@@ -765,7 +764,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                     if (dist) {
                                                         pData = {
                                                             distributionId: dist.id,
-                                                            destinationCompany: dist.targetName,
                                                             // Could also pull logistics from the distribution object if we store it there
                                                         };
                                                     }
@@ -1003,7 +1001,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                             type="button"
                             onClick={() => {
                                 if (step === 1) {
-                                    if (!observedYield || parseFloat(observedYield) <= 0) return alert('Ingrese la producción total');
+                                    const yVal = parseFloat(observedYield);
+                                    if (observedYield === '' || isNaN(yVal) || yVal < 0) return alert('Ingrese la producción total');
                                     setStep(2);
                                 } else if (step === 2) {
                                     // Check for exceeded quotas

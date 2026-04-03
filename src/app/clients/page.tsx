@@ -502,9 +502,12 @@ export default function ClientsPage() {
             }
 
             {showSuccessMessage && (
-                <div className="pt-0 text-[#2d9a7d] font-bold text-2xl font-serif animate-fadeIn tracking-wider">
-                    Recuerde asignar empresa
-                </div>
+                <Link 
+                    href="/admin/users"
+                    className="block pt-0 text-[#2d9a7d] font-bold text-2xl font-serif animate-fadeIn tracking-wider hover:underline transition-all"
+                >
+                    Recuerde asignar empresa y contratista
+                </Link>
             )}
         </div >
     );

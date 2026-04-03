@@ -14,6 +14,11 @@ import { Input } from '@/components/ui/Input';
 import { generateId } from '@/lib/uuid';
 import { syncService } from '@/services/sync';
 import { CampaignSnapshot, ClientStock } from '@/types';
+import { useMovementEditor } from '@/hooks/useMovementEditor';
+import { MovementDetailsView } from '@/components/MovementDetailsView';
+import { OrderDetailView } from '@/components/OrderDetailView';
+import { StockSalePanel } from '@/components/StockSalePanel';
+import { StockEntryForm } from '@/app/clients/[id]/stock/components/StockEntryForm';
 
 export default function ContaduriaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -23,6 +28,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     const { movements, loading: movementsLoading } = useClientMovements(id);
     const { products, loading: productsLoading } = useInventory();
     const { orders, loading: ordersLoading } = useOrders(id);
+
+
     const scrollRef = useHorizontalScroll();
     const partnersScrollRef = useHorizontalScroll();
     const [loading, setLoading] = useState(true);
@@ -46,6 +53,20 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     // Campaign Snapshots
     const [snapshots, setSnapshots] = useState<CampaignSnapshot[]>([]);
     const [isSnapshotting, setIsSnapshotting] = useState(false);
+
+    // Editor State (must be after campaigns declaration)
+    const [selectedMovement, setSelectedMovement] = useState<InventoryMovement | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+    const editor = useMovementEditor(id as string, {
+        productsData: Object.fromEntries(products.map(p => [p.id, p])),
+        campaigns: campaigns || [],
+        stock: [],
+        updateStock: async (item: any) => { await db.put('stock', item); },
+        onSuccess: () => {
+             window.location.reload();
+        }
+    });
 
 
     useEffect(() => {
@@ -704,6 +725,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
     if (!client) return <div className="p-8 text-center text-red-500">Empresa no encontrada</div>;
 
     return (
+        <>
         <div className="space-y-8">
             <div className="flex flex-col gap-4">
                 <div>
@@ -793,8 +815,17 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                                 financialHistory.slice(0, historyLimit).map((item) => (
                                     <React.Fragment key={item.id}>
                                         <tr
-                                            onClick={() => item.type === 'PURCHASE' ? setExpandedHistoryId(expandedHistoryId === item.id ? null : item.id) : null}
-                                            className={`transition-colors ${item.type === 'PURCHASE' ? 'cursor-pointer hover:bg-slate-50' : 'hover:bg-slate-50'}`}
+                                            onClick={() => {
+                                                if (item.type === 'PURCHASE') setExpandedHistoryId(expandedHistoryId === item.id ? null : item.id);
+                                                if (item.type === 'PURCHASE' || item.type === 'SALE') {
+                                                    const mov = movements.find(m => m.id === item.id);
+                                                    if (mov) { setSelectedMovement(mov); setSelectedOrder(null); }
+                                                } else if (item.type === 'SERVICE') {
+                                                    const ord = orders.find(o => o.id === item.id);
+                                                    if (ord) { setSelectedOrder(ord); setSelectedMovement(null); }
+                                                }
+                                            }}
+                                            className="cursor-pointer transition-colors hover:bg-slate-50"
                                         >
                                             <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
                                                 <div className="flex flex-col">
@@ -1042,7 +1073,14 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             {/* Investors Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Desglose por Socio</h3>
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
+                        Desglose por Socio {(() => {
+                            if (viewCampaignId === 'all') return '(Todas las Campañas)';
+                            if (viewCampaignId === 'none') return '(Sin Campaña)';
+                            const camp = campaigns.find(c => c.id === viewCampaignId);
+                            return camp ? `(${camp.name})` : '';
+                        })()}
+                    </h3>
                     {!isReadOnly && (
                         <button
                             onClick={() => setShowEditInvestors(!showEditInvestors)}
@@ -1258,5 +1296,135 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                 </Link>
             </div>
         </div >
+        
+        {/* Detail Modals */}
+        {selectedMovement && client && (
+                <div className="mt-4 animate-slideUp">
+                        <MovementDetailsView
+                            movement={selectedMovement}
+                            client={client}
+                            order={selectedOrder || undefined}
+                            typeLabel={selectedMovement.type === 'SALE' ? 'Venta' : selectedMovement.type === 'IN' ? 'Ingreso' : 'Egreso'}
+                            originName={undefined}
+                            destName={undefined}
+                            onClose={() => setSelectedMovement(null)}
+                            onEdit={() => editor.startEdit(selectedMovement)}
+                            isReadOnly={isReadOnly}
+                            campaigns={campaigns}
+                        />
+                </div>
+            )}
+
+            {selectedOrder && client && (
+                <div className="mt-4">
+                    <OrderDetailView 
+                        order={selectedOrder} 
+                        client={client} 
+                        onClose={() => setSelectedOrder(null)} 
+                        onEdit={() => {}}
+                        warehouses={[] as any} 
+                        createdBy={'Sistema'} 
+                        isReadOnly={isReadOnly} 
+                    />
+                </div>
+            )}
+
+            {editor.showEditForm && editor.editingMovement && (
+                <div className="mt-8 animate-slideUp">
+                    {(editor.editingMovement.type === 'SALE' || editor.editingMovement.type === 'OUT') ? (
+                        <StockSalePanel
+                            titleOverride={editor.editingMovement?.type === 'SALE' ? "Editar Venta" : "Editar Retiro"}
+                            stockItem={{
+                                productId: editor.editingMovement.productId,
+                                productName: editor.editingMovement.productName || '',
+                                productBrand: editor.editingMovement.productBrand || '',
+                                quantity: editor.editingMovement.quantity,
+                                unit: editor.editingMovement.unit,
+                                warehouseId: editor.selectedWarehouseId,
+                                warehouseName: 'Galpón'
+                            }}
+                            onClose={() => { editor.setShowEditForm(false); editor.setEditingMovement(null); }}
+                            onSubmit={async (e) => { e?.preventDefault(); await editor.saveEdit(); }}
+                            saleQuantity={editor.saleQuantity} 
+                            setSaleQuantity={editor.setSaleQuantity}
+                            salePrice={editor.salePrice}
+                            setSalePrice={editor.setSalePrice}
+                            isSubmitting={editor.isSubmitting}
+                            facturaUploading={false}
+                            saleTruckDriver={editor.saleTruckDriver} setSaleTruckDriver={editor.setSaleTruckDriver}
+                            salePlateNumber={editor.salePlateNumber} setSalePlateNumber={editor.setSalePlateNumber}
+                            saleTrailerPlate={editor.saleTrailerPlate} setSaleTrailerPlate={editor.setSaleTrailerPlate}
+                            saleDestinationCompany={editor.saleDestinationCompany} setSaleDestinationCompany={editor.setSaleDestinationCompany}
+                            saleDestinationAddress={editor.saleDestinationAddress} setSaleDestinationAddress={editor.setSaleDestinationAddress}
+                            salePrimarySaleCuit={editor.salePrimarySaleCuit} setSalePrimarySaleCuit={editor.setSalePrimarySaleCuit}
+                            saleTransportCompany={editor.saleTransportCompany} setSaleTransportCompany={editor.setSaleTransportCompany}
+                            saleDischargeNumber={editor.saleDischargeNumber} setSaleDischargeNumber={editor.setSaleDischargeNumber}
+                            saleHumidity={editor.saleHumidity} setSaleHumidity={editor.setSaleHumidity}
+                            saleHectoliterWeight={editor.saleHectoliterWeight} setSaleHectoliterWeight={editor.setSaleHectoliterWeight}
+                            saleGrossWeight={editor.saleGrossWeight} setSaleGrossWeight={editor.setSaleGrossWeight}
+                            saleTareWeight={editor.saleTareWeight} setSaleTareWeight={editor.setSaleTareWeight}
+                            saleDistanceKm={editor.saleDistanceKm} setSaleDistanceKm={editor.setSaleDistanceKm}
+                            saleDepartureDateTime={editor.saleDepartureDateTime} setSaleDepartureDateTime={editor.setSaleDepartureDateTime}
+                            saleFreightTariff={editor.saleFreightTariff} setSaleFreightTariff={editor.setSaleFreightTariff}
+                            showSaleNote={editor.showNote} setShowSaleNote={editor.setShowNote}
+                            saleNote={editor.note} setSaleNote={editor.setNote}
+                            saleFacturaFile={null} setSaleFacturaFile={() => {}}
+                            saleRemitoFile={null} setSaleRemitoFile={() => {}}
+                        />
+                    ) : (
+                        <StockEntryForm 
+                            showStockForm={true} 
+                            setShowStockForm={editor.setShowEditForm} 
+                            warehouses={[] as any} 
+                            activeWarehouseIds={editor.selectedWarehouseId ? [editor.selectedWarehouseId] : []} 
+                            selectedWarehouseId={editor.selectedWarehouseId} 
+                            setSelectedWarehouseId={editor.setSelectedWarehouseId} 
+                            availableProducts={products} 
+                            activeStockItem={editor.activeStockItem as any} 
+                            updateActiveStockItem={(field: string, value: string) => editor.setActiveStockItem((prev: any) => ({ ...prev, [field]: value }))} 
+                            stockItems={editor.stockItems as any} 
+                            setStockItems={editor.setStockItems as any} 
+                            addStockToBatch={() => {}} 
+                            editBatchItem={() => {}} 
+                            removeBatchItem={() => {}} 
+                            availableSellers={[]} 
+                            selectedSeller={editor.selectedSeller} 
+                            setSelectedSeller={editor.setSelectedSeller} 
+                            showSellerInput={false} 
+                            setShowSellerInput={() => {}} 
+                            sellerInputValue={''} 
+                            setSellerInputValue={() => {}} 
+                            handleAddSeller={() => {}} 
+                            showSellerDelete={false} 
+                            setShowSellerDelete={() => {}} 
+                            setAvailableSellers={() => {}} 
+                            saveClientSellers={() => {}} 
+                            selectedInvestors={editor.selectedInvestors} 
+                            setSelectedInvestors={editor.setSelectedInvestors} 
+                            client={client} 
+                            showNote={editor.showNote} 
+                            setShowNote={editor.setShowNote} 
+                            note={editor.note} 
+                            setNote={editor.setNote} 
+                            setNoteConfirmed={() => {}} 
+                            facturaFile={null} 
+                            setFacturaFile={() => {}} 
+                            handleFacturaChange={() => {}} 
+                            handleStockSubmit={async (e: any) => { e?.preventDefault(); await editor.saveEdit(); }} 
+                            isSubmitting={editor.isSubmitting} 
+                            facturaUploading={false} 
+                            campaigns={campaigns} 
+                            selectedCampaignId={editor.selectedCampaignId} 
+                            setSelectedCampaignId={editor.setSelectedCampaignId} 
+                            facturaDate={editor.facturaDate} 
+                            setFacturaDate={editor.setFacturaDate} 
+                            dueDate={editor.dueDate} 
+                            setDueDate={editor.setDueDate} 
+                            isEditing={true} 
+                        />
+                    )}
+                </div>
+            )}
+        </>
     );
 }

@@ -26,7 +26,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
     const { db, clientId, lot, data, campaigns, products, identity, updaters, isEditing, existingBatchId, existingOrder } = params;
     const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
 
-    const batchId = existingBatchId || generateId();
+    const batchId = existingBatchId || (existingOrder as any)?.harvestBatchId || generateId();
     const campaign = campaigns.find(c => String(c.id) === String(campaignId));
     const campaignName = campaign?.name || '---';
 

@@ -811,6 +811,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setNewFarmAddress('');
         setNewFarmCity('');
         setNewFarmProvince('');
+        setTempFarmBoundary(null);
+        setTempFarmKmlData(null);
     };
 
     if (role === 'CONTRATISTA') {
@@ -844,15 +846,21 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
 
             {showFarmForm && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 animate-fadeIn relative">
-                    <button
-                        onClick={cancelEdit}
-                        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
-                        title="Cancelar edición"
-                    >
-                        ✕
-                    </button>
-                    <h2 className="text-lg font-semibold text-slate-800 mb-4">{editingFarmId ? 'Editar Campo' : 'Nuevo Campo'}</h2>
                     <form onSubmit={handleAddFarm} className="space-y-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-semibold text-slate-800">{editingFarmId ? 'Editar Campo' : 'Nuevo Campo'}</h2>
+                            <div className="flex gap-2">
+                                <Button type="submit" size="sm" className="!p-1 !h-8 !w-8 flex items-center justify-center rounded-full">➜</Button>
+                                <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+                                    title="Cancelar"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
                         <div className="flex gap-4 items-end">
                             <div className="flex-1">
                                 <Input
@@ -863,7 +871,6 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     required
                                 />
                             </div>
-                            <Button type="submit">{editingFarmId ? '➜' : 'Guardar Campo'}</Button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <Input
