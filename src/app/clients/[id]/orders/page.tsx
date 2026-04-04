@@ -261,23 +261,13 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
 
         const finalDate = `${year}-${month}-${day}`;
 
-        // If price is missing, trigger the price modal
-        if (!statusPopupOrder.servicePrice || statusPopupOrder.servicePrice === 0) {
-            setPriceModalOrder(statusPopupOrder);
-            setTempPrice('');
-            setTempInvestor(statusPopupOrder.investorName || '');
-            setIsApplyingFromStatus(true);
-            setStatusPopupOrder(null);
-            return;
-        }
-
         try {
             const auditData = {
                 appliedBy: displayName || 'Sistema',
                 appliedAt: new Date(finalDate + 'T12:00:00Z').toISOString()
             };
 
-            await updateOrderStatus(statusPopupOrder.id, 'DONE', displayName || 'Sistema', auditData, statusPopupOrder.servicePrice);
+            await updateOrderStatus(statusPopupOrder.id, 'DONE', displayName || 'Sistema', auditData, statusPopupOrder.servicePrice || 0);
             setStatusPopupOrder(null);
         } catch (e) {
             alert('Error al actualizar el estado');

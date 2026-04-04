@@ -5,7 +5,6 @@ import { syncService } from '@/services/sync';
 import { normalizeNumber, formatForInput } from '@/lib/numbers';
 import { generateId } from '@/lib/uuid';
 import { movementService } from '@/services/movements';
-import { clientService } from '@/services/clients';
 
 /**
  * Reusable hook to manage the state and logic for editing stock movements.

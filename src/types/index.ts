@@ -9,6 +9,11 @@ export interface UserProfile {
     cuit?: string;
 }
 
+export interface OrderInvestor {
+    name: string;
+    percentage: number;
+}
+
 // --- Location Entities ---
 
 export interface Client {

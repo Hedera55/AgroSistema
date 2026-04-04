@@ -596,16 +596,25 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 </div>
                             </div>
 
-                            <div className="min-h-[52px] mb-4">
-                                {availableYield > 0 ? (
-                                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 animate-fadeIn h-full">
-                                        <span className="text-amber-600 text-sm">⚠️</span>
-                                        <p className="text-xs font-bold text-blue-800 uppercase leading-none">
-                                            Falta asignar cosecha: el remanente ({totalYieldNum - assignedYield} kg) se enviará al galpón por default para cosechas
-                                        </p>
+                            <div className="mb-4 min-h-[52px]">
+                                {(availableYield > 0 || (!selectedHarvestCampaignId && distributions.some(d => d.type === 'PARTNER'))) ? (
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 animate-fadeIn">
+                                        <span className="text-amber-600 text-sm mt-0.5">⚠️</span>
+                                        <div className="flex flex-col gap-2">
+                                            {availableYield > 0 && (
+                                                <p className="text-xs font-bold text-blue-800 uppercase leading-normal">
+                                                    Falta asignar cosecha: el remanente ({totalYieldNum - assignedYield} kg) se enviará al galpón por default para cosechas
+                                                </p>
+                                            )}
+                                            {!selectedHarvestCampaignId && distributions.some(d => d.type === 'PARTNER') && (
+                                                <p className="text-xs font-bold text-blue-800 uppercase leading-normal">
+                                                    no eligió campaña, no se pueden calcular los cupos de socio
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : (
-                                    <div className="h-full border border-transparent"></div>
+                                    <div className="h-[52px]"></div>
                                 )}
                             </div>
 
