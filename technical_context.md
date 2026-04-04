@@ -74,7 +74,8 @@ To ensure semantic consistency across the Galpón (Stock) and Contaduría (Accou
     - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator and dot (`.`) as thousands separator.
     - **Implementation**: 
         - Use `type="text"` combined with `inputMode="decimal"`.
-        - **Standard Utility**: Use `normalizeNumber` from `@/lib/numbers.ts`. Avoid ad-hoc `.replace(',', '.')` calls to ensure thousands separators are also correctly handled.
+        - **Standard Utility**: Use `normalizeNumber` from `@@/lib/numbers.ts`. Dot is thousand, comma is decimal.
+        - **Input Formatting**: When populating an `<input>` for editing, use `formatForInput` (NO thousands-dots). This prevents the "Circular Parsing Bug" where a formatting dot is misinterpreted as a multiplier during the next save.
     - **Display**: All numeric values displayed in the UI should be formatted using `.toLocaleString('es-AR')` or similar to respect local formatting.
 
 - **Stock History Subrows (Expandable Rows)**: 
@@ -228,6 +229,10 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
     - *Example*: Deleting a 100L Sale adds 100L back to the cache; deleting a 50kg Purchase subtracts 50kg.
 - **Negative Stock Support**: Stock balances can now go negative to track usage before purchase records are uploaded.
 - **Deduction Logic**: When deducting stock for Orders, the system **MUST** use the `warehouseId` defined at the **item level** (if present) rather than the Order's general warehouse ID.
+- **Hybrid Movement Schema (Flat vs. Array)**: The stock engine supports two data formats:
+    1. **Bulk (Array-based)**: Movements with an `items: MovementItem[]` list (e.g., Sowing/Application Orders).
+    2. **Singular (Flat)**: Movements with a direct `productId` and `quantity` (e.g., Sales, Harvests).
+    - **Reconciliation Rule**: The engine (`movementService.ts`) MUST first check for a non-empty `items` array. If the array is missing or `length === 0`, it MUST fall back to the flat product/quantity fields. Failing to do this causes stock drift during edits.
 
 ### Metadata Enrichment Pattern (Display-Time Consistency)
 - **Problem**: Movement records often lack `productCommercialName` and sometimes `productBrand` because the harvest/purchase flows don't always persist these fields. The `stock` table does store them, but the `movements` table is the source for the History view.
@@ -342,3 +347,8 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
 
 ### 👥 Role-Based Security
 - **Contractor Barrier**: The **Galpón Virtual** (Virtual Warehouse) is strictly prohibited for users with the `CONTRATISTA` role. This is a business-critical rule to protect inventory levels and internal pricing.
+
+### 🛡️ Dual-Purpose Creation & Edition Components
+- **Problem**: When reusing the same UI component (forms, data-entry ribbons, arrays) to both CREATE new and EDIT existing entities, secondary commit triggers (like pressing `Enter`) often bypass the `isEditing` checks, falling back to default "create/push" logic and causing silent array duplicates or database clashes.
+- **Universal Save Validation**: ALL commit triggers (Save buttons, `onKeyDown="Enter"` events, auto-saves) MUST converge into a single, central save handler. Never duplicate commit logic across different elements.
+- **Identity & Metadata Preservation**: When saving an edit, you MUST preserve the original entity's structural identity (like `id` or `stockId`), timestamps (`createdAt`), and background metadata. Always spread `...preloadedRecord` before applying changes to prevent the database layer from treating it as a new document and generating duplicates.

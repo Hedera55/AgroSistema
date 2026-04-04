@@ -7,9 +7,20 @@ export const normalizeNumber = (val: string | number | undefined | null): number
     if (val === undefined || val === null || val === '') return 0;
     if (typeof val === 'number') return val;
     
-    // Remove dots (thousands) and replace comma with dot (decimal)
+    // User Rules: dot is thousand, comma is decimal.
+    // 1. Remove all dots
+    // 2. Replace comma with dot
     const normalized = val.toString().replace(/\./g, '').replace(',', '.');
     const result = parseFloat(normalized);
     
     return isNaN(result) ? 0 : result;
+};
+
+/**
+ * Formats a number for a text input in Spanish locale.
+ * Uses comma for decimal and NO dots for thousands to avoid parser confusion.
+ */
+export const formatForInput = (num: number, decimals: number = 2): string => {
+    if (isNaN(num)) return '';
+    return num.toFixed(decimals).replace('.', ',');
 };

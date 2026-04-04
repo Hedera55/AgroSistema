@@ -29,8 +29,7 @@ const mappers = {
         created_at: f.createdAt || new Date().toISOString(),
         updated_at: f.updatedAt || new Date().toISOString(),
         deleted: f.deleted || false,
-        deleted_at: f.deletedAt,
-        deleted_by: f.deletedBy
+        deleted_at: f.deletedAt
     }),
     lot: (l: Lot) => ({
         id: l.id,
@@ -50,8 +49,7 @@ const mappers = {
         created_at: l.createdAt || new Date().toISOString(),
         updated_at: l.updatedAt || new Date().toISOString(),
         deleted: l.deleted || false,
-        deleted_at: l.deletedAt,
-        deleted_by: l.deletedBy
+        deleted_at: l.deletedAt
     }),
     product: (p: Product) => {
         return {

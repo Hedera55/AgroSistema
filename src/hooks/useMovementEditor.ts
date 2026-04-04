@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
-import { InventoryMovement, Order, Product, Warehouse, Client, ClientStock, Campaign, MovementItem } from '@/types';
+import { InventoryMovement, Order, Product, Warehouse, Client, ClientStock, Campaign, MovementItem, OrderInvestor } from '@/types';
 import { db } from '@/services/db';
 import { syncService } from '@/services/sync';
-import { normalizeNumber } from '@/lib/numbers';
+import { normalizeNumber, formatForInput } from '@/lib/numbers';
 import { generateId } from '@/lib/uuid';
 import { movementService } from '@/services/movements';
+import { clientService } from '@/services/clients';
 
 /**
  * Reusable hook to manage the state and logic for editing stock movements.
@@ -32,7 +33,7 @@ export function useMovementEditor(clientId: string, {
     const [selectedCampaignId, setSelectedCampaignId] = useState('');
     const [note, setNote] = useState('');
     const [showNote, setShowNote] = useState(false);
-    const [selectedInvestors, setSelectedInvestors] = useState<{ name: string; percentage: number }[]>([]);
+    const [selectedInvestors, setSelectedInvestors] = useState<OrderInvestor[]>([]);
     
     // SALE Specific
     const [saleQuantity, setSaleQuantity] = useState('');
@@ -82,8 +83,9 @@ export function useMovementEditor(clientId: string, {
             const product = productsData[m.productId];
             const isGrainOrSeedSale = (product?.type === 'GRAIN' || product?.type === 'SEED') && m.type === 'SALE';
             
-            setSaleQuantity(isGrainOrSeedSale ? (m.quantity / 1000).toString() : m.quantity.toString());
-            setSalePrice(isGrainOrSeedSale ? (Number(m.salePrice || 0) * 1000).toLocaleString('es-AR') : (m.salePrice || 0).toString());
+            // CRITICAL FIX: Use formatForInput to avoid thousand dots (which break the parser)
+            setSaleQuantity(isGrainOrSeedSale ? formatForInput(m.quantity / 1000, 3) : formatForInput(m.quantity, 0));
+            setSalePrice(isGrainOrSeedSale ? formatForInput(Number(m.salePrice || 0) * 1000, 2) : formatForInput(Number(m.salePrice || 0), 2));
             
             // Logistics
             const l = m as any;

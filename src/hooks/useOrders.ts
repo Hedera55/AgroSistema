@@ -3,6 +3,7 @@ import { db } from '@/services/db';
 import { syncService } from '@/services/sync';
 import { Order, OrderItem, ClientStock } from '@/types';
 import { generateId } from '@/lib/uuid';
+import { movementService } from '@/services/movements';
 
 export function useOrders(clientId: string) {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -293,10 +294,16 @@ export function useOrders(clientId: string) {
                 synced: false
             });
 
-            // 2. Soft-delete associated movements
+            // 2. Soft-delete associated movements and REVERSE STOCK
             const allMovements = await db.getAll('movements');
-            const associatedMovements = allMovements.filter((m: any) => m.referenceId === orderId);
+            const associatedMovements = allMovements.filter((m: any) => m.referenceId === orderId && !m.deleted);
+            
             for (const m of associatedMovements) {
+                // Correctly undo the stock change before deleting the movement
+                await movementService.reverseStock(clientId, m, async (updatedStock) => {
+                    await db.put('stock', updatedStock);
+                });
+
                 await db.put('movements', {
                     ...m,
                     deleted: true,

@@ -145,6 +145,12 @@ export function OrderRecipeStep({
 
     const [dosageError, setDosageError] = useState(false);
 
+    React.useEffect(() => {
+        if (!currProdId && !mechanicalLaborName) {
+            setDosageError(false);
+        }
+    }, [currProdId, mechanicalLaborName]);
+
     const normalizedDosage = currDosage.replace(',', '.');
     const requiredTotal = (parseFloat(normalizedDosage) || 0) * (selectedLot.hectares || 0);
 

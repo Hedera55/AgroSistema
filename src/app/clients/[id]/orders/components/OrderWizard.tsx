@@ -101,6 +101,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
     const [fertilizerPlacement, setFertilizerPlacement] = useState<'LINE' | 'SIDE' | undefined>(undefined);
 
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Initial warehouse selection
     useEffect(() => {
@@ -467,6 +468,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
             }
         }
 
+        setIsSubmitting(true);
         try {
             let nextOrderNumber = undefined;
             if (editId) {
@@ -534,6 +536,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
         } catch (e) {
             console.error(e);
             alert('Failed to save order');
+            setIsSubmitting(false);
         }
     };
 
@@ -683,6 +686,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
                         notes={notes}
                         onBack={() => setStep(2)}
                         onSubmit={handleSubmit}
+                        isSubmitting={isSubmitting}
                     />
                 )}
             </div>

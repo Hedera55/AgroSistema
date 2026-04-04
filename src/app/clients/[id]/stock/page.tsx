@@ -232,6 +232,15 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         syncService.pushChanges();
     }, [client]);
 
+    const handleReorderWarehouses = React.useCallback(async (newOrder: string[]) => {
+        if (!client) return;
+        const updatedClient = { ...client, warehouseOrder: newOrder, updatedAt: new Date().toISOString(), synced: false };
+        await db.put('clients', updatedClient);
+        setClient(updatedClient);
+        syncService.pushChanges();
+    }, [client]);
+
+
     // Auto-set "Acopio de Granos" as default if none set
     useEffect(() => {
         if (client && !client.defaultHarvestWarehouseId && warehouses.length > 0) {
@@ -314,7 +323,12 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
         localStorage.setItem(`stock_showWarehouses_${id}`, showWarehouses.toString());
     }, [showWarehouses, id]);
 
+    const isFirstMountActiveW = useRef(true);
     useEffect(() => {
+        if (isFirstMountActiveW.current) {
+            isFirstMountActiveW.current = false;
+            return;
+        }
         localStorage.setItem(`stock_activeW_${id}`, JSON.stringify(activeWarehouseIds));
     }, [activeWarehouseIds, id]);
 
@@ -1568,6 +1582,8 @@ export default function ClientStockPage({ params }: { params: Promise<{ id: stri
                 stock={stock}
                 defaultHarvestWarehouseId={client?.defaultHarvestWarehouseId}
                 onSetDefaultWarehouse={handleSetDefaultWarehouse}
+                warehouseOrder={client?.warehouseOrder}
+                onReorderWarehouses={handleReorderWarehouses}
             />
 
             <ProductCatalog

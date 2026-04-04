@@ -31,6 +31,8 @@ interface WarehouseManagerProps {
     stock: any[]; // ClientStock[]
     defaultHarvestWarehouseId?: string;
     onSetDefaultWarehouse?: (id: string) => void;
+    warehouseOrder?: string[];
+    onReorderWarehouses?: (newOrder: string[]) => void;
 }
 
 function WarehouseManagerInternal({
@@ -58,9 +60,58 @@ function WarehouseManagerInternal({
     warehouseContainerRef,
     stock,
     defaultHarvestWarehouseId,
-    onSetDefaultWarehouse
+    onSetDefaultWarehouse,
+    warehouseOrder,
+    onReorderWarehouses
 }: WarehouseManagerProps) {
     const [showDefaultSelector, setShowDefaultSelector] = useState(false);
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [sortedWarehouseIds, setSortedWarehouseIds] = useState<string[]>([]);
+
+    React.useEffect(() => {
+        let sorted = [...warehouses];
+        if (warehouseOrder && warehouseOrder.length > 0) {
+            sorted.sort((a, b) => {
+                const indexA = warehouseOrder.indexOf(a.id);
+                const indexB = warehouseOrder.indexOf(b.id);
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                if (indexA !== -1) return -1;
+                if (indexB !== -1) return 1;
+                return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            });
+        } else {
+             sorted.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        }
+        setSortedWarehouseIds(sorted.map(w => w.id));
+    }, [warehouses, warehouseOrder]);
+
+    const handleDragStart = (e: React.DragEvent, id: string) => {
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedId(id);
+    };
+
+    const handleDragOver = (e: React.DragEvent, id: string) => {
+        e.preventDefault();
+        if (!draggedId || draggedId === id) return;
+
+        const currentIds = [...sortedWarehouseIds];
+        const draggedIndex = currentIds.indexOf(draggedId);
+        const overIndex = currentIds.indexOf(id);
+
+        currentIds.splice(draggedIndex, 1);
+        currentIds.splice(overIndex, 0, draggedId);
+        
+        setSortedWarehouseIds(currentIds);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setDraggedId(null);
+        if (onReorderWarehouses) {
+            onReorderWarehouses(sortedWarehouseIds);
+        }
+    };
+
     const warehouseSelectOptions = useMemo(() => [
         <option key="ware-default" value="">Seleccionar un galpón...</option>,
         ...warehouses.map(w => (
@@ -170,10 +221,18 @@ function WarehouseManagerInternal({
                     </Button>
                 </div>
             )}
-            <div className="space-y-3" ref={warehouseContainerRef}>
-                {warehouses.map(w => (
+            <div className="space-y-3" ref={warehouseContainerRef} onDragOver={e => e.preventDefault()}>
+                {sortedWarehouseIds.map(id => {
+                    const w = warehouses.find(wh => wh.id === id);
+                    if (!w) return null;
+                    return (
                     <div
                         key={w.id}
+                        draggable={!isReadOnly}
+                        onDragStart={e => handleDragStart(e, w.id)}
+                        onDragOver={e => handleDragOver(e, w.id)}
+                        onDrop={handleDrop}
+                        onDragEnd={() => setDraggedId(null)}
                         onClick={() => {
                             if (selectedInManagerId === w.id) {
                                 toggleWarehouseSelection(w.id);
@@ -184,7 +243,7 @@ function WarehouseManagerInternal({
                                 setSelectedInManagerId(w.id);
                             }
                         }}
-                        className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer select-none ${draggedId === w.id ? 'opacity-50 scale-[0.98]' : ''} ${activeWarehouseIds.includes(w.id) ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-100' : 'bg-white border-slate-100 hover:border-slate-200'} ${selectedInManagerId === w.id ? 'shadow-md border-emerald-300' : ''}`}
                     >
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3 flex-1">
@@ -282,7 +341,8 @@ function WarehouseManagerInternal({
                             </div>
                         </div>
                     </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

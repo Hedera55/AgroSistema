@@ -24,6 +24,7 @@ export interface Client {
     synced?: boolean;
     enabledUnits?: string[];
     enabledSellers?: string[];
+    warehouseOrder?: string[];
     createdAt?: string;
     updatedAt?: string;
     deleted?: boolean;

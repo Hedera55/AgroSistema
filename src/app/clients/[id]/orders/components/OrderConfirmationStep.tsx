@@ -24,6 +24,7 @@ interface OrderConfirmationStepProps {
     notes: string;
     onBack: () => void;
     onSubmit: () => void;
+    isSubmitting?: boolean;
 }
 
 export function OrderConfirmationStep({
@@ -46,7 +47,8 @@ export function OrderConfirmationStep({
     campaignName,
     notes,
     onBack,
-    onSubmit
+    onSubmit,
+    isSubmitting = false
 }: OrderConfirmationStepProps) {
     const isSowingInvalid = containsSeeds && isDateRange;
 
@@ -203,11 +205,13 @@ export function OrderConfirmationStep({
                 <Button
                     onClick={onSubmit}
                     variant={stockShortages.length > 0 ? 'danger' : 'primary'}
-                    disabled={isSowingInvalid}
+                    disabled={isSowingInvalid || isSubmitting}
                 >
-                    {stockShortages.length > 0
-                        ? 'Confirmar de todas formas (Saldo Negativo)'
-                        : (containsSeeds ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Trabajo')}
+                    {isSubmitting 
+                        ? 'Procesando...' 
+                        : (stockShortages.length > 0
+                            ? 'Confirmar de todas formas (Saldo Negativo)'
+                            : (containsSeeds ? 'Confirmar Orden de Siembra' : 'Confirmar Orden de Trabajo'))}
                 </Button>
             </div>
         </div>

@@ -88,7 +88,23 @@ export default function ClientsPage() {
     const [showPartnerRibbon, setShowPartnerRibbon] = useState(false);
     const [editingPartnerIdx, setEditingPartnerIdx] = useState<number | null>(null);
 
-
+    const handleSavePartner = () => {
+        if (activePartner.name) {
+            if (editingPartnerIdx !== null) {
+                const p = [...newClient.partners];
+                p[editingPartnerIdx] = { ...activePartner };
+                setNewClient({ ...newClient, partners: p });
+                setEditingPartnerIdx(null);
+            } else {
+                setNewClient({
+                    ...newClient,
+                    partners: [...newClient.partners, { ...activePartner }]
+                });
+            }
+            setActivePartner({ name: '', cuit: '' });
+            setShowPartnerRibbon(false);
+        }
+    };
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newClient.name) return;
@@ -353,13 +369,9 @@ export default function ClientsPage() {
                                             value={activePartner.name}
                                             onChange={e => setActivePartner({ ...activePartner, name: e.target.value })}
                                             onKeyDown={e => {
-                                                if (e.key === 'Enter' && activePartner.name) {
-                                                    setNewClient({
-                                                        ...newClient,
-                                                        partners: [...newClient.partners, { ...activePartner }]
-                                                    });
-                                                    setActivePartner({ name: '', cuit: '' });
-                                                    setShowPartnerRibbon(false);
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleSavePartner();
                                                 }
                                             }}
                                             autoFocus
@@ -372,13 +384,9 @@ export default function ClientsPage() {
                                             value={activePartner.cuit}
                                             onChange={e => setActivePartner({ ...activePartner, cuit: e.target.value })}
                                             onKeyDown={e => {
-                                                if (e.key === 'Enter' && activePartner.name) {
-                                                    setNewClient({
-                                                        ...newClient,
-                                                        partners: [...newClient.partners, { ...activePartner }]
-                                                    });
-                                                    setActivePartner({ name: '', cuit: '' });
-                                                    setShowPartnerRibbon(false);
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleSavePartner();
                                                 }
                                             }}
                                         />
@@ -386,23 +394,7 @@ export default function ClientsPage() {
                                     <div className="flex gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                if (activePartner.name) {
-                                                    if (editingPartnerIdx !== null) {
-                                                        const p = [...newClient.partners];
-                                                        p[editingPartnerIdx] = { ...activePartner };
-                                                        setNewClient({ ...newClient, partners: p });
-                                                        setEditingPartnerIdx(null);
-                                                    } else {
-                                                        setNewClient({
-                                                            ...newClient,
-                                                            partners: [...newClient.partners, { ...activePartner }]
-                                                        });
-                                                    }
-                                                    setActivePartner({ name: '', cuit: '' });
-                                                    setShowPartnerRibbon(false);
-                                                }
-                                            }}
+                                            onClick={handleSavePartner}
                                             className={`h-10 w-10 flex items-center justify-center rounded-lg shadow-sm transition-all ${activePartner.name ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
                                             title={editingPartnerIdx !== null ? "Guardar cambios" : "Agregar a la lista"}
                                         >
