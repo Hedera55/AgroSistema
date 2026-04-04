@@ -13,6 +13,7 @@ interface HarvestData {
     investors?: Array<{ name: string; percentage: number }>;
     harvestType: 'SEMILLA' | 'GRANO';
     totalYield: number;
+    technicalResponsible?: string;
     distributions: Array<{
         id: string; // unique frontend UI id
         type: 'WAREHOUSE' | 'PARTNER';
@@ -41,6 +42,7 @@ interface HarvestWizardProps {
     initialContractor: string;
     initialLaborPrice: string;
     initialYield: string;
+    initialTechnicalResponsible?: string;
     isExecutingPlan: boolean;
     initialDistributions?: any[];
     initialTransportSheets?: TransportSheet[];
@@ -65,6 +67,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     isExecutingPlan,
     initialDistributions,
     initialTransportSheets,
+    initialTechnicalResponsible,
     defaultWhId,
     campaignShares = {},
     campaignInvestments = {}
@@ -85,6 +88,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     );
     const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(
         (initialDistributions?.[0]?.type === 'SEMILLA' || initialDistributions?.[0]?.logistics?.type === 'SEMILLA') ? 'SEMILLA' : 'GRANO'
+    );
+    const [harvestTechnicalResponsible, setHarvestTechnicalResponsible] = useState(
+        initialTechnicalResponsible || 
+        initialDistributions?.[0]?.technicalResponsible || 
+        initialDistributions?.[0]?.logistics?.technicalResponsible || ''
     );
 
     const [isConfirming, setIsConfirming] = useState(false);
@@ -338,7 +346,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     };
 
     const applyProfileData = (sheet: TransportSheet, profile: Partial<TransportSheet>) => {
-        const skipFields = ['id', 'dischargeNumber', 'grossWeight', 'tareWeight', 'netWeight', 'departureTime'];
+        const skipFields = ['id', 'dischargeNumber', 'grossWeight', 'tareWeight', 'netWeight', 'departureDateTime'];
         const updatedSheet = { ...sheet };
 
         Object.entries(profile).forEach(([key, value]) => {
@@ -486,6 +494,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             investors: selectedHarvestInvestors,
             harvestType,
             totalYield: totalYieldNum,
+            technicalResponsible: harvestTechnicalResponsible,
             distributions: processedDistributions,
             transportSheets
         });
@@ -570,6 +579,14 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 inputMode="decimal"
                                 value={harvestLaborPrice}
                                 onChange={e => setHarvestLaborPrice(normalizeNumber(e.target.value).toString())}
+                                className="bg-white"
+                                labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
+                            />
+                            <Input
+                                label="Responsable técnico"
+                                placeholder="Nombre del encargado..."
+                                value={harvestTechnicalResponsible}
+                                onChange={e => setHarvestTechnicalResponsible(e.target.value)}
                                 className="bg-white"
                                 labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1"
                             />
@@ -913,6 +930,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     placeholder="0"
                                     value={getSheetValue('freightTariff')}
                                     onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))}
+                                />
+                                <Input
+                                    label="Marca de socio"
+                                    placeholder="..."
+                                    value={getSheetValue('partnermark')}
+                                    onChange={e => updateSheetField('partnermark', e.target.value)}
                                 />
                             </div>
                         </div>

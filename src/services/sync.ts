@@ -184,6 +184,7 @@ const mappers = {
             harvest_labor_cost: m.harvestLaborCost || 0,
             contractor_name: m.contractorName || null,
             receiver_name: m.receiverName || null,
+            technical_responsible: m.technicalResponsible || null,
             farm_id: m.farmId || null,
             lot_id: m.lotId || null,
             created_at: m.createdAt || new Date(m.date).toISOString(),
@@ -422,7 +423,8 @@ const reverseMappers = {
         deletedAt: m.deleted_at,
         deletedBy: m.deleted_by,
         campaignId: m.campaign_id,
-        source: m.source
+        source: m.source,
+        technicalResponsible: m.technical_responsible
     }),
     activity: (a: any): OrderActivity => ({
         id: a.id,

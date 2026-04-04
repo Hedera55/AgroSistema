@@ -83,6 +83,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [harvestLaborPrice, setHarvestLaborPrice] = useState('');
     const [harvestContractor, setHarvestContractor] = useState('');
     const [harvestDate, setHarvestDate] = useState('');
+    const [harvestTechnicalResponsible, setHarvestTechnicalResponsible] = useState('');
     const [sowingOrder, setSowingOrder] = useState<Order | null>(null);
     const [harvestMovement, setHarvestMovement] = useState<InventoryMovement | null>(null);
     const [harvestMovements, setHarvestMovements] = useState<InventoryMovement[]>([]);
@@ -403,6 +404,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         setHarvestLaborPrice(event.harvestLaborPricePerHa?.toString() || event.movements?.[0]?.harvestLaborPricePerHa?.toString() || '');
         setSelectedHarvestInvestor(event.investorName || event.movements?.[0]?.investorName || '');
         setSelectedHarvestCampaignId(event.campaignId || event.movements?.[0]?.campaignId || '');
+        setHarvestTechnicalResponsible(event.technicalResponsible || event.movements?.[0]?.technicalResponsible || '');
 
         // 3. Open Wizard in Edit Mode
         setHarvestPlanOrder({
@@ -1789,6 +1791,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             initialContractor={harvestContractor}
                             initialLaborPrice={harvestLaborPrice}
                             initialYield={observedYield}
+                            initialTechnicalResponsible={harvestTechnicalResponsible}
                             isExecutingPlan={!isEditingHarvestPanel}
                             initialDistributions={(harvestPlanOrder as any)?.movements?.map((m: any) => ({
                                 id: m.id,

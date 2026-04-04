@@ -24,7 +24,7 @@ export interface HarvestProcessParams {
 
 export const processHarvest = async (params: HarvestProcessParams) => {
     const { db, clientId, lot, data, campaigns, products, identity, updaters, isEditing, existingBatchId, existingOrder } = params;
-    const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, distributions, transportSheets: sheets } = data;
+    const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, technicalResponsible, distributions, transportSheets: sheets } = data;
 
     const batchId = existingBatchId || (existingOrder as any)?.harvestBatchId || generateId();
     const campaign = campaigns.find(c => String(c.id) === String(campaignId));
@@ -195,6 +195,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
             synced: false,
             harvestBatchId: batchId,
             source: 'HARVEST',
+            technicalResponsible,
             transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
         });
     }
@@ -222,6 +223,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         updatedAt: new Date().toISOString(),
         synced: false,
         harvestBatchId: batchId,
+        technicalResponsible,
         notes: `Cosecha de ${lot.cropSpecies || 'Cultivo'} en ${lot.name}`
     };
 

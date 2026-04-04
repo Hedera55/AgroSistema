@@ -1259,6 +1259,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                     initialContractor={editor.editingMovement?.contractorName || ''}
                     initialLaborPrice={editor.editingMovement?.harvestLaborPricePerHa ? String(editor.editingMovement?.harvestLaborPricePerHa) : editor.editingMovement?.harvestLaborCost ? String(editor.editingMovement?.harvestLaborCost) : ''}
                     initialYield={String(harvestMovements.reduce((sum, m) => sum + Math.abs(m.quantity), 0))}
+                    initialTechnicalResponsible={editor.editingMovement?.technicalResponsible || ''}
                     isExecutingPlan={false} // Editing an existing one
                     // Map ALL related peer harvest movements (they are all type: HARVEST)
                     initialDistributions={harvestMovements.map(m => ({

@@ -272,6 +272,15 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
     - `Participation % = (Dynamic Partner USD / Dynamic Total USD) * 100`.
 - **Benefit**: This ensures that even if a campaign has zero initial investment, paying for the harvest labor immediately generates a valid participation quota.
 
+### 🚛 Transport Sheet Management (Harvest Wizard Step 3)
+- **Profile/Template Logic**: The wizard includes a "Perfil de Carga" (Load Profile) system to save time on repetitive truck data.
+    - **Persistence**: Profiles are saved via `handleSaveProfile`. If a new field is added, it must be included in the profile's data spread.
+    - **The `skipFields` Rule**: The `applyProfileData` helper (Step 3) contains a `skipFields` array. 
+        - **Unique Fields**: Fields that differ per truck (e.g., Weights, Humidity, Times, Specific IDs) MUST be added to `skipFields` to prevent them from being overwritten when a general profile is applied.
+        - **Shared Fields**: Fields that are common across a batch (e.g., Transport Company, Driver Name, Destination) should NOT be in `skipFields`.
+- **Initialization**: New sheets are created via `handleAddSheet`. Any new field must be explicitly initialized or handled in the object creation spread.
+- **Numerical Consistency**: Use the `normalizeNumber` utility for numeric inputs (e.g., USD, Kg, %). Ensure the input uses `type="text"` and `inputMode="decimal"` to support Argentine localized separators (comma/dot).
+
 ### Quota Calculation Pool
 - **Source of Truth**: The total yield used for quota distribution includes:
     1. The sum of all **previous confirmed harvests** for the same campaign.

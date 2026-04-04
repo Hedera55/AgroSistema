@@ -244,6 +244,7 @@ export interface TransportSheet {
     freightTariff?: number;
     distributionId?: string; // Links to a specific distribution from Step 2
     profileName?: string; // Which profile this sheet was created from
+    partnermark?: string;
 }
 
 export interface InventoryMovement {
@@ -320,6 +321,7 @@ export interface InventoryMovement {
     truckPlate?: string;
     warehouseName?: string;
     transportSheets?: TransportSheet[];
+    technicalResponsible?: string;
 }
 
 export interface Order {
