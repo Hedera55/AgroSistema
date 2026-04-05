@@ -1,0 +1,821 @@
+import { supabase } from '@/lib/supabase';
+import { db } from './db';
+import { Client, Farm, Lot, Product, Order, InventoryMovement, ClientStock, OrderActivity, Observation } from '@/types';
+
+// Explicit mappers for each entity to ensure correct column names and data types for Supabase
+const mappers = {
+    client: (c: Client) => ({
+        id: c.id,
+        name: c.name,
+        investors: c.investors || [],
+        partners: c.partners || [],
+        enabled_units: c.enabledUnits || [],
+        enabled_sellers: c.enabledSellers || [],
+        default_harvest_warehouse_id: c.defaultHarvestWarehouseId || null,
+        created_at: c.createdAt || new Date().toISOString(),
+        updated_at: c.updatedAt || new Date().toISOString(),
+        deleted: c.deleted || false,
+        deleted_at: c.deletedAt,
+        deleted_by: c.deletedBy
+    }),
+    farm: (f: Farm) => ({
+        id: f.id,
+        client_id: f.clientId,
+        name: f.name,
+        boundary: f.boundary,
+        kml_data: f.kmlData,
+        created_by: f.createdBy,
+        last_updated_by: f.lastUpdatedBy,
+        created_at: f.createdAt || new Date().toISOString(),
+        updated_at: f.updatedAt || new Date().toISOString(),
+        deleted: f.deleted || false,
+        deleted_at: f.deletedAt
+    }),
+    lot: (l: Lot) => ({
+        id: l.id,
+        client_id: l.clientId,
+        farm_id: l.farmId,
+        name: l.name,
+        hectares: l.hectares,
+        crop_species: l.cropSpecies,
+        yield: l.yield || 0,
+        observed_yield: l.observedYield || 0,
+        status: l.status || 'EMPTY',
+        last_harvest_id: l.lastHarvestId || null,
+        boundary: l.boundary,
+        kml_data: l.kmlData,
+        created_by: l.createdBy,
+        last_updated_by: l.lastUpdatedBy,
+        created_at: l.createdAt || new Date().toISOString(),
+        updated_at: l.updatedAt || new Date().toISOString(),
+        deleted: l.deleted || false,
+        deleted_at: l.deletedAt
+    }),
+    product: (p: Product) => {
+        return {
+            id: p.id,
+            client_id: p.clientId,
+            name: p.name,
+            brand_name: p.brandName,
+            commercial_name: p.commercialName,
+            active_ingredient: p.activeIngredient,
+            type: p.type,
+            unit: p.unit,
+            concentration: p.concentration,
+            standard_presentations: p.standardPresentations || [],
+            created_at: p.createdAt || new Date().toISOString(),
+            updated_at: p.updatedAt || new Date().toISOString(),
+            deleted: p.deleted || false,
+            deleted_at: p.deletedAt,
+            deleted_by: p.deletedBy
+        };
+    },
+    stock: (s: ClientStock) => ({
+        id: s.id,
+        client_id: s.clientId,
+        warehouse_id: s.warehouseId || null,
+        product_id: s.productId,
+        product_brand: s.productBrand || null,
+        quantity: s.quantity,
+        source: s.source || null,
+        campaign_id: s.campaignId || null,
+        presentation_label: s.presentationLabel,
+        presentation_content: s.presentationContent,
+        presentation_amount: s.presentationAmount,
+        presentation: s.presentation,
+        updated_at: s.updatedAt || s.lastUpdated || new Date().toISOString()
+    }),
+    order: (o: Order) => ({
+        id: o.id,
+        order_number: o.orderNumber,
+        client_id: o.clientId,
+        farm_id: (o.farmId && o.farmId !== '') ? o.farmId : null,
+        lot_id: (o.lotId && o.lotId !== '') ? o.lotId : (o.lotIds && o.lotIds.length > 0 ? o.lotIds[0] : null),
+        warehouse_id: (o.warehouseId && o.warehouseId !== '') ? o.warehouseId : null,
+        type: o.type,
+        status: o.status,
+        date: o.date,
+        time: o.time,
+        harvest_batch_id: o.harvestBatchId || null,
+        application_start: o.applicationStart,
+        application_end: o.applicationEnd,
+        planting_density: o.plantingDensity,
+        planting_density_unit: o.plantingDensityUnit,
+        planting_spacing: o.plantingSpacing,
+        treated_area: o.treatedArea,
+        items: o.items,
+        applicator_name: o.applicatorName,
+        service_price: o.servicePrice || 0,
+        notes: o.notes,
+        created_by: o.createdBy,
+        updated_by: o.updatedBy,
+        created_at: o.createdAt || new Date().toISOString(),
+        updated_at: o.updatedAt || new Date().toISOString(),
+        synced: true,
+        deleted: o.deleted || false,
+        deleted_at: o.deletedAt || null,
+        deleted_by: o.deletedBy || null,
+        sowing_order_id: (o.sowingOrderId && o.sowingOrderId !== '') ? o.sowingOrderId : null,
+        investor_name: o.investorName || null,
+        campaign_id: o.campaignId || null,
+        boundary: o.boundary || null,
+        kml_data: o.kmlData || null,
+        remito_image_url: o.remitoImageUrl || null,
+        technical_responsible: o.technicalResponsible || null
+    }),
+    movement: (m: InventoryMovement) => {
+        return {
+            id: m.id,
+            client_id: m.clientId,
+            warehouse_id: (m.warehouseId && m.warehouseId !== '') ? m.warehouseId : null,
+            product_id: m.productId,
+            product_name: m.productName,
+            product_brand: m.productBrand,
+            type: m.type,
+            quantity: m.quantity,
+            unit: m.unit,
+            date: m.date,
+            time: m.time,
+            harvest_batch_id: m.harvestBatchId || null,
+            source: m.source || null,
+            sale_price: m.salePrice || 0,
+            purchase_price: m.purchasePrice || 0,
+            reference_id: (m.referenceId && m.referenceId !== '') ? m.referenceId : null,
+            notes: m.notes,
+            seller_name: m.sellerName || null,
+            factura_date: m.facturaDate || null,
+            due_date: m.dueDate || null,
+            factura_image_url: m.facturaImageUrl,
+            remito_image_url: m.remitoImageUrl,
+            investor_name: m.investorName || null,
+            created_by: m.createdBy,
+            campaign_id: m.campaignId || null,
+            investors: m.investors || [],
+            items: m.items || [],
+            presentation_label: m.presentationLabel,
+            presentation_content: m.presentationContent,
+            presentation_amount: m.presentationAmount,
+            discharge_number: m.dischargeNumber,
+            gross_weight: m.grossWeight,
+            tare_weight: m.tareWeight,
+            humidity: m.humidity,
+            hectoliter_weight: m.hectoliterWeight,
+            transport_company: m.transportCompany,
+            truck_plate: m.truckPlate,
+            trailer_plate: m.trailerPlate,
+            driver_name: m.driverName,
+            departure_date_time: m.departureDateTime,
+            distance_km: m.distanceKm,
+            freight_tariff: m.freightTariff,
+            destination_company: m.destinationCompany,
+            destination_address: m.destinationAddress,
+            origin_address: m.originAddress,
+            primary_sale_cuit: m.primarySaleCuit,
+            is_transfer: m.isTransfer || false,
+            origin_name: m.originName,
+            dest_name: m.destName,
+            partner_id: m.partnerId,
+            transport_name: m.transportName,
+            transport_cuit: m.transportCuit,
+            driver_cuit: m.driverCuit,
+            warehouse_name: m.warehouseName,
+            transport_sheets: m.transportSheets || [],
+            harvest_labor_price_per_ha: m.harvestLaborPricePerHa || 0,
+            harvest_labor_cost: m.harvestLaborCost || 0,
+            contractor_name: m.contractorName || null,
+            receiver_name: m.receiverName || null,
+            farm_id: m.farmId || null,
+            lot_id: m.lotId || null,
+            created_at: m.createdAt || new Date(m.date).toISOString(),
+            updated_at: m.updatedAt || new Date().toISOString(),
+            deleted: m.deleted || false,
+            deleted_at: m.deletedAt || null,
+            deleted_by: m.deletedBy || null
+        };
+    },
+    activity: (a: OrderActivity) => ({
+        id: a.id,
+        order_id: a.orderId,
+        order_number: a.orderNumber,
+        client_id: a.clientId,
+        action: a.action,
+        description: a.description,
+        user_name: a.userName,
+        timestamp: a.timestamp
+    }),
+    observation: (o: Observation) => ({
+        id: o.id,
+        client_id: o.clientId,
+        farm_id: o.farmId,
+        lot_id: o.lotId,
+        user_name: o.userName,
+        date: o.date,
+        comments: o.comments,
+        created_at: o.createdAt || new Date().toISOString(),
+        deleted: o.deleted || false,
+        deleted_by: o.deletedBy,
+        deleted_at: o.deletedAt
+    }),
+    warehouse: (w: any) => ({
+        id: w.id,
+        client_id: w.clientId,
+        name: w.name,
+        created_at: w.createdAt || new Date().toISOString(),
+        updated_at: w.updatedAt || new Date().toISOString(),
+        deleted: w.deleted || false,
+        deleted_at: w.deletedAt,
+        deleted_by: w.deletedBy
+    })
+};
+
+// Reverse mappers (Supabase -> Local)
+const reverseMappers = {
+    client: (c: any): Client => ({
+        id: c.id,
+        name: c.name,
+        investors: c.investors || [],
+        partners: c.partners || [],
+        enabledUnits: c.enabled_units || [],
+        enabledSellers: c.enabled_sellers || [],
+        defaultHarvestWarehouseId: c.default_harvest_warehouse_id,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+        deleted: c.deleted,
+        deletedAt: c.deleted_at,
+        deletedBy: c.deleted_by,
+        synced: true
+    }),
+    farm: (f: any): Farm => ({
+        id: f.id,
+        clientId: f.client_id,
+        name: f.name,
+        boundary: f.boundary,
+        kmlData: f.kml_data,
+        createdBy: f.created_by,
+        lastUpdatedBy: f.last_updated_by,
+        createdAt: f.created_at,
+        updatedAt: f.updated_at,
+        synced: true,
+        deleted: f.deleted,
+        deletedAt: f.deleted_at,
+        deletedBy: f.deleted_by
+    }),
+    lot: (l: any): Lot => ({
+        id: l.id,
+        clientId: l.client_id,
+        farmId: l.farm_id,
+        name: l.name,
+        hectares: l.hectares,
+        cropSpecies: l.crop_species,
+        yield: l.yield,
+        observedYield: l.observed_yield || 0,
+        status: l.status || 'EMPTY',
+        lastHarvestId: l.last_harvest_id,
+        boundary: l.boundary,
+        kmlData: l.kml_data,
+        createdBy: l.created_by,
+        lastUpdatedBy: l.last_updated_by,
+        createdAt: l.created_at,
+        updatedAt: l.updated_at,
+        synced: true,
+        deleted: l.deleted,
+        deletedAt: l.deleted_at,
+        deletedBy: l.deleted_by
+    }),
+    product: (p: any): Product => ({
+        id: p.id,
+        clientId: p.client_id,
+        name: p.name,
+        brandName: p.brand_name,
+        commercialName: p.commercial_name,
+        activeIngredient: p.active_ingredient,
+        type: p.type,
+        unit: p.unit,
+        concentration: p.concentration,
+        standardPresentations: p.standard_presentations || [],
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        deleted: p.deleted,
+        deletedAt: p.deleted_at,
+        deletedBy: p.deleted_by,
+        synced: true
+    }),
+    stock: (s: any): ClientStock => ({
+        id: s.id,
+        clientId: s.client_id,
+        warehouseId: s.warehouse_id,
+        productId: s.product_id,
+        productBrand: s.product_brand,
+        quantity: s.quantity,
+        updatedAt: s.updated_at,
+        lastUpdated: s.updated_at,
+        source: s.source,
+        campaignId: s.campaign_id,
+        presentationLabel: s.presentation_label,
+        presentationContent: s.presentation_content,
+        presentationAmount: s.presentation_amount,
+        presentation: s.presentation,
+        synced: true
+    }),
+    order: (o: any): Order => ({
+        id: o.id,
+        orderNumber: o.order_number,
+        clientId: o.client_id,
+        farmId: o.farm_id,
+        lotId: o.lot_id,
+        warehouseId: o.warehouse_id,
+        type: o.type,
+        status: o.status,
+        date: o.date,
+        time: o.time,
+        harvestBatchId: o.harvest_batch_id,
+        applicationStart: o.application_start,
+        applicationEnd: o.application_end,
+        plantingDensity: o.planting_density,
+        plantingDensityUnit: o.planting_density_unit,
+        plantingSpacing: o.planting_spacing,
+        treatedArea: o.treated_area,
+        items: o.items,
+        applicatorName: o.applicator_name,
+        servicePrice: o.service_price || 0,
+        notes: o.notes,
+        createdBy: o.created_by,
+        updatedBy: o.updated_by,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+        synced: true,
+        deleted: o.deleted,
+        deletedAt: o.deleted_at,
+        deletedBy: o.deleted_by,
+        sowingOrderId: o.sowing_order_id,
+        investorName: o.investor_name,
+        campaignId: o.campaign_id,
+        boundary: o.boundary,
+        kmlData: o.kml_data,
+        remitoImageUrl: o.remito_image_url,
+        technicalResponsible: o.technical_responsible
+    }),
+    movement: (m: any): InventoryMovement => ({
+        id: m.id,
+        clientId: m.client_id,
+        warehouseId: m.warehouse_id,
+        productId: m.product_id,
+        productName: m.product_name || 'Unknown',
+        productBrand: m.product_brand,
+        type: m.type,
+        quantity: m.quantity,
+        unit: m.unit || 'L',
+        date: m.date,
+        time: m.time,
+        harvestBatchId: m.harvest_batch_id,
+        salePrice: m.sale_price || 0,
+        purchasePrice: m.purchase_price || 0,
+        referenceId: m.reference_id || 'manual',
+        notes: m.notes,
+        sellerName: m.seller_name,
+        facturaDate: m.factura_date,
+        dueDate: m.due_date,
+        facturaImageUrl: m.factura_image_url,
+        remitoImageUrl: m.remito_image_url,
+        investorName: m.investor_name,
+        investors: m.investors || [],
+        items: m.items || [],
+        presentationLabel: m.presentation_label,
+        presentationContent: m.presentation_content,
+        presentationAmount: m.presentation_amount,
+        dischargeNumber: m.discharge_number,
+        grossWeight: m.gross_weight,
+        tareWeight: m.tare_weight,
+        humidity: m.humidity,
+        hectoliterWeight: m.hectoliter_weight,
+        transportCompany: m.transport_company,
+        truckPlate: m.truck_plate,
+        trailerPlate: m.trailer_plate,
+        driverName: m.driver_name,
+        departureDateTime: m.departure_date_time,
+        distanceKm: m.distance_km,
+        freightTariff: m.freight_tariff,
+        destinationCompany: m.destination_company,
+        destinationAddress: m.destination_address,
+        originAddress: m.origin_address,
+        primarySaleCuit: m.primary_sale_cuit,
+        isTransfer: m.is_transfer || false,
+        originName: m.origin_name,
+        destName: m.dest_name,
+        partnerId: m.partner_id,
+        transportName: m.transport_name,
+        transportCuit: m.transport_cuit,
+        driverCuit: m.driver_cuit,
+        warehouseName: m.warehouse_name,
+        transportSheets: m.transport_sheets || [],
+        harvestLaborPricePerHa: m.harvest_labor_price_per_ha || 0,
+        harvestLaborCost: m.harvest_labor_cost || 0,
+        contractorName: m.contractor_name,
+        receiverName: m.receiver_name,
+        farmId: m.farm_id,
+        lotId: m.lot_id,
+        createdBy: m.created_by,
+        createdAt: m.created_at,
+        updatedAt: m.updated_at,
+        synced: true,
+        deleted: m.deleted,
+        deletedAt: m.deleted_at,
+        deletedBy: m.deleted_by,
+        campaignId: m.campaign_id,
+        source: m.source
+    }),
+    activity: (a: any): OrderActivity => ({
+        id: a.id,
+        orderId: a.order_id,
+        orderNumber: a.order_number,
+        clientId: a.client_id,
+        action: a.action,
+        description: a.description,
+        userName: a.user_name,
+        timestamp: a.timestamp,
+        synced: true
+    }),
+    observation: (o: any): Observation => ({
+        id: o.id,
+        clientId: o.client_id,
+        farmId: o.farm_id,
+        lotId: o.lot_id,
+        userName: o.user_name,
+        date: o.date,
+        comments: o.comments,
+        createdAt: o.created_at,
+        deleted: o.deleted,
+        deletedBy: o.deleted_by,
+        deletedAt: o.deleted_at,
+        synced: true
+    }),
+    warehouse: (w: any) => ({
+        id: w.id,
+        clientId: w.client_id,
+        name: w.name,
+        createdAt: w.created_at,
+        updatedAt: w.updated_at,
+        synced: true,
+        deleted: w.deleted,
+        deletedAt: w.deleted_at,
+        deletedBy: w.deleted_by
+    })
+};
+
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
+export class SyncService {
+    private isSyncing = false;
+    private channel: any = null;
+    private listeners: ((status: SyncStatus) => void)[] = [];
+
+    onStatusChange(callback: (status: SyncStatus) => void) {
+        this.listeners.push(callback);
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== callback);
+        };
+    }
+
+    private notify(status: SyncStatus) {
+        this.listeners.forEach(l => l(status));
+    }
+
+    async sync() {
+        if (this.isSyncing) return;
+        this.isSyncing = true;
+        this.notify('syncing');
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                // Silently skip if no session
+                this.notify('idle');
+                return;
+            }
+
+            await this.pushChangesInternal();
+            await this.pullChangesInternal();
+
+            this.notify('success');
+
+            // Revert to idle after 3 seconds
+            setTimeout(() => this.notify('idle'), 3000);
+        } catch (error) {
+            console.error('❌ Sync error:', error);
+            this.notify('error');
+            setTimeout(() => this.notify('idle'), 3000);
+        } finally {
+            this.isSyncing = false;
+        }
+    }
+
+    async pushChanges() {
+        this.sync().catch(console.error);
+    }
+
+    // Realtime Subscription
+    subscribeToChanges() {
+        if (this.channel) return;
+
+        this.channel = supabase.channel('db-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public' },
+                async (payload) => {
+                    await this.handleRealtimeEvent(payload);
+                }
+            )
+            .subscribe();
+    }
+
+    unsubscribe() {
+        if (this.channel) {
+            this.channel.unsubscribe();
+            this.channel = null;
+        }
+    }
+
+    private async handleRealtimeEvent(payload: any) {
+        const { table, eventType, new: newRecord, old: oldRecord } = payload;
+
+        try {
+            let localStore: any = null;
+            let mapper: any = null;
+
+            switch (table) {
+                case 'clients': localStore = 'clients'; mapper = reverseMappers.client; break;
+                case 'farms': localStore = 'farms'; mapper = reverseMappers.farm; break;
+                case 'lots': localStore = 'lots'; mapper = reverseMappers.lot; break;
+                case 'products': localStore = 'products'; mapper = reverseMappers.product; break;
+                case 'stock': localStore = 'stock'; mapper = reverseMappers.stock; break;
+                case 'orders': localStore = 'orders'; mapper = reverseMappers.order; break;
+                case 'inventory_movements': localStore = 'movements'; mapper = reverseMappers.movement; break;
+                case 'order_activities': localStore = 'order_activities'; mapper = reverseMappers.activity; break;
+            }
+
+            if (!localStore || !mapper) return;
+
+            if (eventType === 'DELETE') {
+                if (oldRecord && oldRecord.id) {
+                    await db.delete(localStore, oldRecord.id);
+                }
+            } else if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                if (newRecord) {
+                    const mappedItem = mapper(newRecord);
+                    const localItem = await db.get(localStore, newRecord.id);
+
+                    if (localItem) {
+                        const localTime = new Date(localItem.updatedAt || localItem.createdAt || 0).getTime();
+                        const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
+
+                        if (remoteTime > localTime) {
+                            // PROTECT LOCAL CHANGES: If local item is NOT synced, do NOT overwrite it
+                            if (localItem.synced === false) {
+                                console.log(`[Realtime] ✋ Protecting local unsynced changes for ${localStore}:${newRecord.id}`);
+                                return;
+                            }
+
+                            // Preserve boundary/KML if remote is blank but local exists
+                            if (!mappedItem.boundary && localItem.boundary) {
+                                mappedItem.boundary = localItem.boundary;
+                            }
+                            if (!mappedItem.kmlData && localItem.kmlData) {
+                                mappedItem.kmlData = localItem.kmlData;
+                            }
+                            await db.put(localStore, mappedItem);
+                        }
+                    } else {
+                        await db.put(localStore, mappedItem);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error handling realtime event:', e);
+        }
+    }
+
+    private async pushChangesInternal() {
+        await this.pushStore('clients', 'clients', mappers.client);
+        await this.pushStore('products', 'products', mappers.product);
+        await this.pushStore('farms', 'farms', mappers.farm);
+        await this.pushStore('lots', 'lots', mappers.lot);
+        await this.pushStore('warehouses', 'warehouses', mappers.warehouse); // Changed from (w: any) => w
+        await this.pushStore('stock', 'stock', mappers.stock);
+        await this.pushStore('orders', 'orders', mappers.order);
+        await this.pushStore('movements', 'inventory_movements', mappers.movement);
+        await this.pushStore('order_activities', 'order_activities', mappers.activity);
+        await this.pushStore('observations', 'observations', mappers.observation);
+    }
+
+    private async pullChangesInternal() {
+        await this.pullStore('clients', 'clients', reverseMappers.client);
+        await this.pullStore('products', 'products', reverseMappers.product);
+        await this.pullStore('farms', 'farms', reverseMappers.farm);
+        await this.pullStore('lots', 'lots', reverseMappers.lot);
+        await this.pullStore('warehouses', 'warehouses', reverseMappers.warehouse); // Changed from (w: any) => w
+        await this.pullStore('stock', 'stock', reverseMappers.stock);
+        await this.pullStore('orders', 'orders', reverseMappers.order);
+        await this.pullStore('movements', 'inventory_movements', reverseMappers.movement);
+        await this.pullStore('order_activities', 'order_activities', reverseMappers.activity);
+        await this.pullStore('observations', 'observations', reverseMappers.observation);
+    }
+
+    private async pushStore<T extends { id: string }>(
+        localStoreName: any,
+        tableName: string,
+        mapper: (item: any) => any
+    ) {
+        const unsyncedItems = await db.getUnsynced(localStoreName);
+        if (unsyncedItems.length === 0) return;
+
+        for (const item of unsyncedItems) {
+            try {
+                // Skip client-less products
+                if (tableName === 'products' && !(item as Product).clientId) continue;
+
+                // Safeguard: Skip items missing clientId for mandatory tables to unblock sync
+                const tablesRequestingClientId = ['inventory_movements', 'orders', 'stock', 'farms', 'lots', 'warehouses', 'observations', 'order_activities'];
+                if (tablesRequestingClientId.includes(tableName) && !(item as any).clientId) {
+                    console.warn(`⚠️ Skipping ${tableName} item ${item.id} because it lacks clientId. Submitting to fix sync blocking.`);
+                    await db.markSynced(localStoreName, item.id); // Mark as "synced" locally so it stops blocking, even though it wasn't pushed
+                    continue;
+                }
+
+                // Skip UI-only "CONSOLIDATED" movements
+                if ((item as any).productId === 'CONSOLIDATED' || (item as any).id === 'CONSOLIDATED') {
+                    console.log(`Skipping UI-only item ${item.id} (CONSOLIDATED)`);
+                    await db.markSynced(localStoreName, item.id); // Mark as synced so we don't retry
+                    continue;
+                }
+
+                const payload = mapper(item);
+
+                // Log size for KML-heavy tables
+                if (tableName === 'lots' || tableName === 'farms') {
+                    const size = JSON.stringify(payload).length;
+                    const hasKmlInPayload = !!payload.kml_data;
+                    const kmlLength = payload.kml_data?.length || 0;
+                    console.log(`📤 Pushing ${tableName} ${item.id} (${(size / 1024).toFixed(1)} KB) | KML: ${hasKmlInPayload ? `YES (${kmlLength} chars)` : 'NO'}`);
+                }
+
+                // Specific handling for Stock to avoid unique constraint violations
+                // Constraint: stock_client_product_warehouse_key
+                let query = supabase.from(tableName).upsert(payload);
+
+                if (tableName === 'stock') {
+                    query = supabase.from(tableName).upsert(payload, {
+                        onConflict: 'client_id,product_id,warehouse_id',
+                        ignoreDuplicates: false
+                    });
+                }
+
+                const { error } = await query;
+
+                if (error) {
+                    // 1. Schema Mismatch / Missing Columns
+                    if (error.message.includes("schema cache") || error.message.includes("column")) {
+                        console.error(`⚠️ Schema mismatch on ${tableName}: ${error.message}. Please check migrations.`);
+                        continue; // Skip this item, keep it unsynced
+                    }
+
+                    // 2. Natural Key Conflict (Stock specific)
+                    if (tableName === 'stock' && (error.message.includes('stock_pkey') || error.message.includes('duplicate key'))) {
+                        console.warn(`🔄 Reconciling Stock natural key conflict for ${item.id}...`);
+                        const { id: _, ...payloadWithoutId } = payload;
+                        const { data: retryData, error: retryError } = await supabase
+                            .from(tableName)
+                            .upsert(payloadWithoutId, { onConflict: 'client_id,product_id,warehouse_id', ignoreDuplicates: false })
+                            .select('id')
+                            .single();
+
+                        if (!retryError && retryData) {
+                            if (retryData.id !== item.id) {
+                                await db.delete(localStoreName, item.id);
+                                await db.put(localStoreName, { ...item, id: retryData.id, synced: true });
+                            } else {
+                                await db.markSynced(localStoreName, item.id);
+                            }
+                        } else {
+                            console.error(`❌ Stock reconciliation failed for ${item.id}:`, retryError?.message);
+                        }
+                        continue;
+                    }
+
+                    // 3. Foreign Key Violations (e.g. missing Lot or Warehouse on server)
+                    if ((error as any).code === '23503' || error.message.includes('violates foreign key constraint')) {
+                        const fkDetails = (error as any).detail || '';
+                        let referencedId = '';
+                        const match = fkDetails.match(/\((.*?)\)=\((.*?)\)/);
+                        if (match && match[2]) referencedId = match[2];
+
+                        // Fallback: guess referenced ID from the item keys based on constraint name
+                        let parentStore = '';
+                        if (error.message.includes('orders_lot_id_fkey')) {
+                            parentStore = 'lots';
+                            referencedId = referencedId || item.lot_id || item.lotId;
+                        } else if (error.message.includes('orders_warehouse_id_fkey')) {
+                            parentStore = 'warehouses';
+                            referencedId = referencedId || item.warehouse_id || item.warehouseId;
+                        } else if (error.message.includes('order_activities_order_id_fkey')) {
+                            parentStore = 'orders';
+                            referencedId = referencedId || item.order_id || item.orderId;
+                        }
+
+                        console.warn(`🚫 ${tableName} ${item.id} skipped: Missing remote dependency (FK). ${error.message}${referencedId ? ` (Referenced ID seems to be: ${referencedId})` : ''}`);
+
+                        // Check if the referenced ID exists locally
+                        if (referencedId && parentStore) {
+                            const existsLocally = await db.get(parentStore as any, referencedId);
+                            if (!existsLocally) {
+                                console.warn(`⚠️ The referenced ID ${referencedId} in ${parentStore} does NOT exist locally either. This is an orphaned record. (Item: ${JSON.stringify(item)})`);
+                                console.log(`🗑️ Soft-deleting orphaned ${tableName} ${item.id} to unblock sync queue.`);
+                                // Soft delete instead of hard delete so UI drops it.
+                                await db.put(localStoreName, { ...item, deleted: true, synced: true });
+
+                                // Cascade to activities if this is an order
+                                if (tableName === 'orders') {
+                                    const allActivities = await db.getAll('order_activities');
+                                    for (const act of allActivities) {
+                                        if (act.orderId === item.id || act.order_id === item.id) {
+                                            console.log(`Cascade soft-deleting orphaned activity ${act.id}`);
+                                            await db.put('order_activities', { ...act, deleted: true, synced: true });
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.info(`ℹ️ The referenced ID ${referencedId} exists locally in ${parentStore} but not on the server. It might be waiting to sync.`);
+                            }
+                        }
+
+                        continue; // Do NOT nullify, just wait for the dependency to sync or be fixed
+                    }
+
+                    // 4. RLS / Permission Errors
+                    // If we get an RLS violation, it means the current user is NOT allowed to push this record.
+                    // This often happens if there are "stale" records from a previous session or another user in IndexedDB.
+                    // We mark them as synced locally to stop them from blocking the queue.
+                    if (error.message.includes('row-level security policy') || error.code === '42501') {
+                        console.warn(`🔒 RLS Violation pushing ${tableName}/${item.id}: Permission Denied. Marking as synced locally to unblock queue.`);
+                        await db.markSynced(localStoreName, item.id);
+                        continue;
+                    }
+
+                    // 5. Other Errors (ID syntax, unique constraints, etc.)
+                    console.error(`❌ Failed to push ${tableName}/${item.id}:`, error.message);
+                } else {
+                    await db.markSynced(localStoreName, item.id);
+                }
+            } catch (innerError) {
+                console.error(`Error processing item ${item.id}:`, innerError);
+            }
+        }
+    }
+
+    private async pullStore(
+        localStoreName: any,
+        remoteTable: string,
+        mapper: (item: any) => any
+    ) {
+        const { data, error } = await supabase.from(remoteTable).select('*');
+        if (error) {
+            console.error(`Failed to pull ${remoteTable}:`, error.message);
+            return;
+        }
+        if (!data || data.length === 0) return;
+
+        for (const remoteItem of data) {
+            try {
+                const localItem = await db.get(localStoreName, remoteItem.id);
+                const mappedItem = mapper(remoteItem);
+
+                if (localItem) {
+                    const localTime = new Date(localItem.updatedAt || localItem.createdAt || 0).getTime();
+                    const remoteTime = new Date(mappedItem.updatedAt || mappedItem.createdAt || 0).getTime();
+
+                    if (remoteTime > localTime) {
+                        // PROTECT LOCAL CHANGES: If local item is NOT synced, do NOT overwrite it
+                        if (localItem.synced === false) {
+                            console.log(`[Pull] ✋ Protecting local unsynced changes for ${localStoreName}:${remoteItem.id}`);
+                            continue;
+                        }
+
+                        // Preserve boundary/KML if remote is blank but local exists
+                        if (!mappedItem.boundary && localItem.boundary) {
+                            mappedItem.boundary = localItem.boundary;
+                        }
+                        if (!mappedItem.kmlData && localItem.kmlData) {
+                            mappedItem.kmlData = localItem.kmlData;
+                        }
+                        await db.put(localStoreName, mappedItem);
+                    }
+                } else {
+                    await db.put(localStoreName, mappedItem);
+                }
+            } catch (e) {
+                console.error(`Error pulling item ${remoteItem.id} into ${localStoreName}:`, e);
+            }
+        }
+    }
+}
+
+export const syncService = new SyncService();
