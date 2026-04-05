@@ -1,0 +1,269 @@
+import React from 'react';
+import { InventoryMovement, Order, Client, Warehouse, Campaign } from '@/types';
+import { getMovementBadgeStyles } from '@/lib/movementStyles';
+
+interface MovementDetailsViewProps {
+    movement: InventoryMovement;
+    client: Client;
+    order?: Order & { farmName?: string; lotName?: string };
+    originName?: string;
+    destName?: string;
+    onClose: () => void;
+    onEdit?: () => void;
+    isReadOnly?: boolean;
+    typeLabel: string;
+    campaigns?: Campaign[];
+}
+
+export function MovementDetailsView({
+    movement,
+    client,
+    order,
+    originName,
+    destName,
+    onClose,
+    onEdit,
+    isReadOnly = false,
+    typeLabel,
+    campaigns
+}: MovementDetailsViewProps) {
+    const logistics = movement as any;
+    const hasLogistics =
+        logistics.truckDriver ||
+        logistics.plateNumber ||
+        logistics.trailerPlate ||
+        logistics.destinationCompany ||
+        logistics.destinationAddress ||
+        logistics.deliveryLocation ||
+        logistics.transportCompany ||
+        logistics.dischargeNumber ||
+        logistics.humidity !== undefined ||
+        logistics.hectoliterWeight !== undefined ||
+        logistics.grossWeight !== undefined ||
+        logistics.tareWeight !== undefined ||
+        logistics.primarySaleCuit ||
+        logistics.departureDateTime ||
+        logistics.distanceKm !== undefined ||
+        logistics.freightTariff !== undefined;
+
+    const styles = getMovementBadgeStyles(movement.type, movement.notes || '', typeLabel);
+
+    const getBadgeColors = () => {
+        const borderColor = styles.color === 'emerald' ? 'border-emerald-200' :
+                          styles.color === 'lime' ? 'border-lime-200' :
+                          styles.color === 'orange' ? 'border-orange-200' :
+                          styles.color === 'blue' ? 'border-blue-200' :
+                          styles.color === 'indigo' ? 'border-indigo-200' : 'border-slate-200';
+        return `${styles.classes} border ${borderColor}`;
+    };
+
+    const getBorderColor = () => {
+        if (styles.color === 'emerald') return 'border-t-emerald-500';
+        if (styles.color === 'lime') return 'border-t-lime-500';
+        if (styles.color === 'orange') return 'border-t-orange-500';
+        if (styles.color === 'blue') return 'border-t-blue-500';
+        if (styles.color === 'indigo') return 'border-t-indigo-500';
+        return 'border-t-slate-500';
+    };
+
+    return (
+        <div className={`bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-slideUp border-t-4 ${getBorderColor()}`}>
+            {/* Header */}
+            <div className="bg-slate-50 px-8 py-4 border-b border-slate-200 flex justify-between items-center">
+                <div className="flex flex-col">
+                    <h3 className="font-black text-slate-900 text-xl tracking-tight">
+                        Detalles de {typeLabel.replace('I-', '').replace('E-', '').toLowerCase()}
+                    </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    {onEdit && !isReadOnly && (
+                        <button
+                            onClick={onEdit}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                            title="Editar"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                    )}
+                    <button
+                        onClick={onClose}
+                        className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                        title="Cerrar Detalles"
+                    >
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            <div className="p-8">
+                <div className="space-y-8">
+                    {/* Section 1: General Info */}
+                    <div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Información General</h3>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8">
+                            <div>
+                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Fecha / Hora</span>
+                                <span className="text-sm font-bold text-slate-700">
+                                    {movement.createdAt 
+                                        ? new Date(movement.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) 
+                                        : (movement.date || '-')}
+                                </span>
+                            </div>
+                            {(movement as any).isTransfer ? (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Trayecto</span>
+                                    <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        {originName || '...'} <span className="text-slate-300">→</span> {destName || '...'}
+                                    </span>
+                                </div>
+                            ) : (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">
+                                        {movement.type === 'IN' ? 'Galpón de destino' : 'Galpón'}
+                                    </span>
+                                    <span className="text-sm font-bold text-slate-700">{destName || originName || 'Galpón'}</span>
+                                </div>
+                            )}
+
+                            {campaigns && (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Campaña</span>
+                                    <span className="text-sm font-bold text-emerald-600">
+                                        {campaigns.find(c => c.id === (movement.campaignId || order?.campaignId))?.name || 'No asignada'}
+                                    </span>
+                                </div>
+                            )}
+
+                            {movement.sellerName && (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Vendedor</span>
+                                    <span className="text-sm font-bold text-blue-600">{movement.sellerName}</span>
+                                </div>
+                            )}
+
+                            {movement.investors && movement.investors.length > 0 && (
+                                <div className="sm:col-span-2 lg:col-span-3">
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Pagado Por</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {movement.investors.map(inv => (
+                                            <span key={inv.name} className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-lg border border-indigo-100 uppercase">
+                                                {inv.name} ({inv.percentage}%)
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {movement.receiverName && (
+                                <div>
+                                    <span className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Retirado Por</span>
+                                    <span className="px-3 py-1 bg-orange-50 text-orange-700 text-[10px] font-black rounded-lg border border-orange-100 uppercase">
+                                        {movement.receiverName}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Section: Product List (Detalles de compra/venta) */}
+                    {(movement.items && movement.items.length > 0) && (
+                        <div>
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                                {typeLabel.includes('COMPRA') ? 'Insumos Comprados' :
+                                    typeLabel.includes('VENTA') ? 'Productos Vendidos' : 'Detalle de Items'}
+                            </h3>
+                            <div className="bg-slate-50/50 rounded-2xl border border-slate-100 overflow-hidden">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Insumo / Marca</th>
+                                            <th className="px-6 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">Presentación</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Cantidad</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Precio Unit.</th>
+                                            <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {movement.items.map((it, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm font-bold text-slate-800">{it.productName}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase">{it.productBrand || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {it.presentationLabel && it.presentationContent ? (
+                                                        <span className="text-xs font-medium text-slate-600">
+                                                            {it.presentationLabel} {it.presentationContent}{it.unit || movement.unit} x {it.presentationAmount}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400 italic">Sin detalle</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-bold text-slate-700">
+                                                    {Math.abs(it.quantity)} {it.unit || movement.unit}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-mono text-slate-500">
+                                                    USD {Number(it.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-sm font-mono font-bold text-slate-900">
+                                                    USD {(it.quantity * (it.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Section 2: Logistics Info */}
+                    {movement.type !== 'IN' && (
+                        <div>
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Datos Logísticos</h3>
+                            {hasLogistics ? (
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-8">
+                                    {[
+                                        { label: 'Chofer', value: logistics.truckDriver },
+                                        { label: 'Patente Camión', value: logistics.plateNumber },
+                                        { label: 'Patente Acoplado', value: logistics.trailerPlate },
+                                        { label: 'Empresa Transp.', value: logistics.transportCompany },
+                                        { label: 'Empresa Destino', value: logistics.destinationCompany || logistics.deliveryLocation },
+                                        { label: 'Dirección Destino', value: logistics.destinationAddress },
+                                        { label: 'CUIT Venta Primaria', value: logistics.primarySaleCuit },
+                            { label: 'Fecha Partida', value: logistics.departureDateTime ? new Date(logistics.departureDateTime).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : null },
+                            { label: 'Distancia (Km)', value: (logistics.distanceKm != null && logistics.distanceKm !== '') ? `${Number(logistics.distanceKm).toLocaleString()} Km` : null },
+                            { label: 'Tarifa Flete', value: (logistics.freightTariff != null && logistics.freightTariff !== '') ? `USD ${Number(logistics.freightTariff).toLocaleString()}` : null },
+                            { label: 'Nº Descarga', value: logistics.dischargeNumber },
+                            { label: 'Humedad', value: (logistics.humidity != null && logistics.humidity !== '') ? `${Number(logistics.humidity).toLocaleString()} %` : null },
+                            { label: 'P. Hectolítrico', value: (logistics.hectoliterWeight != null && logistics.hectoliterWeight !== '') ? Number(logistics.hectoliterWeight).toLocaleString() : null },
+                            { label: 'Peso Bruto', value: (logistics.grossWeight != null && logistics.grossWeight !== '') ? `${Number(logistics.grossWeight).toLocaleString()} Kg` : null },
+                            { label: 'Peso Tara', value: (logistics.tareWeight != null && logistics.tareWeight !== '') ? `${Number(logistics.tareWeight).toLocaleString()} Kg` : null },
+                        ].filter(row => row.value != null && row.value !== '').map((row, idx) => (
+                            <div key={idx}>
+                                <span className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{row.label}</span>
+                                <span className="text-sm font-bold text-slate-700">{row.value}</span>
+                            </div>
+                        ))}
+                                </div>
+                            ) : (
+                                <div className="text-slate-400 text-sm font-bold italic py-2">
+                                    No se registraron datos logísticos para este movimiento.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Section 3: Notes */}
+                    {movement.notes && (
+                        <div>
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Notas</h3>
+                            <div className="bg-amber-50/50 p-6 rounded-2xl border border-amber-100 text-sm text-slate-700 font-medium leading-relaxed italic">
+                                "{movement.notes}"
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
