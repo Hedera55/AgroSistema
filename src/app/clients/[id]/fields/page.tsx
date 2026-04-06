@@ -100,6 +100,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [tempLotKmlData, setTempLotKmlData] = useState<string | null>(null);
     const [tempLotBoundary, setTempLotBoundary] = useState<any>(null);
     const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+    const [harvestBalanceError, setHarvestBalanceError] = useState<{ partner: string, equation: string, formula: string } | null>(null);
+    const [showBalanceErrorBox, setShowBalanceErrorBox] = useState(false);
 
     const refreshMovements = useClientMovements(id).refresh;
 
@@ -527,7 +529,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             );
 
             const warningMsg = hasConsumption 
-                ? "Aviso: Este producto ya tiene ventas o retiros registrados en el historial (Galpón o Directos). Al borrar esta cosecha, el stock podría quedar en negativo hasta que lo corrija. ¿Está seguro de continuar?"
+                ? "Aviso: Este producto ya tiene ventas o retiros registrados en el historial (Galpón o Directos). Al borrar esta cosecha, el stock podría quedar en negativo hasta que lo corrija.\nEsta cosecha tiene retiros directos. Se recomienda tenerlos anotados para poder recrear la cosecha, o perderá su registro.\n¿Está seguro de continuar?"
                 : "¿Está seguro de eliminar esta cosecha del historial? Se restará el stock y se borrarán los registros.";
 
             if (!confirm(warningMsg)) return;
@@ -1796,7 +1798,44 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             {/* WIZARD CONTAINER (Always at bottom of flow) */}
             <div id="harvest-wizard-scroll-anchor" className="container mx-auto max-w-7xl px-4 lg:px-8 pb-32">
                 {isHarvesting && selectedLotId && (
-                    <div className="mt-8 animate-fadeIn">
+                    <div className="mt-8 animate-fadeIn relative">
+                        {harvestBalanceError && (
+                            <div className="absolute -left-10 top-2 z-50">
+                                <span 
+                                    className="text-red-600 font-black text-3xl hover:scale-110 transition-transform cursor-pointer animate-pulse drop-shadow-sm select-none"
+                                    onClick={() => setShowBalanceErrorBox(!showBalanceErrorBox)}
+                                    title="Error de integridad: Balance de granos negativo detectado. Presione para ver detalle del diagnóstico."
+                                >
+                                    !
+                                </span>
+                                
+                                {showBalanceErrorBox && (
+                                    <div className="absolute left-12 top-0 w-80 p-4 bg-red-50 border-2 border-red-200 rounded-xl shadow-xl animate-fadeIn z-[60]">
+                                        <p className="text-red-700 font-bold text-sm leading-snug italic mb-3">
+                                            Por alguna razón, el balance de granos es negativo. Se ha eliminado una cosecha, de granos que ya se habían retirado. Hay que arreglar el stock. Este es el balance de granos actual, y la cuenta del numerador:
+                                        </p>
+                                        <div className="bg-white/50 p-2 rounded border border-red-100">
+                                            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1 text-center">Diagnóstico</p>
+                                            <p className="text-xs font-mono font-bold text-red-600 text-center break-all">
+                                                Cuenta: (Kilos Retirados Históricos Socio + Kilos del Camión Actual) / (Kilos Cosechados Totales Campaña + Kilos Camión Actual)
+                                            </p>
+                                            <p className="mt-2 text-sm font-mono font-black text-red-700 text-center border-t border-red-100 pt-2">
+                                                {harvestBalanceError.equation}
+                                            </p>
+                                            <p className="text-[9px] text-red-400 mt-1 text-center italic">
+                                                {harvestBalanceError.formula}
+                                            </p>
+                                        </div>
+                                        <button 
+                                            onClick={() => setShowBalanceErrorBox(false)}
+                                            className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
+                                        >
+                                            Cerrar diagnóstico
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <HarvestWizard
                             lot={allClientLots.find(l => l.id === selectedLotId)!}
                             farm={farms.find(f => f.id === selectedFarmId)!}
@@ -1808,8 +1847,11 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             campaignShares={campaignShares}
                             campaignInvestments={campaignInvestments}
                             movements={movements}
+                            onBalanceError={setHarvestBalanceError}
                             onCancel={() => {
                                 setIsHarvesting(false);
+                                setHarvestBalanceError(null);
+                                setShowBalanceErrorBox(false);
                                 setHistoryRefreshKey(prev => prev + 1);
                             }}
                             onComplete={async (data) => {

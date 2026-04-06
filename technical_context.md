@@ -64,6 +64,18 @@ To ensure semantic consistency across the Galpón (Stock) and Contaduría (Accou
   - Label: `TRANSFERENCIA`.
   - Context: Transfers between warehouses.
 
+### ⚠️ Diagnostic Warning Pattern (The '!' Sentry)
+When an automated audit detects an integrity issue (e.g., negative grain balance, allocation mismatch), the system uses a non-blocking **"Sentry"** pattern to alert the user without interrupting their workflow.
+
+- **The Icon**: A bold red exclamation sign (`!`).
+  - **Classes**: `text-red-600 font-black text-2xl md:text-3xl hover:scale-110 transition-transform cursor-pointer animate-pulse drop-shadow-sm select-none`.
+  - **Positioning**: Usually placed **outside** the component container (e.g., `absolute -left-10` or `-right-8`) to maintain a clean layout while signaling an external audit state.
+- **Interactivity**: Clicking the `!` toggles a floating **Diagnostic Box** or a warning message.
+- **Visual implementation variants**:
+  1. **Floating Diagnostic Box (Recommended for complex data)**: `bg-red-50 border-2 border-red-200 rounded-xl shadow-xl animate-fadeIn`. Contains a mono-spaced formula.
+  2. **Inline Warning Text (For simple mismatches)**: `text-red-600 font-bold text-sm italic leading-snug animate-fadeIn`, placed below the relevant section.
+- **Philosophy**: Transparency over blocking. We show the user the *math* behind the error (e.g., in the Quota calculation or "Sin Asignar" balance) so they can perform manual reconciliation.
+
 ### Layout & Width Standards
 - **Standard Width**: Most pages MUST follow a `max-w-7xl mx-auto` constraint to maintain a clean, centered reading column and consistent alignment.
 - **Extended Width (Data-Heavy Tables)**: For pages with high horizontal data density (e.g., Stock History), the preferred pattern is to bypass the `7xl` constraint to prevent row overcrowding.

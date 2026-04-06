@@ -60,6 +60,7 @@ interface HarvestWizardProps {
     initialDistributions?: any[];
     initialTransportSheets?: TransportSheet[];
     defaultWhId?: string;
+    onBalanceError?: (error: { partner: string, equation: string, formula: string } | null) => void;
 }
 
 export const HarvestWizard: React.FC<HarvestWizardProps> = ({
@@ -83,7 +84,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     initialTechnicalResponsible,
     defaultWhId,
     campaignShares = {},
-    campaignInvestments = {}
+    campaignInvestments = {},
+    onBalanceError
 }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
@@ -325,6 +327,58 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
 
     const currentCampaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
+
+    // --- Diagnostic Error Reporting ---
+    useEffect(() => {
+        if (!onBalanceError || !selectedHarvestCampaignId) {
+            onBalanceError?.(null);
+            return;
+        }
+
+        // We check all distributions that are PARTNER type
+        const partnerDists = distributions.filter(d => d.type === 'PARTNER');
+        if (partnerDists.length === 0) {
+            onBalanceError(null);
+            return;
+        }
+
+        for (const dist of partnerDists) {
+            const info = getPartnerQuotaInfo(dist.targetName);
+            if (!info) continue;
+
+            const previousHarvested = movements
+                .filter(m => m.campaignId === selectedHarvestCampaignId && m.type === 'HARVEST' && m.referenceId !== lot.id && !m.deleted)
+                .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+            const previousRetired = movements
+                .filter(m =>
+                    m.campaignId === selectedHarvestCampaignId &&
+                    m.receiverName === dist.targetName &&
+                    (m.type === 'HARVEST' || m.type === 'OUT') &&
+                    m.referenceId !== lot.id &&
+                    !m.deleted
+                )
+                .reduce((acc, m) => acc + (m.quantity || 0), 0);
+
+            const denominator = (previousHarvested + totalYieldNum);
+            const numerator = (previousRetired + totalYieldNum);
+
+            // Error condition: Denominator <= 0 or remaining balance is anomalous (negative numerator vs denominator)
+            if (denominator <= 0 || info.remaining < -100) {
+                const equation = `${numerator.toLocaleString()} / ${denominator.toLocaleString()}`;
+                const formula = `(${previousRetired.toLocaleString()} + ${totalYieldNum.toLocaleString()}) / (${previousHarvested.toLocaleString()} + ${totalYieldNum.toLocaleString()})`;
+                
+                onBalanceError({
+                    partner: dist.targetName,
+                    equation,
+                    formula
+                });
+                return;
+            }
+        }
+        onBalanceError(null);
+    }, [distributions, selectedHarvestCampaignId, totalYieldNum, movements, onBalanceError]);
+
 
     const allDestinations = useMemo(() => {
         const options: Array<{ label: string; value: string; disabled?: boolean; type?: 'WAREHOUSE' | 'PARTNER'; name?: string }> = [];
