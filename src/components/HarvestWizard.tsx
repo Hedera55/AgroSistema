@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Warehouse, Campaign, Lot, Farm, InventoryMovement, TransportSheet } from '@/types';
 import { InvestorSelector } from '@/components/InvestorSelector';

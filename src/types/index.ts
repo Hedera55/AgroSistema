@@ -265,8 +265,6 @@ export interface InventoryMovement {
     presentationLabel?: string;
     presentationContent?: number;
     presentationAmount?: number;
-    farmId?: string;
-    lotId?: string;
     type: 'IN' | 'OUT' | 'SALE' | 'HARVEST' | 'PURCHASE' | 'SERVICE';
     quantity: number;
     unit: Unit;
