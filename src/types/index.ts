@@ -123,6 +123,7 @@ export interface Product {
     commercialName?: string;
     concentration?: string; // e.g., "30%"
     standardPresentations?: StandardPresentation[];
+    campaignId?: string;
     synced?: boolean;
     createdAt?: string;
     updatedAt?: string;
@@ -245,6 +246,12 @@ export interface TransportSheet {
     distributionId?: string; // Links to a specific distribution from Step 2
     profileName?: string; // Which profile this sheet was created from
     partnermark?: string;
+    grossWeightPlant?: number;
+    tareWeightPlant?: number;
+    foreignMatter?: number;
+    earthPercentage?: number;
+    greenPercentage?: number;
+    lotId?: string; // Links to a specific lot
 }
 
 export interface InventoryMovement {
@@ -258,6 +265,8 @@ export interface InventoryMovement {
     presentationLabel?: string;
     presentationContent?: number;
     presentationAmount?: number;
+    farmId?: string;
+    lotId?: string;
     type: 'IN' | 'OUT' | 'SALE' | 'HARVEST' | 'PURCHASE' | 'SERVICE';
     quantity: number;
     unit: Unit;

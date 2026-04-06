@@ -174,8 +174,11 @@ export function StockTable({
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-slate-500">
                                             USD {(item.quantity * (item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                            {item.quantity} <span className={`text-xs ml-1 font-normal transition-colors uppercase tracking-tight ${item.quantity < 0 ? 'text-red-400' : 'text-slate-400 group-hover:text-emerald-300'}`}>{item.unit}</span>
+                                        <td 
+                                            className={`px-6 py-4 whitespace-nowrap text-right font-mono font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-emerald-600'}`}
+                                            title={item.quantity < 0 ? "Revise el historial, hay más producto usado que comprado/cosechado." : undefined}
+                                        >
+                                            {item.quantity.toLocaleString()} <span className={`text-xs ml-1 font-normal transition-colors uppercase tracking-tight ${item.quantity < 0 ? 'text-red-400' : 'text-slate-400 group-hover:text-emerald-300'}`}>{item.unit}</span>
                                         </td>
                                     </tr>
 

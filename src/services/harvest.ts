@@ -35,16 +35,15 @@ export const processHarvest = async (params: HarvestProcessParams) => {
     const productType = selectedHarvestType === 'SEMILLA' ? 'SEED' : 'GRAIN';
     const propBrand = campaignName;
 
-    // 1. Identify/Sync the Product
+    // 1. Identify/Sync the Product (Unique Fingerprint: Name + Type + CampaignID + 'Propia')
     let product: Product | undefined;
 
-    // A) If editing, we MUST keep the same Product ID to ensure Sales "follow" the branding update
+    // A) If editing, we MUST keep the same Product ID to ensure Sales "follow" the update
     if (isEditing && batchId) {
         const allMovs = await db.getAll('movements');
-        // Capture legacy movements (no batchId) by checking ReferenceId + Date
         const oldMovs = allMovs.filter((m: any) => 
             ((m.harvestBatchId && m.harvestBatchId === batchId) || 
-             (!m.harvestBatchId && m.type === 'HARVEST' && m.referenceId === lot.id && m.date === existingOrder?.date)) &&
+             (!m.harvestBatchId && m.type === 'HARVEST' && m.referenceId === lot.id && m.date === (existingOrder as any)?.date)) &&
             !m.deleted
         );
         
@@ -53,19 +52,21 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         if (existingProdId) {
             const existingProd = products.find(p => p.id === existingProdId);
             if (existingProd) {
-                product = { ...existingProd, brandName: propBrand, updatedAt: new Date().toISOString() };
+                // Keep the same ID, update the display brand (Campaign Name)
+                product = { ...existingProd, brandName: propBrand, campaignId: String(campaignId), updatedAt: new Date().toISOString() };
                 await db.put('products', product);
             }
         }
     }
 
-    // B) Fallback search by attributes if not found yet
+    // B) Deterministic Lookup (Fingerprint: Name + Type + CampaignID + 'Propia')
     if (!product) {
         product = products.find(p =>
-            p.name.toLowerCase() === productName.toLowerCase() &&
+            p.clientId === clientId &&
+            p.campaignId === String(campaignId) &&
             p.type === productType &&
-            p.brandName === propBrand &&
-            p.clientId === clientId
+            p.name.toLowerCase() === productName.toLowerCase() &&
+            p.commercialName === 'Propia'
         );
     }
 
@@ -75,6 +76,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         product = await updaters.addProduct({
             id: newId,
             clientId,
+            campaignId: String(campaignId),
             name: productName,
             type: productType,
             brandName: propBrand,

@@ -20,6 +20,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [currentClientName, setCurrentClientName] = useState<string | null>(null);
     const [persistedClientId, setPersistedClientId] = useState<string | null>(null);
     const [assignedCompanies, setAssignedCompanies] = useState<{ id: string, name: string }[]>([]);
+    const [pendingHarvests, setPendingHarvests] = useState<any[]>([]);
+    const [isCosechasOpen, setIsCosechasOpen] = useState(false);
     const isInitializing = useRef(false);
 
     // Fetch assigned companies for Contratista
@@ -57,6 +59,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         });
         return unsubscribe;
     }, []);
+
+
 
     // Load persisted client on mount and on every navigation
     useEffect(() => {
@@ -106,6 +110,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         
         return potentialId;
     }, [role, assignedId, urlClientId, persistedClientId, profile?.assigned_clients]);
+
+    // Fetch Pending Harvests for Sidebar
+    useEffect(() => {
+        const fetchPending = async () => {
+            if (!effectiveId) {
+                setPendingHarvests([]);
+                return;
+            }
+            try {
+                const all = await db.getAll('lots');
+                const pending = all.filter((l: any) => l.clientId === effectiveId && l.status === 'SOWED' && !l.deleted);
+                setPendingHarvests(pending);
+            } catch (err) {
+                console.error('Error fetching pending harvests:', err);
+            }
+        };
+
+        fetchPending();
+
+        const handleUpdate = () => fetchPending();
+        window.addEventListener('lotsUpdated', handleUpdate);
+        window.addEventListener('clientSelectionChanged', handleUpdate);
+        
+        return () => {
+            window.removeEventListener('lotsUpdated', handleUpdate);
+            window.removeEventListener('clientSelectionChanged', handleUpdate);
+        };
+    }, [effectiveId]);
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {
@@ -302,13 +334,58 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     })}
 
                     {currentClientName && showClientMenu && role !== 'CONTRATISTA' && (
-                        <div className="mt-4 px-4 animate-fadeIn">
+                        <div className="mt-4 animate-fadeIn">
                             <Link
                                 href={`/clients/${effectiveId}`}
-                                className="text-sm text-emerald-500 font-medium truncate tracking-wide hover:text-emerald-400 transition-all block"
+                                className="px-4 text-sm text-emerald-500 font-medium truncate tracking-wide hover:text-emerald-400 transition-all block mb-10"
                             >
                                 {currentClientName}
                             </Link>
+
+                            {/* Cosechas Menu Item */}
+                            <div className="bg-blue-600/10 rounded-lg overflow-hidden transition-all mx-2 group">
+                                <button 
+                                    onClick={() => setIsCosechasOpen(!isCosechasOpen)}
+                                    className="w-full pl-2 pr-4 py-2 flex flex-col justify-start transition-colors cursor-pointer"
+                                >
+                                    <div className="w-full flex justify-between items-center">
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-[13px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer">
+                                                Cosechas
+                                            </span>
+                                            {isCosechasOpen && (
+                                                <span className="text-[10px] italic font-medium text-blue-500">
+                                                    pendientes
+                                                </span>
+                                            )}
+                                        </div>
+                                        {pendingHarvests.length > 0 && (
+                                            <span className="text-blue-500 text-[10px] font-bold">
+                                                {pendingHarvests.length}
+                                            </span>
+                                        )}
+                                    </div>
+                                </button>
+
+                                {isCosechasOpen && (
+                                    <div className="pb-2 space-y-0.5">
+                                        {pendingHarvests.length === 0 ? (
+                                            <div className="pl-2 py-2 text-[10px] text-slate-500 italic">No hay cosechas pendientes</div>
+                                        ) : (
+                                            pendingHarvests.map((lot) => (
+                                                <Link
+                                                    key={lot.id}
+                                                    href={`/clients/${effectiveId}/fields?harvestLotId=${lot.id}`}
+                                                    className="block pl-2 py-1 text-[11px] font-medium text-blue-300/80 hover:text-white transition-all truncate"
+                                                    title={lot.name}
+                                                >
+                                                    {lot.name}
+                                                </Link>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </nav>
@@ -373,26 +450,81 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {/* Mobile Menu */}
                 {
                     isMobileMenuOpen && (
-                        <div className="md:hidden bg-slate-900 text-white p-4 space-y-2 border-t border-slate-800">
-                            {currentClientName && showClientMenu && (
-                                <Link
-                                    href={`/clients/${effectiveId}`}
-                                    onClick={() => setIsMobileMenuOpen(false)}
-                                    className="block py-2 text-emerald-500 font-medium border-b border-slate-800 mb-2"
-                                >
-                                    {currentClientName}
-                                </Link>
-                            )}
-                            {navigation.map((item) => (
-                                <Link
-                                    key={item.name}
-                                    href={item.href}
-                                    onClick={() => setIsMobileMenuOpen(false)}
-                                    className="block py-2 text-slate-300 hover:text-white"
-                                >
-                                    {item.name}
-                                </Link>
-                            ))}
+                        <div className="md:hidden bg-slate-900 text-white p-4 border-t border-slate-800">
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Left Column: Navigation */}
+                                <div className="space-y-1">
+                                    {navigation.map((item) => (
+                                        <Link
+                                            key={item.name}
+                                            href={item.href}
+                                            onClick={() => setIsMobileMenuOpen(false)}
+                                            className="block py-2 text-slate-300 hover:text-white"
+                                        >
+                                            {item.name}
+                                        </Link>
+                                    ))}
+                                </div>
+
+                                {/* Right Column: Client & Cosechas */}
+                                {currentClientName && showClientMenu && (
+                                    <div className="space-y-4">
+                                        <Link
+                                            href={`/clients/${effectiveId}`}
+                                            onClick={() => setIsMobileMenuOpen(false)}
+                                            className="block py-2 text-emerald-500 font-medium truncate"
+                                        >
+                                            {currentClientName}
+                                        </Link>
+
+                                        {/* Mobile Cosechas Menu */}
+                                        <div className="bg-blue-600/10 rounded-lg overflow-hidden transition-all -ml-2 mr-4">
+                                            <button 
+                                                onClick={() => setIsCosechasOpen(!isCosechasOpen)}
+                                                className="w-full pl-2 pr-3 py-2 flex flex-col justify-start transition-colors cursor-pointer"
+                                            >
+                                                <div className="w-full flex justify-between items-center">
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-[12px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer">
+                                                            Cosechas
+                                                        </span>
+                                                        {isCosechasOpen && (
+                                                            <span className="text-[10px] italic font-medium text-blue-500 animate-fadeIn">
+                                                                pendientes
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {pendingHarvests.length > 0 && (
+                                                        <span className="text-blue-500 text-[10px] font-bold">
+                                                            {pendingHarvests.length}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </button>
+
+                                            {isCosechasOpen && (
+                                                <div className="pb-2 space-y-0.5">
+                                                    {pendingHarvests.length === 0 ? (
+                                                        <div className="pl-2 py-1 text-[10px] text-slate-500 italic">No hay cosechas pendientes</div>
+                                                    ) : (
+                                                        pendingHarvests.map((lot) => (
+                                                            <Link
+                                                                key={lot.id}
+                                                                href={`/clients/${effectiveId}/fields?harvestLotId=${lot.id}`}
+                                                                onClick={() => setIsMobileMenuOpen(false)}
+                                                                className="block pl-2 py-1.5 text-[11px] font-medium text-blue-300/80 hover:text-white transition-all truncate"
+                                                                title={lot.name}
+                                                            >
+                                                                {lot.name}
+                                                            </Link>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )
                 }

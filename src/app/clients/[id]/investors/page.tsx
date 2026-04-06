@@ -1083,14 +1083,18 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             <div className="relative">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">
+                    <Link 
+                        href={`/clients/${id}/analytics?tab=withdrawals`}
+                        className="group font-bold text-slate-900 text-sm uppercase tracking-wider hover:underline cursor-pointer transition-all"
+                    >
                         Desglose por Socio {(() => {
                             if (viewCampaignId === 'all') return '(Todas las Campañas)';
                             if (viewCampaignId === 'none') return '(Sin Campaña)';
                             const camp = campaigns.find(c => c.id === viewCampaignId);
                             return camp ? `(${camp.name})` : '';
                         })()}
-                    </h3>
+                        <span className="hidden group-hover:inline text-emerald-600 normal-case tracking-normal font-medium text-xs ml-1">más detalles</span>
+                    </Link>
                     {!isReadOnly && (
                         <button
                             onClick={() => setShowEditInvestors(!showEditInvestors)}
@@ -1205,7 +1209,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-visible" ref={partnersScrollRef}>
+                    <div className="overflow-x-auto" ref={partnersScrollRef}>
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>

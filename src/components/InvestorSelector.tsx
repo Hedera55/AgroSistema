@@ -71,6 +71,8 @@ export const InvestorSelector: React.FC<InvestorSelectorProps> = ({
     };
 
     const totalPercentage = selectedInvestors.reduce((acc, i) => acc + i.percentage, 0);
+    const [localSelection, setLocalSelection] = React.useState("");
+    const isKeyboardRef = React.useRef(false);
 
     return (
         <div className="space-y-1.5">
@@ -81,10 +83,27 @@ export const InvestorSelector: React.FC<InvestorSelectorProps> = ({
                 <div className="w-[180px] shrink-0">
                     <select
                         className="block w-full rounded-lg border-slate-200 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm h-9 bg-white"
-                        value=""
+                        value={localSelection}
+                        onKeyDown={e => {
+                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                                isKeyboardRef.current = true;
+                            }
+                            if (e.key === 'Enter' && localSelection) {
+                                handleAddInvestor(localSelection);
+                                setLocalSelection("");
+                            }
+                        }}
+                        onMouseDown={() => {
+                            isKeyboardRef.current = false;
+                        }}
                         onChange={e => {
-                            handleAddInvestor(e.target.value);
-                            e.target.value = "";
+                            const val = e.target.value;
+                            if (isKeyboardRef.current) {
+                                setLocalSelection(val);
+                            } else {
+                                handleAddInvestor(val);
+                                setLocalSelection("");
+                            }
                         }}
                     >
                         <option value="">Seleccionar socio...</option>

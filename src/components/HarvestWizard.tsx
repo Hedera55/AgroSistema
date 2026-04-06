@@ -4,6 +4,19 @@ import { Warehouse, Campaign, Lot, Farm, InventoryMovement, TransportSheet } fro
 import { InvestorSelector } from '@/components/InvestorSelector';
 import { normalizeNumber } from '@/lib/numbers';
 
+/**
+ * Normalizes a string for robust matching (removes accents, spaces, and case)
+ */
+const normalizeKey = (val: string | undefined | null) => {
+    if (!val) return "";
+    return val.toString()
+        .toLowerCase()
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") 
+        .replace(/[^a-z0-9]/g, "");
+};
+
 interface HarvestData {
     date: string;
     contractor: string;
@@ -78,7 +91,6 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     const [harvestDate, setHarvestDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
     const [harvestContractor, setHarvestContractor] = useState(initialContractor || '');
     const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(initialDistributions?.[0]?.campaignId || initialDistributions?.[0]?.logistics?.campaignId || '');
-    const [observedYield, setObservedYield] = useState(initialYield || '');
     const [harvestLaborPrice, setHarvestLaborPrice] = useState(initialLaborPrice || '');
     const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>(
         initialDistributions?.[0]?.investors ||
@@ -96,6 +108,15 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     );
 
     const [isConfirming, setIsConfirming] = useState(false);
+    const [showQuotaId, setShowQuotaId] = useState<string | null>(null);
+
+    // Global click-to-close for magnifier
+    React.useEffect(() => {
+        if (!showQuotaId) return;
+        const handleGlobalClick = () => setShowQuotaId(null);
+        window.addEventListener('mousedown', handleGlobalClick);
+        return () => window.removeEventListener('mousedown', handleGlobalClick);
+    }, [showQuotaId]);
 
     // Step 2 State (Distribution) — remains Step 2 internally for state management but swapped in UI
     const [distributions, setDistributions] = useState<Array<{
@@ -133,8 +154,18 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         if (initialTransportSheets && initialTransportSheets.length > 0) {
             return initialTransportSheets;
         }
-        const firstSheet: TransportSheet = { id: `sheet_${Date.now()}`, dischargeNumber: '1' };
-        if (farm?.address) firstSheet.originAddress = farm.address;
+
+        const now = new Date();
+        const formattedNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const farmParts = [farm.name, farm.province, farm.city, farm.address].filter(Boolean);
+        const originStr = lot.name + (farmParts.length > 0 ? `, ${farmParts.join(', ')}` : '');
+
+        const firstSheet: TransportSheet = { 
+            id: `sheet_${Date.now()}`, 
+            dischargeNumber: '1',
+            originAddress: originStr,
+            departureDateTime: formattedNow
+        };
         return [firstSheet];
     });
     const [activeSheetIndex, setActiveSheetIndex] = useState(initialTransportSheets && initialTransportSheets.length > 0 ? initialTransportSheets.length - 1 : 0);
@@ -149,77 +180,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         }, 0);
     }, [transportSheets]);
 
-    // Sync observedYield with trucks for downstream compatibility
-    React.useEffect(() => {
-        setObservedYield(calculatedTotalYield.toString());
-    }, [calculatedTotalYield]);
 
-    // --- Participation Ledger Logic ---
-    const participationLedger = useMemo(() => {
-        if (!selectedHarvestCampaignId) return [];
-
-        const campaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
-        if (!campaign) return [];
-
-        // 1. Get Campaign Shares (Target Percentages)
-        const targetShares = campaignShares[selectedHarvestCampaignId] || {};
-
-        // 2. Fetch Historical Totals from props.movements
-        const campaignMovements = movements.filter(m => m.campaignId === selectedHarvestCampaignId && !m.deleted);
-        const pastHarvests = campaignMovements
-            .filter(m => m.type === 'HARVEST')
-            .reduce((acc, m) => acc + (m.quantity || 0), 0);
-        const pastSales = campaignMovements
-            .filter(m => m.type === 'SALE')
-            .reduce((acc, m) => acc + (m.quantity || 0), 0);
-
-        // 3. Calculate Pool (Denominator)
-        const cumulativePool = pastHarvests + calculatedTotalYield - pastSales;
-
-        // 4. Calculate Taken per Partner (Numerator)
-        return partners.map(p => {
-            const pastRetired = campaignMovements
-                .filter(m => m.type === 'HARVEST' && m.receiverName === p.name)
-                .reduce((acc, m) => acc + (m.quantity || 0), 0);
-
-            const currentWizardMarks = transportSheets
-                .filter(s => s.partnermark === p.name)
-                .reduce((acc, s) => acc + (normalizeNumber(s.grossWeight?.toString() || '0') - normalizeNumber(s.tareWeight?.toString() || '0')), 0);
-
-            const totalTaken = pastRetired + currentWizardMarks;
-            const targetPercent = targetShares[p.name] || 0;
-            const realizedPercent = cumulativePool > 0 ? (totalTaken / cumulativePool * 100) : 0;
-
-            return {
-                name: p.name,
-                realizedPercent,
-                targetPercent,
-                totalTaken,
-                isExceeded: realizedPercent > targetPercent + 0.1
-            };
-        }).filter(p => p.targetPercent > 0);
-    }, [selectedHarvestCampaignId, calculatedTotalYield, transportSheets, movements, campaignShares, partners]);
-
-    // Profile options derived from distributions
-    const profileOptions = useMemo(() => {
-        const opts: Array<{ id: string; label: string }> = [
-            { id: 'general', label: 'GENERAL (Aplica a todos)' }
-        ];
-        partners.forEach(p => {
-            opts.push({ id: `P_${p.name}`, label: p.name });
-        });
-
-        customProfiles.forEach(p => {
-            if (!opts.some(o => o.id === p.id)) {
-                opts.push({ id: p.id, label: p.name });
-            }
-        });
-
-        opts.push({ id: 'ACTION_ADD', label: '+ Nuevo Perfil' });
-        return opts;
-    }, [partners, customProfiles]);
-
-    const totalYieldNum = Math.floor(normalizeNumber(observedYield) || 0);
+    const totalYieldNum = Math.floor(Number(calculatedTotalYield) || 0);
     const assignedYield = Math.floor(distributions.reduce((sum, d) => sum + d.amount, 0));
     const availableYield = Math.floor(totalYieldNum - assignedYield);
 
@@ -284,6 +246,83 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             previousRetired
         };
     };
+
+    // --- Participation Ledger Logic ---
+    const participationLedger = useMemo(() => {
+        if (!selectedHarvestCampaignId) return [];
+
+        const campaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
+        if (!campaign) return [];
+
+        // 1. Get Campaign Shares (Target Percentages)
+        const targetShares = campaignShares[selectedHarvestCampaignId] || {};
+
+        // 2. Fetch Historical Totals from props.movements
+        const campaignMovements = movements.filter(m => m.campaignId === selectedHarvestCampaignId && !m.deleted);
+        const pastHarvests = campaignMovements
+            .filter(m => m.type === 'HARVEST')
+            .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+        const pastSales = campaignMovements
+            .filter(m => m.type === 'SALE')
+            .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+
+        // 3. Calculate Pool (Denominator: Total Production to date)
+        const cumulativePool = Number(pastHarvests) + Number(calculatedTotalYield);
+
+        // 4. Calculate Ledger candidates using identical logic to Step 3 distributions
+        const socioWizardTotals = new Map<string, number>();
+        transportSheets.forEach(s => {
+            const mark = s.partnermark;
+            if (mark && mark !== 'General') {
+                const net = normalizeNumber(s.grossWeight?.toString() || '0') - normalizeNumber(s.tareWeight?.toString() || '0');
+                const current = socioWizardTotals.get(mark) || 0;
+                socioWizardTotals.set(mark, current + (net > 0 ? net : 0));
+            }
+        });
+
+        return partners.map(p => {
+            const pKey = p.name;
+            const quotaInfo = getPartnerQuotaInfo(p.name);
+            
+            const pastRetired = campaignMovements
+                .filter(m => m.type === 'HARVEST' && m.receiverName === pKey)
+                .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+
+            const totalWizardAmount = socioWizardTotals.get(pKey) || 0;
+            const totalTaken = Number(pastRetired) + Number(totalWizardAmount);
+            const targetPercent = Number(quotaInfo?.percentage || targetShares[p.name] || 0);
+            const realizedPercent = cumulativePool > 0 ? (totalTaken / cumulativePool * 100) : 0;
+
+            return {
+                name: p.name,
+                realizedPercent,
+                targetPercent,
+                totalTaken,
+                cumulativePool, // Pass this for the debug label
+                isExceeded: realizedPercent > targetPercent + 0.1
+            };
+        }).filter(p => Number(p.targetPercent) > 0);
+    }, [transportSheets, calculatedTotalYield, selectedHarvestCampaignId, movements, campaignShares, partners, campaigns, campaignInvestments, harvestLaborPrice, selectedHarvestInvestors, lot]);
+
+    // Profile options derived from distributions
+    const profileOptions = useMemo(() => {
+        const opts: Array<{ id: string; label: string }> = [
+            { id: 'general', label: 'GENERAL (Aplica a todos)' }
+        ];
+        partners.forEach(p => {
+            opts.push({ id: `P_${p.name}`, label: p.name });
+        });
+
+        customProfiles.forEach(p => {
+            if (!opts.some(o => o.id === p.id)) {
+                opts.push({ id: p.id, label: p.name });
+            }
+        });
+
+        opts.push({ id: 'ACTION_ADD', label: '+ Nuevo Perfil' });
+        return opts;
+    }, [partners, customProfiles]);
+
 
     const currentCampaign = campaigns.find(c => c.id === selectedHarvestCampaignId);
 
@@ -417,12 +456,19 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             }
         }
 
+        const now = new Date();
+        const formattedNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        const farmParts = [farm.name, farm.province, farm.city, farm.address].filter(Boolean);
+        const originStr = lot.name + (farmParts.length > 0 ? `, ${farmParts.join(', ')}` : '');
+
         const newSheet: TransportSheet = applyProfileData({
             id: `sheet_${Date.now()}`,
             dischargeNumber: getNextDischargeNumber(),
-            profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL'
+            profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL',
+            departureDateTime: formattedNow,
+            originAddress: originStr
         } as TransportSheet, {
-            originAddress: farm?.address || '',
             ...profileData
         });
 
@@ -561,7 +607,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             investor: selectedHarvestInvestors.length > 0 ? selectedHarvestInvestors[0].name : '',
             investors: selectedHarvestInvestors,
             harvestType,
-            totalYield: totalYieldNum,
+            totalYield: Number(calculatedTotalYield),
             technicalResponsible: harvestTechnicalResponsible,
             distributions: processedDistributions,
             transportSheets
@@ -591,7 +637,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
-                            <Input label="Responsable técnico" placeholder="Nombre del encargado..." value={harvestTechnicalResponsible} onChange={e => setHarvestTechnicalResponsible(e.target.value)} className="bg-white" labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1" />
+                            <Input label="Responsable técnico" placeholder="" value={harvestTechnicalResponsible} onChange={e => setHarvestTechnicalResponsible(e.target.value)} className="bg-white" labelClassName="block text-[10px] uppercase font-bold text-slate-500 mb-1" />
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Tipo de Cosecha</label>
                                 <select className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" value={harvestType} onChange={e => setHarvestType(e.target.value as 'SEMILLA' | 'GRANO')}>
@@ -647,30 +693,135 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white rounded-b-xl max-h-[45vh] overflow-y-auto">
-                                <Input label="Nro de Descarga" placeholder="..." value={getSheetValue('dischargeNumber')} onChange={e => updateSheetField('dischargeNumber', e.target.value)} />
-                                <Input label="Dirección / Origen" placeholder="..." value={getSheetValue('originAddress')} onChange={e => updateSheetField('originAddress', e.target.value)} />
-                                <Input label="CUIT Corredor" placeholder="..." value={getSheetValue('primarySaleCuit')} onChange={e => updateSheetField('primarySaleCuit', e.target.value)} />
-                                <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
-                                <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
-                                <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
-                                <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
-                                <Input label="Humedad (%)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('humidity')} onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))} />
-                                <Input label="Peso Hectolítrico" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('hectoliterWeight')} onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))} />
-                                <Input label="Peso Bruto (kg)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeight')} onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))} />
-                                <Input label="Peso Tara (kg)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeight')} onChange={e => updateSheetField('tareWeight', normalizeNumber(e.target.value))} />
-                                <Input label="Empresa de Destino" placeholder="..." value={getSheetValue('destinationCompany')} onChange={e => updateSheetField('destinationCompany', e.target.value)} />
-                                <Input label="Dirección Destino" placeholder="..." value={getSheetValue('destinationAddress')} onChange={e => updateSheetField('destinationAddress', e.target.value)} />
-                                <Input label="Fecha/Hora Partida" type="datetime-local" value={getSheetValue('departureDateTime')} onChange={e => updateSheetField('departureDateTime', e.target.value.replace('T', ' '))} />
-                                <Input label="Km a recorrer" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('distanceKm')} onChange={e => updateSheetField('distanceKm', normalizeNumber(e.target.value))} />
-                                <Input label="Tarifa Flete (USD)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('freightTariff')} onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))} />
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Marca de socio</label>
-                                    <select className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={getSheetValue('partnermark') || 'General'} onChange={e => updateSheetField('partnermark', e.target.value)}>
-                                        <option value="General">General</option>
-                                        {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                                    </select>
-                                </div>
+                            <div className="p-4 flex flex-col gap-4 bg-white rounded-b-xl max-h-[50vh] overflow-y-auto">
+                                {/* CALC DE DERIVADOS */}
+                                {(() => {
+                                    const grossF = Number(normalizeNumber(activeSheet?.grossWeight?.toString() || '0'));
+                                    const taraF = Number(normalizeNumber(activeSheet?.tareWeight?.toString() || '0'));
+                                    const grossP = Number(normalizeNumber(activeSheet?.grossWeightPlant?.toString() || '0'));
+                                    const taraP = Number(normalizeNumber(activeSheet?.tareWeightPlant?.toString() || '0'));
+                                    const netF = grossF - taraF;
+                                    const netP = grossP - taraP;
+                                    const diff = netP - netF;
+
+                                    return (
+                                        <div className="flex flex-col gap-4">
+                                            {/* Row 1: Nro Descarga | Origen */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Nro de Descarga" placeholder="..." value={getSheetValue('dischargeNumber')} onChange={e => updateSheetField('dischargeNumber', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-8">
+                                                    <Input label="Origen" placeholder="..." value={getSheetValue('originAddress')} onChange={e => updateSheetField('originAddress', e.target.value)} />
+                                                </div>
+                                            </div>
+
+                                            {/* Row 2: Ciudad destino | Empresa Destino | CUIT Corredor */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Ciudad destino" placeholder="..." value={getSheetValue('destinationAddress')} onChange={e => updateSheetField('destinationAddress', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Empresa de Destino" placeholder="..." value={getSheetValue('destinationCompany')} onChange={e => updateSheetField('destinationCompany', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="CUIT Corredor" placeholder="..." value={getSheetValue('primarySaleCuit')} onChange={e => updateSheetField('primarySaleCuit', e.target.value)} />
+                                                </div>
+                                            </div>
+
+                                            {/* Row 3: Empresa Transporte | Chofer | Patente Camion | Patente Acoplado */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-6 sm:col-span-3">
+                                                    <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-6 sm:col-span-3">
+                                                    <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-6 sm:col-span-3">
+                                                    <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
+                                                </div>
+                                                <div className="col-span-6 sm:col-span-3">
+                                                    <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
+                                                </div>
+                                            </div>
+
+                                            {/* Weights Group (Campo & Planta + Calcs) */}
+                                            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-4">
+                                                {/* Pesos Campo & Planta */}
+                                                <div className="grid grid-cols-12 gap-4">
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Peso Bruto Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeight')} onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Peso Tara Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeight')} onChange={e => updateSheetField('tareWeight', normalizeNumber(e.target.value))} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Peso Bruto Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeightPlant')} onChange={e => updateSheetField('grossWeightPlant', normalizeNumber(e.target.value))} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Peso Tara Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeightPlant')} onChange={e => updateSheetField('tareWeightPlant', normalizeNumber(e.target.value))} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Netos & Dif */}
+                                                <div className="grid grid-cols-12 gap-4">
+                                                    <div className="col-span-12 sm:col-span-4">
+                                                        <Input label="Peso Neto Campo" readOnly disabled value={netF.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
+                                                    </div>
+                                                    <div className="col-span-12 sm:col-span-4">
+                                                        <Input label="Peso Neto Planta" readOnly disabled value={netP.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
+                                                    </div>
+                                                    <div className="col-span-12 sm:col-span-4">
+                                                        <Input label="Dif" readOnly disabled value={diff.toLocaleString()} className={`bg-white/50 border-slate-100 font-bold ${diff < 0 ? 'text-red-600' : 'text-emerald-600'}`} />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Row 6: Humedad | Hectolitrico | Cuerpos Extraños */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Humedad (%)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('humidity')} onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Peso Hectolítrico" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('hectoliterWeight')} onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="% Cuerpos Extraños" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('foreignMatter')} onChange={e => updateSheetField('foreignMatter', normalizeNumber(e.target.value))} />
+                                                </div>
+                                            </div>
+
+                                            {/* Row 7: Tierra | Verde | Fecha/Hora Partida */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="% Tierra" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('earthPercentage')} onChange={e => updateSheetField('earthPercentage', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="% Verde" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('greenPercentage')} onChange={e => updateSheetField('greenPercentage', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Fecha/Hora Partida" type="datetime-local" value={getSheetValue('departureDateTime')} onChange={e => updateSheetField('departureDateTime', e.target.value)} />
+                                                </div>
+                                            </div>
+
+                                            {/* Row 8: Km | Tarifa | Socio */}
+                                            <div className="grid grid-cols-12 gap-4">
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Km a recorrer" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('distanceKm')} onChange={e => updateSheetField('distanceKm', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <Input label="Tarifa Flete (USD)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('freightTariff')} onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))} />
+                                                </div>
+                                                <div className="col-span-12 sm:col-span-4">
+                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Marca de socio</label>
+                                                    <select className="flex-1 w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={getSheetValue('partnermark') || 'General'} onChange={e => updateSheetField('partnermark', e.target.value)}>
+                                                        <option value="General">General</option>
+                                                        {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -717,28 +868,59 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="space-y-2 relative">
                                 {distributions.map(dist => {
                                     const isLocked = dist.type === 'PARTNER';
                                     const info = getPartnerQuotaInfo(dist.targetName);
                                     const isExceeded = dist.type === 'PARTNER' && info && dist.amount > info.remaining + 0.1;
                                     return (
-                                        <div key={dist.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100 transition-all hover:border-slate-200">
+                                        <div key={dist.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100 transition-all hover:border-slate-200 relative">
                                             <div className="flex-1 flex flex-col">
                                                 <span className="text-xs font-bold text-slate-700">{dist.targetName}</span>
-                                                <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400">
-                                                    {dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
-                                                    {dist.type === 'PARTNER' && info && <span className={isExceeded ? 'text-red-500 ml-1' : 'ml-1'}>• CUPO: {info.remaining.toLocaleString()} kg ({info.percentage.toFixed(1)}%)</span>}
-                                                </span>
+                                                <div 
+                                                    className="flex items-center cursor-pointer group"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setShowQuotaId(dist.id === showQuotaId ? null : dist.id);
+                                                    }}
+                                                >
+                                                    <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400 group-hover:text-slate-600 transition-colors">
+                                                        {dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
+                                                        {dist.type === 'PARTNER' && info && (
+                                                            <span className={isExceeded ? 'text-red-500 ml-1' : 'ml-1'}>
+                                                                • CUPO: {info.remaining.toLocaleString()} kg ({info.percentage.toFixed(1)}%)
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </div>
+
+                                                {/* True Magnifier (Lupa) Style */}
+                                                {showQuotaId === dist.id && dist.type === 'PARTNER' && info && (
+                                                    <div 
+                                                        className="absolute -left-6 -top-4 z-[101] animate-in fade-in zoom-in duration-100 pointer-events-none"
+                                                        onClick={e => e.stopPropagation()}
+                                                    >
+                                                        <div className="bg-white p-6 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.25)] border border-slate-200 min-w-[340px] pointer-events-auto">
+                                                            <div className="flex flex-col gap-1.5">
+                                                                <span className="text-xl font-bold text-slate-800">{dist.targetName}</span>
+                                                                <span className={`text-[13px] font-black uppercase tracking-tight ${isExceeded ? 'text-red-500' : 'text-slate-500'}`}>
+                                                                    Socio • Cupo: {info.remaining.toLocaleString()} kg ({info.percentage.toFixed(1)}%)
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="relative w-36">
-                                                <input type="text" inputMode="decimal" value={isExceeded && isLocked ? `${Math.round(dist.amount).toLocaleString()} / ${Math.round(info?.remaining || 0).toLocaleString()}` : dist.amount || ''} disabled={isLocked} onChange={e => handleUpdateDistributionAmountString(dist.id, e.target.value)} className={`w-full px-2 py-1 text-sm rounded bg-white font-bold text-right pr-7 border transition-all ${isLocked ? 'text-blue-600 border-slate-200' : isExceeded ? 'border-red-500 text-red-600 bg-red-50' : 'border-slate-200 text-blue-600'}`} />
-                                                <span className={`absolute right-1.5 top-1.5 text-[9px] font-bold uppercase ${isLocked ? 'text-slate-400' : isExceeded ? 'text-red-400' : 'text-slate-400'}`}>kg</span>
+                                            <div className="relative w-40">
+                                                <input type="text" inputMode="decimal" value={isExceeded && isLocked ? `${Math.round(dist.amount).toLocaleString()} / ${Math.round(info?.remaining || 0).toLocaleString()}` : dist.amount || ''} disabled={isLocked} onChange={e => handleUpdateDistributionAmountString(dist.id, e.target.value)} className={`w-full px-2 py-1.5 text-sm rounded bg-white font-bold text-right pr-9 border transition-all ${isLocked ? 'text-blue-600 border-slate-200' : isExceeded ? 'border-red-500 text-red-600 bg-red-50' : 'border-slate-200 text-blue-600'}`} />
+                                                <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold uppercase ${isLocked ? 'text-slate-500' : isExceeded ? 'text-red-500' : 'text-slate-500'}`}>kg</span>
                                             </div>
                                             {dist.type === 'WAREHOUSE' && (
                                                 <button type="button" onClick={() => handleFillRemainder(dist.id)} className="w-7 h-7 flex items-center justify-center rounded border border-blue-100 bg-blue-50 text-blue-600 shadow-sm" title="Llenar remanente/cupo">↓</button>
                                             )}
-                                            <button type="button" onClick={() => handleDeleteDistribution(dist.id)} className="w-7 h-7 flex items-center justify-center rounded border border-red-50 text-red-500">✕</button>
+                                            {dist.type === 'WAREHOUSE' && (
+                                                <button type="button" onClick={() => handleDeleteDistribution(dist.id)} className="w-7 h-7 flex items-center justify-center rounded border border-red-50 text-red-500">✕</button>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -782,11 +964,12 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                 Producción: {totalYieldNum.toLocaleString()} kg | Rinde: {(totalYieldNum / (lot.hectares || 1)).toFixed(0)} kg/ha
                             </div>
                         )}
-                        {step === 2 && (
+                        {(step === 2 || step === 3) && (
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 animate-fadeIn">
                                 {participationLedger.map(p => (
-                                    <span key={p.name} className={`text-xs font-bold uppercase ${p.isExceeded ? 'text-red-700' : 'text-indigo-600'}`}>
+                                    <span key={p.name} className={`text-xs font-bold uppercase transition-all duration-300 ${p.isExceeded ? 'text-red-700 animate-pulse' : 'text-indigo-600'}`}>
                                         {p.name}: {p.realizedPercent.toFixed(1)}% / {p.targetPercent.toFixed(1)}%
+                                        <span className="ml-1 opacity-50 font-normal">({Math.round(p.totalTaken)}/{Math.round(p.cumulativePool)} kg)</span>
                                     </span>
                                 ))}
                             </div>
@@ -799,7 +982,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         </button>
                         <button type="button" onClick={() => {
                             if (step === 1) { setStep(2); }
-                            else if (step === 2) { if (totalYieldNum === 0) return alert('Cargue al menos un camión.'); syncMarksToDistributions(); setStep(3); }
+                            else if (step === 2) { syncMarksToDistributions(); setStep(3); }
                             else if (step === 3) { setStep(4); }
                             else { if (!isConfirming) { setIsConfirming(true); setTimeout(() => setIsConfirming(false), 3000); } else { handleFinalSubmit(); } }
                         }} className={`px-6 py-2 rounded-lg text-white text-xs font-bold uppercase tracking-wider shadow-md transition-all ${isConfirming ? 'bg-yellow-500 hover:bg-yellow-600 scale-105' : 'bg-blue-600 hover:bg-blue-700'}`}>

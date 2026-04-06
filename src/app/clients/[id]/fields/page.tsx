@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useRef, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useFarms, useLots, useAllLots } from '@/hooks/useLocations';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -139,6 +139,26 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
         return map;
     }, [orders]);
+    
+    const searchParams = useSearchParams();
+    const harvestLotId = searchParams.get('harvestLotId');
+
+    // Auto-open Harvest Wizard via Deep Linking
+    useEffect(() => {
+        if (harvestLotId && allClientLots.length > 0) {
+            const lot = allClientLots.find(l => l.id === harvestLotId);
+            if (lot) {
+                setSelectedFarmId(lot.farmId);
+                setSelectedLotId(lot.id);
+                fetchSowingDetails(lot.id);
+                setIsHarvesting(true);
+                
+                // Clear param to prevent accidental re-triggers
+                const newPath = window.location.pathname;
+                window.history.replaceState(null, '', newPath);
+            }
+        }
+    }, [harvestLotId, allClientLots]);
 
     useEffect(() => {
         const fetchExtras = async () => {
@@ -488,24 +508,33 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     };
 
     const handleDeleteHarvestBatch = async (batchId: string, lotId: string) => {
-        if (!confirm('¿Está seguro de eliminar esta cosecha del historial? Se restará el stock y se borrarán los registros.')) return;
-
         try {
             const lot = allClientLots.find(l => l.id === lotId);
             if (!lot) return;
 
-            const isCurrentHarvest = lot.status === 'HARVESTED' && lot.lastHarvestId === batchId;
-
-            if (!isCurrentHarvest && lot.lastHarvestId !== batchId) {
-                alert("No se puede. Opción: Editar el rinde total a 0");
-                return;
-            }
-
-            // 1. Fetch ALL batch movements
+            // 1. Broad Sense Dependency Check (Fingerprint: Product ID)
             const allMovements = await db.getAll('movements') as InventoryMovement[];
             const batchMovements = allMovements.filter(m => m.harvestBatchId === batchId && !m.deleted);
+            
+            // Get the product ID for this harvest batch
+            const harvestProdId = batchMovements.find(m => m.type === 'HARVEST')?.productId;
+            
+            // Check for ANY consumption of this product (Broad Sense)
+            const hasConsumption = harvestProdId && allMovements.some(m => 
+                m.productId === harvestProdId && 
+                (m.type === 'SALE' || m.type === 'OUT') && 
+                !m.deleted
+            );
 
-            // 2. Revert Stock for each movement
+            const warningMsg = hasConsumption 
+                ? "Aviso: Este producto ya tiene ventas o retiros registrados en el historial (Galpón o Directos). Al borrar esta cosecha, el stock podría quedar en negativo hasta que lo corrija. ¿Está seguro de continuar?"
+                : "¿Está seguro de eliminar esta cosecha del historial? Se restará el stock y se borrarán los registros.";
+
+            if (!confirm(warningMsg)) return;
+
+            const isCurrentHarvest = lot.status === 'HARVESTED' && lot.lastHarvestId === batchId;
+
+            // 2. Revert Stock for each movement in the batch
             for (const mov of batchMovements) {
                 const items = mov.items && mov.items.length > 0 ? mov.items : [{
                     productId: mov.productId,
@@ -1769,7 +1798,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 {isHarvesting && selectedLotId && (
                     <div className="mt-8 animate-fadeIn">
                         <HarvestWizard
-                            lot={lots.find(l => l.id === selectedLotId)!}
+                            lot={allClientLots.find(l => l.id === selectedLotId)!}
                             farm={farms.find(f => f.id === selectedFarmId)!}
                             contractors={contractors}
                             campaigns={campaigns}
