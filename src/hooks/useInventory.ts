@@ -151,8 +151,7 @@ export function useClientStock(clientId: string) {
         }
         setLoading(true);
         try {
-            const allStock = await db.getAll('stock');
-            const clientStock = allStock.filter((s: ClientStock) => s.clientId === clientId);
+            const clientStock = await db.getAllByClient('stock', clientId);
             setStock(clientStock);
         } catch (e) {
             console.error(e);
@@ -195,8 +194,7 @@ export function useClientMovements(clientId: string) {
         if (!clientId) return;
         setLoading(true);
         try {
-            const allMovements = await db.getAll('movements');
-            const clientMovements = allMovements.filter((m: any) => m.clientId === clientId && !m.deleted);
+            const clientMovements = (await db.getAllByClient('movements', clientId)).filter((m: any) => !m.deleted);
             // Sort by date desc
             clientMovements.sort((a: any, b: any) => new Date(b.date + 'T' + (b.time || '00:00')).getTime() - new Date(a.date + 'T' + (a.time || '00:00')).getTime());
             setMovements(clientMovements);

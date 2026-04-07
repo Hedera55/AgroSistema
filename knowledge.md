@@ -100,6 +100,20 @@ This file stores persistent context, rules, and preferences for the AgroSistema 
 
 - ** browser extension **: Don't use the browser ability, where you can open chromium and browse by yourself; my computer's too old for that, ask me and I'll investigate
 
+- ** recalcular fuerte's mission: **  What will recalcular fuerte do? 
+  Products are entered via purchases or harvests.
+  Products are withdrawn, multiple ways
+  Money is entered... only through sales of products,
+  And money is withdrawn multiple ways
+
+  Sometimes money withdrawn, or product withdrawn, doesn't have a corresponding input movement.
+  It's fine, we deal with those with negatives.
+
+  This is the main logic. This is what history of stocks and lotes ond orders is supposed to track
+
+  This is what recalcular fuerte should have as its mission.
+
+
 
 + . + . + . + . + . + . +
 

@@ -117,6 +117,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const matrixMap = new Map<string, Map<string, number>>(); // [partnerName][lotId] -> kg
         const activeLotIds = new Set<string>();
         
+        const evolutionMap = new Map<string, {
+            date: string;
+            time: string;
+            eventId: string;
+            viajes: number;
+            netoCampo: number;
+            netoPlanta: number;
+            partnerWeights: Record<string, number>;
+        }>();
+        
         // Helper to get lot display name
         const getLotDisplayName = (lotId: string) => {
             const lot = lots.find(l => l.id === lotId);
@@ -130,6 +140,21 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         );
         
         filteredMovements.forEach(m => {
+            const eventId = m.harvestBatchId || m.id;
+            
+            if (!evolutionMap.has(eventId)) {
+                evolutionMap.set(eventId, {
+                    date: m.date,
+                    time: m.time || '00:00',
+                    eventId,
+                    viajes: 0,
+                    netoCampo: 0,
+                    netoPlanta: 0,
+                    partnerWeights: {}
+                });
+            }
+            const evo = evolutionMap.get(eventId)!;
+
             (m.transportSheets || []).forEach((sheet: TransportSheet) => {
                 const mark = sheet.partnermark;
                 if (!mark || mark === 'General') return;
@@ -144,6 +169,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     netoPlanta: existing.netoPlanta + (netoPlanta > 0 ? netoPlanta : 0),
                     viajes: existing.viajes + 1
                 });
+
+                // Evolution Data
+                evo.viajes += 1;
+                evo.netoCampo += (netoCampo > 0 ? netoCampo : 0);
+                evo.netoPlanta += (netoPlanta > 0 ? netoPlanta : 0);
+                evo.partnerWeights[mark] = (evo.partnerWeights[mark] || 0) + (netoPlanta > 0 ? netoPlanta : 0);
 
                 // Matrix Data (Partner x Lot)
                 if (sheet.lotId) {
@@ -206,6 +237,29 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             lotTotals[lotId] = matrixRows.reduce((sum, row) => sum + (row.lotValues[lotId] || 0), 0);
         });
 
+        // Calculate Evolution Rows
+        const evoArray = Array.from(evolutionMap.values()).filter(e => e.viajes > 0);
+        // Sort oldest to newest
+        evoArray.sort((a, b) => {
+            const dateA = a.date + 'T' + a.time;
+            const dateB = b.date + 'T' + b.time;
+            return dateA.localeCompare(dateB);
+        });
+
+        let currentAccumulatedCampo = 0;
+        const evolutionRows = evoArray.map(evo => {
+            currentAccumulatedCampo += evo.netoCampo;
+            return {
+                ...evo,
+                netoCampoAcumulado: currentAccumulatedCampo
+            };
+        });
+
+        // Reverse to newest on top
+        evolutionRows.reverse();
+
+        const allClientPartners = (client?.partners || []).map(p => p.name).filter(Boolean) as string[];
+
         return { 
             rows, 
             totalCampo, 
@@ -216,6 +270,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 rows: matrixRows,
                 lotTotals,
                 grandTotal: totalPlanta
+            },
+            evolution: {
+                rows: evolutionRows,
+                partners: allClientPartners
             }
         };
     }, [movements, selectedCampaignId, client, lots, farms]);
@@ -299,9 +357,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             <tr style={{ backgroundColor: '#0C8A52' }}>
                                                 <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Socio</th>
                                                 <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Neto Campo (kg)</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Neto Planta (kg)</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Neto Planta Acumulado (kg)</th>
                                                 <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>% Neto Planta</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>% Neto Planta Acumulado</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -309,7 +367,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <tr 
                                                     key={idx} 
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
-                                                    className="hover:brightness-95 transition-all"
                                                 >
                                                     <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.name}</td>
                                                     <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
@@ -357,7 +414,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]" 
                                                     style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
                                                 >
-                                                    Neto planta (kg)
+                                                    Neto planta acumulado (kg)
                                                 </th>
                                             </tr>
                                             <tr style={{ backgroundColor: '#0C8A52' }}>
@@ -375,7 +432,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <tr 
                                                     key={idx} 
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
-                                                    className="hover:brightness-95 transition-all"
                                                 >
                                                     <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {mRow.partnerName}
@@ -404,6 +460,64 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 </td>
                                             </tr>
                                         </tfoot>
+                                    </table>
+                                </div>
+
+                                {/* Evolution Table: Evolución Diaria de Kg Acumulados */}
+                                <div className="overflow-x-auto rounded-lg border border-gray-400">
+                                    <table className="min-w-full border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th 
+                                                    colSpan={5 + withdrawalData.evolution.partners.length} 
+                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]" 
+                                                    style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
+                                                >
+                                                    Evolución Diaria de Kg Acumulados
+                                                </th>
+                                            </tr>
+                                            <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                {withdrawalData.evolution.partners.map(partner => (
+                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {partner}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {withdrawalData.evolution.rows.map((row, idx) => (
+                                                <tr 
+                                                    key={idx} 
+                                                    style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
+                                                >
+                                                    <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.viajes}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    {withdrawalData.evolution.partners.map(partner => (
+                                                        <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
                                     </table>
                                 </div>
                             </div>

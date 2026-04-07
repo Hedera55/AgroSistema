@@ -12,11 +12,11 @@ export function useOrders(clientId: string) {
     const refreshOrders = useCallback(async () => {
         if (!clientId) return;
         try {
-            const allOrders = await db.getAll('orders');
-            const clientOrders = allOrders
-                .filter((o: Order) => o.clientId === clientId && !o.deleted && o.type !== 'HARVEST')
+            const clientOrders = await db.getAllByClient('orders', clientId);
+            const filteredOrders = clientOrders
+                .filter((o: Order) => !o.deleted && o.type !== 'HARVEST')
                 .sort((a: Order, b: Order) => (b.orderNumber || 0) - (a.orderNumber || 0));
-            setOrders(clientOrders);
+            setOrders(filteredOrders);
         } catch (error) {
             console.error('Error fetching orders:', error);
         } finally {
@@ -40,8 +40,7 @@ export function useOrders(clientId: string) {
             const existingOrder = await db.get('orders', order.id);
             if (existingOrder) {
                 // REVERSAL LOGIC: Restore stock from previous movements
-                const allMovements = await db.getAll('movements');
-                const originalMovements = allMovements.filter((m: any) => m.referenceId === order.id && !m.deleted);
+                const originalMovements = (await db.getAllByClient('movements', clientId)).filter((m: any) => m.referenceId === order.id && !m.deleted);
                 
                 // Capture original "Birth Time" from first movement
                 let birthTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
@@ -51,11 +50,10 @@ export function useOrders(clientId: string) {
 
                 for (const m of originalMovements) {
                     // Restore stock
-                    const stockItems = await db.getAll('stock');
+                    const stockItems = await db.getAllByClient('stock', clientId);
                     const candidate = stockItems.find((s: ClientStock) =>
                         s.productId === m.productId &&
-                        s.warehouseId === m.warehouseId &&
-                        s.clientId === clientId
+                        s.warehouseId === m.warehouseId
                     );
 
                     if (candidate) {
@@ -116,8 +114,7 @@ export function useOrders(clientId: string) {
             await db.put('orders', finalOrder);
 
             // 3. Deduct Stock & Record Movements
-            const currentStock = await db.getAll('stock');
-            const clientStock = currentStock.filter((s: ClientStock) => s.clientId === clientId);
+            const clientStock = await db.getAllByClient('stock', clientId);
 
             for (const item of items) {
                 // SKIP stock deduction for Virtual Deficits
@@ -184,7 +181,7 @@ export function useOrders(clientId: string) {
                 }
 
                 // Record Movement
-                const birthTime = (await db.getAll('movements'))
+                const birthTime = (await db.getAllByClient('movements', clientId))
                     .filter((m: any) => m.referenceId === order.id && !m.deleted)
                     .find((m: any) => m.time)?.time || new Date().toTimeString().split(' ')[0].substring(0, 5);
 
@@ -295,8 +292,7 @@ export function useOrders(clientId: string) {
             });
 
             // 2. Soft-delete associated movements and REVERSE STOCK
-            const allMovements = await db.getAll('movements');
-            const associatedMovements = allMovements.filter((m: any) => m.referenceId === orderId && !m.deleted);
+            const associatedMovements = (await db.getAllByClient('movements', clientId)).filter((m: any) => m.referenceId === orderId && !m.deleted);
             
             for (const m of associatedMovements) {
                 // Correctly undo the stock change before deleting the movement

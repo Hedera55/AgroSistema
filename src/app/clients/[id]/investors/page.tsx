@@ -108,8 +108,8 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
 
     const loadSnapshots = async () => {
         try {
-            const allSnapshots = await db.getAll('campaign_snapshots');
-            setSnapshots(allSnapshots.filter((s: CampaignSnapshot) => s.clientId === id));
+            const clientSnapshots = await db.getAllByClient('campaign_snapshots', id);
+            setSnapshots(clientSnapshots);
         } catch (e) {
             console.error('Error loading snapshots', e);
         }
@@ -119,8 +119,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
         if (!confirm('¿Está seguro de cerrar esta campaña y guardar una copia de seguridad del stock? (Snapshot)')) return;
         setIsSnapshotting(true);
         try {
-            const allStock = await db.getAll('stock');
-            const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+            const clientStock = await db.getAllByClient('stock', id);
 
             const snapshot: CampaignSnapshot = {
                 id: generateId(),
@@ -153,8 +152,7 @@ export default function ContaduriaPage({ params }: { params: Promise<{ id: strin
             // Note: Recalculation logic will go here if needed. 
             // For now, in Contaduría, this just saves a new snapshot of the *current* state 
             // under this campaign, effectively updating the snapshot if movements were edited.
-            const allStock = await db.getAll('stock');
-            const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+            const clientStock = await db.getAllByClient('stock', id);
 
             const newSnapshot: CampaignSnapshot = {
                 ...existing,

@@ -27,7 +27,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Fetch assigned companies for Contratista
     useEffect(() => {
         if (role === 'CONTRATISTA' && assignedId) {
-            db.getAll('clients').then(all => {
+            db.getAllByClient('clients', assignedId).then(all => {
                 const assigned = all.filter((c: any) =>
                     profile?.assigned_clients?.includes(c.id) && !c.deleted
                 ).map((c: any) => ({ id: c.id, name: c.name }));
@@ -119,9 +119,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 return;
             }
             try {
-                const all = await db.getAll('lots');
-                const pending = all.filter((l: any) => l.clientId === effectiveId && l.status === 'SOWED' && !l.deleted);
-                setPendingHarvests(pending);
+                const pending = await db.getAllByClient('lots', effectiveId);
+                setPendingHarvests(pending.filter((l: any) => l.status === 'SOWED' && !l.deleted));
             } catch (err) {
                 console.error('Error fetching pending harvests:', err);
             }
@@ -160,8 +159,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         const checkAndInitWarehouses = async () => {
             try {
                 // Initial check
-                let allWarehouses = await db.getAll('warehouses');
-                let clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
+                let clientWarehouses = await db.getAllByClient('warehouses', effectiveId);
+                clientWarehouses = clientWarehouses.filter((w: Warehouse) => !w.deleted);
                 
                 // --- Part 1: Safe Deduplication of existing leaks ---
                 const namesToCheck = ['Acopio de Granos', 'Galpón'];
@@ -175,8 +174,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         const toKeep = duplicates.find((w: Warehouse) => w.id === officialId) || duplicates[0];
                         const toDelete = duplicates.filter((w: Warehouse) => w.id !== toKeep.id);
 
-                        const allStock = await db.getAll('stock');
-                        const allMovements = await db.getAll('movements');
+                        const allStock = await db.getAllByClient('stock', effectiveId);
+                        const allMovements = await db.getAllByClient('movements', effectiveId);
 
                         for (const wh of toDelete) {
                             const hasStock = allStock.some((s: any) => s.warehouseId === wh.id);
@@ -192,8 +191,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 }
 
                 if (hasChanged) {
-                    allWarehouses = await db.getAll('warehouses');
-                    clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
+                    clientWarehouses = (await db.getAllByClient('warehouses', effectiveId)).filter((w: Warehouse) => !w.deleted);
                     syncService.pushChanges();
                 }
 
@@ -206,8 +204,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     await new Promise(resolve => setTimeout(resolve, 800));
                     
                     // Final check before creation
-                    allWarehouses = await db.getAll('warehouses');
-                    clientWarehouses = allWarehouses.filter((w: Warehouse) => w.clientId === effectiveId && !w.deleted);
+                    clientWarehouses = (await db.getAllByClient('warehouses', effectiveId)).filter((w: Warehouse) => !w.deleted);
                     
                     const stillMissingHarvest = !clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'acopio de granos');
                     const stillMissingDefault = !clientWarehouses.some((w: Warehouse) => w.name.trim().toLowerCase() === 'galpón');
@@ -271,8 +268,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { name: 'Órdenes', href: role === 'CONTRATISTA' ? '/orders' : `/clients/${effectiveId}/orders`, show: role === 'CONTRATISTA' || showClientMenu },
     ].filter(item => item.show), [isMaster, role, effectiveId, showClientMenu]);
 
-    // Don't show sidebar/header on login page or public KML views
-    if (pathname === '/login' || pathname?.startsWith('/kml') || pathname?.includes('/public/map/')) {
+    // Don't show sidebar/header on login page or public context
+    const isPublic = pathname === '/login' || pathname?.startsWith('/kml') || pathname?.includes('/public/map/');
+    
+    if (isPublic) {
         return <>{children}</>;
     }
 

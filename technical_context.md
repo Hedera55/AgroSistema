@@ -169,8 +169,8 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
 - **Fallback**: If the `investors` array is missing or empty, the system must fallback to the legacy single `investorName` field (Defaulting to 100% share).
 
 ### "Sin Asignar" (Unassigned) Logic
-- **Expenditure Only**: The "Sin Asignar" category is restricted to only bearing direct expenses. 
-- **Profit Exclusion**: It is explicitly forbidden from participating in "Participación saldo de la empresa" (Sale profit distribution). Sales revenue is only distributed among defined partners.
+- **"Sin Asignar" Transparency**: Any investment initially funded by the company ("Sin Asignar") is tracked as its own partner row in the Investors breakdown.
+- **Profit Participation**: It participates proportionally in profit distribution to maintain a 100% accurate picture of the company's financial stake/result.
 - **Normalization**: Partner names must be normalized via helper functions to handle JSON-encoded names and consolidate case-insensitive "Sin Asignar" or "Sin_Asignar" strings.
 
 ### Filtering Consistency

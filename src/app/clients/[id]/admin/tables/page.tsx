@@ -72,11 +72,11 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
 
     async function loadLookups() {
         const [ps, ws, cs, ls, fs] = await Promise.all([
-            db.getAll('products'),
-            db.getAll('warehouses'),
-            db.getAll('campaigns'),
-            db.getAll('lots'),
-            db.getAll('farms')
+            db.getAllByClient('products', id),
+            db.getAllByClient('warehouses', id),
+            db.getAllByClient('campaigns', id),
+            db.getAllByClient('lots', id),
+            db.getAllByClient('farms', id)
         ]);
         setLookups({
             products: ps.filter((p: any) => !p.clientId || p.clientId === id),
@@ -94,8 +94,7 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
         setLoading(true);
         try {
             if (activeStore === 'stock') {
-                const allStock = await db.getAll('stock');
-                const clientStock = allStock.filter((s: ClientStock) => s.clientId === id);
+                const clientStock = await db.getAllByClient('stock', id);
                 
                 // Mirror Galpón enrichment logic
                 const enrichedStock = clientStock.map((item: any) => {
@@ -132,21 +131,16 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
 
                 setData(enrichedStock);
             } else if (activeStore === 'movements') {
-                const all = await db.getAll('movements');
-                const filtered = all.filter((m: any) => m.clientId === id && !m.deleted);
-                setData(filtered.sort((a: any, b: any) => b.date.localeCompare(a.date)));
+                const filtered = await db.getAllByClient('movements', id);
+                setData(filtered.filter((m: any) => !m.deleted).sort((a: any, b: any) => b.date.localeCompare(a.date)));
             } else if (activeStore === 'lotes') {
                 const [lots, orders, movs] = await Promise.all([
-                    db.getAll('lots'),
-                    db.getAll('orders'),
-                    db.getAll('movements')
+                    db.getAllByClient('lots', id),
+                    db.getAllByClient('orders', id),
+                    db.getAllByClient('movements', id)
                 ]);
 
-                const clientLots = lots.filter((l: any) => {
-                    if (l.deleted) return false;
-                    const farm = lookups.farms.find((f: any) => f.id === l.farmId);
-                    return farm?.clientId === id;
-                });
+                const clientLots = lots.filter((l: any) => !l.deleted);
 
                 // Enriched Lot Lifecycle Data
                 const enrichedLots = clientLots.map((l: any) => {
@@ -168,8 +162,8 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
                 setData(enrichedLots); // We'll group in render
             } else if (activeStore === 'money') {
                 const [movs, orders] = await Promise.all([
-                    db.getAll('movements'),
-                    db.getAll('orders')
+                    db.getAllByClient('movements', id),
+                    db.getAllByClient('orders', id)
                 ]);
 
                 const clientMovs = movs.filter((m: any) => m.clientId === id && !m.deleted);
@@ -346,23 +340,60 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
     };
 
     const adjustStockForMovementEdit = async (oldMov: InventoryMovement, newMov: InventoryMovement) => {
-        if (oldMov.productId !== newMov.productId || oldMov.warehouseId !== newMov.warehouseId) return;
+        // Multi-item movements check
+        const oldItems = oldMov.items && oldMov.items.length > 0
+            ? oldMov.items
+            : [{ productId: oldMov.productId, quantity: oldMov.quantity }];
 
-        const diff = parseFloat(String(newMov.quantity)) - parseFloat(String(oldMov.quantity));
-        if (diff === 0) return;
+        const newItems = newMov.items && newMov.items.length > 0
+            ? newMov.items
+            : [{ productId: newMov.productId, quantity: newMov.quantity }];
 
-        const stocks = await db.getAll('stock');
-        const stockEntry = stocks.find((s: ClientStock) => s.productId === newMov.productId && s.warehouseId === newMov.warehouseId && s.clientId === id);
+        // Revert old items and apply new items if warehouse/metadata matches
+        // Optimization: for Admin Tables common single-product edits
+        if (oldItems.length === 1 && newItems.length === 1 && oldMov.warehouseId === newMov.warehouseId) {
+            const oldIt = oldItems[0];
+            const newIt = newItems[0];
+            
+            if (oldIt.productId === newIt.productId) {
+                const diff = parseFloat(String(newIt.quantity)) - parseFloat(String(oldIt.quantity));
+                if (diff === 0) return;
 
-        if (stockEntry) {
-            const isOut = ['OUT', 'SALE'].includes(newMov.type);
-            const isIn = ['IN', 'HARVEST'].includes(newMov.type);
+                const stocks = await db.getAllByClient('stock', id);
+                const stockEntry = stocks.find((s: ClientStock) => s.productId === newIt.productId && s.warehouseId === newMov.warehouseId);
 
-            let newBalance = stockEntry.quantity;
-            if (isOut) newBalance -= diff;
-            if (isIn) newBalance += diff;
+                if (stockEntry) {
+                    const isOut = ['OUT', 'SALE'].includes(newMov.type);
+                    const isIn = ['IN', 'HARVEST'].includes(newMov.type);
 
-            await db.put('stock', { ...stockEntry, quantity: newBalance, updatedAt: new Date().toISOString(), synced: false });
+                    let newBalance = stockEntry.quantity;
+                    if (isOut) newBalance -= diff;
+                    if (isIn) newBalance += diff;
+
+                    await db.put('stock', { ...stockEntry, quantity: newBalance, updatedAt: new Date().toISOString(), synced: false });
+                }
+                return;
+            }
+        }
+
+        // Complex scenario: multiple items or different warehouses
+        // 1. Revert Old
+        await reverseStockImpact(oldMov);
+        // 2. Apply New (shallowly using the same logic as sync or creation)
+        const isOut = ['OUT', 'SALE'].includes(newMov.type);
+        const multiplier = isOut ? -1 : 1;
+        const stocks = await db.getAllByClient('stock', id);
+
+        for (const it of newItems) {
+            const stockEntry = stocks.find((s: ClientStock) => s.productId === it.productId && s.warehouseId === newMov.warehouseId);
+            if (stockEntry) {
+                await db.put('stock', {
+                    ...stockEntry,
+                    quantity: stockEntry.quantity + (it.quantity * multiplier),
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
+            }
         }
     };
 
@@ -411,18 +442,26 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
     };
 
     const reverseStockImpact = async (mov: InventoryMovement) => {
-        const stocks = await db.getAll('stock');
-        const stockEntry = stocks.find((s: ClientStock) => s.productId === mov.productId && s.warehouseId === mov.warehouseId && s.clientId === id);
+        if (mov.deleted) return;
 
-        if (stockEntry) {
-            const isOut = ['OUT', 'SALE'].includes(mov.type);
-            const isIn = ['IN', 'HARVEST'].includes(mov.type);
+        const items = mov.items && mov.items.length > 0
+            ? mov.items
+            : [{ productId: mov.productId, quantity: mov.quantity }];
 
-            let newBalance = stockEntry.quantity;
-            if (isOut) newBalance += parseFloat(String(mov.quantity));
-            if (isIn) newBalance -= parseFloat(String(mov.quantity));
+        const isPurchaseOrIn = ['PURCHASE', 'IN', 'HARVEST'].includes(mov.type);
+        const multiplier = isPurchaseOrIn ? -1 : 1; // Reversing an IN subtracts, reversing an OUT adds back
 
-            await db.put('stock', { ...stockEntry, quantity: newBalance, updatedAt: new Date().toISOString(), synced: false });
+        const stocks = await db.getAllByClient('stock', id);
+        for (const item of items) {
+            const stockEntry = stocks.find((s: ClientStock) => s.productId === item.productId && s.warehouseId === mov.warehouseId);
+            if (stockEntry) {
+                await db.put('stock', {
+                    ...stockEntry,
+                    quantity: stockEntry.quantity + (item.quantity * multiplier),
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                });
+            }
         }
     };
 

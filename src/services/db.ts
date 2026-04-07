@@ -148,20 +148,59 @@ export const dbPromise = typeof window !== 'undefined'
 const cache = new Map<string, any[]>();
 
 export const db = {
+    // Helper to clear cache entries for a store (handles both global and client-keyed caches)
+    invalidateCache(storeName: string) {
+        const keys = Array.from(cache.keys());
+        keys.forEach(key => {
+            if (key === storeName || key.startsWith(`${storeName}:`)) {
+                cache.delete(key);
+            }
+        });
+    },
+
     async getAll<Name extends StoreNames<AgronomicDB>>(storeName: Name) {
         if (cache.has(storeName)) {
             return cache.get(storeName)!;
         }
-        const db = await dbPromise;
-        if (!db) return [];
-        const result = await db.getAll(storeName);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return [];
+        const result = await dbInstance.getAll(storeName);
         cache.set(storeName, result);
         return result;
     },
+
+    async getAllByClient<Name extends StoreNames<AgronomicDB>>(storeName: Name, clientId: string) {
+        const cacheKey = `${storeName}:${clientId}`;
+        if (cache.has(cacheKey)) {
+            return cache.get(cacheKey)!;
+        }
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return [];
+        
+        let result;
+        try {
+            const tx = dbInstance.transaction(storeName, 'readonly');
+            const store = tx.store;
+            if (store.indexNames.contains('by-client')) {
+                result = await dbInstance.getAllFromIndex(storeName, 'by-client', clientId);
+            } else {
+                // Fallback filtering if index doesn't exist
+                const all = await dbInstance.getAll(storeName);
+                result = all.filter((item: any) => item.clientId === clientId || !item.clientId);
+            }
+        } catch (e) {
+            console.warn(`DB Error in getAllByClient for ${storeName}:`, e);
+            const all = await dbInstance.getAll(storeName);
+            result = all.filter((item: any) => item.clientId === clientId || !item.clientId);
+        }
+        
+        cache.set(cacheKey, result);
+        return result;
+    },
     async get<Name extends StoreNames<AgronomicDB>>(storeName: Name, key: string) {
-        const db = await dbPromise;
-        if (!db) return undefined;
-        return db.get(storeName, key);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return undefined;
+        return dbInstance.get(storeName, key);
     },
     async put<Name extends StoreNames<AgronomicDB>>(storeName: Name, value: AgronomicDB[Name]['value']) {
         // Dev-mode safeguard: ensure clientId is present for mandatory fields
@@ -171,16 +210,16 @@ export const db = {
             // We still allow the put to prevent UI crashes, but the console error will alert developers.
         }
 
-        cache.delete(storeName);
-        const db = await dbPromise;
-        if (!db) return;
-        return db.put(storeName, value);
+        this.invalidateCache(storeName);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return;
+        return dbInstance.put(storeName, value);
     },
     async delete<Name extends StoreNames<AgronomicDB>>(storeName: Name, key: string) {
-        cache.delete(storeName);
-        const db = await dbPromise;
-        if (!db) return;
-        return db.delete(storeName, key);
+        this.invalidateCache(storeName);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return;
+        return dbInstance.delete(storeName, key);
     },
     async logOrderActivity(activity: Omit<import('@/types').OrderActivity, 'id' | 'timestamp'>) {
         return this.put('order_activities', {
@@ -192,20 +231,20 @@ export const db = {
     },
     // New Sync Helpers
     async getUnsynced<Name extends StoreNames<AgronomicDB>>(storeName: Name) {
-        const db = await dbPromise;
-        if (!db) return [];
-        const allItems = await db.getAll(storeName);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return [];
+        const allItems = await dbInstance.getAll(storeName);
         // @ts-ignore - 'synced' might not exist on all items yet
         return allItems.filter(item => item.synced !== true);
     },
     async markSynced<Name extends StoreNames<AgronomicDB>>(storeName: Name, key: string) {
-        const db = await dbPromise;
-        if (!db) return;
-        const item = await db.get(storeName, key);
+        const dbInstance = await dbPromise;
+        if (!dbInstance) return;
+        const item = await dbInstance.get(storeName, key);
         if (!item) return;
         // @ts-ignore
         item.synced = true;
         // @ts-ignore
-        await db.put(storeName, item);
+        await dbInstance.put(storeName, item);
     }
 };

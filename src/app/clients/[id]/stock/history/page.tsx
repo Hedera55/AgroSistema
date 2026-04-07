@@ -96,13 +96,13 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
     const [isRecalculating, setIsRecalculating] = useState(false);
 
     const loadData = React.useCallback(async () => {
-        const [allMovements, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
-            db.getAll('movements'),
-            db.getAll('products'),
-            db.getAll('orders'),
-            db.getAll('warehouses'),
-            db.getAll('farms'),
-            db.getAll('lots'),
+        const [clientMovementsRaw, allProducts, allOrders, allWarehouses, allFarms, allLots, allClients] = await Promise.all([
+            db.getAllByClient('movements', clientId),
+            db.getAllByClient('products', clientId),
+            db.getAllByClient('orders', clientId),
+            db.getAllByClient('warehouses', clientId),
+            db.getAllByClient('farms', clientId),
+            db.getAllByClient('lots', clientId),
             db.getAll('clients')
         ]);
 
@@ -123,34 +123,27 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             setContractors(filtered);
         }
 
-        const clientMovements = allMovements
+        const clientMovements = clientMovementsRaw
             .filter((m: InventoryMovement) =>
-                m.clientId === clientId &&
                 !m.deleted &&
                 !m.notes?.toLowerCase().includes('labor de cosecha')
             )
             .sort((a: InventoryMovement, b: InventoryMovement) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-        const clientProducts = allProducts.filter((p: any) => p.clientId === clientId);
-        const clientOrders = allOrders.filter((o: any) => o.clientId === clientId);
-        const clientWarehouses = allWarehouses.filter((w: any) => w.clientId === clientId);
-        const clientFarms = allFarms.filter((f: any) => f.clientId === clientId);
-        const clientLots = allLots.filter((l: any) => l.clientId === clientId);
-
         const priceMap: Record<string, number> = {};
         const pMap: Record<string, Product> = {};
-        clientProducts.forEach((p: any) => {
+        allProducts.forEach((p: any) => {
             if (p.price) priceMap[p.id] = p.price;
             pMap[p.id] = p;
         });
 
         const orderTypeMap: Record<string, string> = {};
-        clientOrders.forEach((o: any) => {
+        allOrders.forEach((o: any) => {
             orderTypeMap[o.id] = o.type;
         });
 
         const wMap: Record<string, string> = {};
-        clientWarehouses.forEach((w: any) => {
+        allWarehouses.forEach((w: any) => {
             wMap[w.id] = w.name;
         });
 
@@ -158,11 +151,11 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
         setProductsKey(priceMap);
         setProductsData(pMap);
         setOrdersKey(orderTypeMap);
-        setOrdersData(clientOrders);
-        setFarms(clientFarms);
-        setLots(clientLots);
+        setOrdersData(allOrders);
+        setFarms(allFarms);
+        setLots(allLots);
         setWarehousesKey(wMap);
-        setWarehousesFull(clientWarehouses);
+        setWarehousesFull(allWarehouses);
         setLoading(false);
     }, [clientId]);
 
@@ -197,16 +190,15 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
 
             // 3. Helper to update stock incrementally
             const revertMovementStock = async (m: InventoryMovement, mItems: any[], mult: number) => {
-                const allStock = await db.getAll('stock') as ClientStock[];
+                const allStock = await db.getAllByClient('stock', clientId) as ClientStock[];
 
                 for (const it of mItems) {
                     const existing = allStock.find(s =>
                         s.productId === it.productId &&
                         s.warehouseId === m.warehouseId &&
-                        s.clientId === clientId &&
-                        (it.productBrand ? (s.productBrand || '').toLowerCase().trim() === it.productBrand.toLowerCase().trim() : true) &&
-                        (it.presentationLabel ? s.presentationLabel === it.presentationLabel : true) &&
-                        (it.presentationContent ? s.presentationContent === it.presentationContent : true)
+                        (it.productBrand ? (s.productBrand || '').toLowerCase().trim() === it.productBrand.toLowerCase().trim() : !(s.productBrand)) &&
+                        (it.presentationLabel ? s.presentationLabel === it.presentationLabel : !s.presentationLabel) &&
+                        (it.presentationContent ? s.presentationContent === it.presentationContent : !s.presentationContent)
                     );
 
                     if (existing) {
@@ -498,9 +490,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                 }
             }
 
-            // 2. Fetch all current stock to wipe/overwrite
-            const allStock = await db.getAll('stock');
-            const clientStock = allStock.filter((s: ClientStock) => s.clientId === clientId);
+            // 2. Fetch all current stock for this client to wipe/overwrite
+            const clientStock = await db.getAllByClient('stock', clientId);
 
             // Delete current stock
             for (const s of clientStock) {
@@ -533,9 +524,8 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
             }
 
             // 3. Fetch all POST-snapshot movements (or all movements if starting from zero) and apply them chronologically
-            const allMovements = await db.getAll('movements');
+            const allMovements = await db.getAllByClient('movements', clientId);
             const postMovements = allMovements.filter((m: InventoryMovement) =>
-                m.clientId === clientId &&
                 !m.deleted &&
                 (targetSnapshot ? new Date(m.createdAt || m.date).getTime() > new Date(targetSnapshot.createdAt).getTime() : true)
             ).sort((a: InventoryMovement, b: InventoryMovement) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
@@ -553,9 +543,9 @@ export default function StockHistoryPage({ params }: { params: Promise<{ id: str
                         s.productId === item.productId &&
                         s.warehouseId === mov.warehouseId &&
                         s.clientId === clientId &&
-                        (item.tempBrand ? (s.productBrand || '').toLowerCase().trim() === item.tempBrand.toLowerCase().trim() : true) &&
-                        (item.presentationLabel ? s.presentationLabel === item.presentationLabel : true) &&
-                        (item.presentationContent ? s.presentationContent === item.presentationContent : true) &&
+                        (item.tempBrand ? (s.productBrand || '').toLowerCase().trim() === item.tempBrand.toLowerCase().trim() : !(s.productBrand)) &&
+                        (item.presentationLabel ? s.presentationLabel === item.presentationLabel : !s.presentationLabel) &&
+                        (item.presentationContent ? s.presentationContent === item.presentationContent : !s.presentationContent) &&
                         (mov.campaignId ? s.campaignId === mov.campaignId : true)
                     );
 
