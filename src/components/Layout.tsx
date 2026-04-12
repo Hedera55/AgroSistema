@@ -119,8 +119,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 return;
             }
             try {
-                const pending = await db.getAllByClient('lots', effectiveId);
-                setPendingHarvests(pending.filter((l: any) => l.status === 'SOWED' && !l.deleted));
+                const farms = await db.getAllByClient('farms', effectiveId);
+                const farmIds = farms.map((f: any) => f.id);
+                
+                const allLots = await db.getAll('lots');
+                const validLots = allLots.filter((lot: any) => farmIds.includes(lot.farmId));
+                
+                setPendingHarvests(validLots.filter((l: any) => l.status === 'SOWED' && !l.deleted));
             } catch (err) {
                 console.error('Error fetching pending harvests:', err);
             }
@@ -349,9 +354,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 >
                                     <div className="w-full flex justify-between items-center">
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-[13px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer">
+                                            <Link 
+                                                href={`/clients/${effectiveId}/analytics?tab=cosechas`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-[13px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer hover:text-blue-400"
+                                            >
                                                 Cosechas
-                                            </span>
+                                            </Link>
                                             {isCosechasOpen && (
                                                 <span className="text-[10px] italic font-medium text-blue-500">
                                                     pendientes
@@ -484,9 +493,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                             >
                                                 <div className="w-full flex justify-between items-center">
                                                     <div className="flex items-baseline gap-2">
-                                                        <span className="text-[12px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer">
+                                                        <Link 
+                                                            href={`/clients/${effectiveId}/analytics?tab=cosechas`}
+                                                            onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); }}
+                                                            className="text-[12px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer hover:text-blue-400"
+                                                        >
                                                             Cosechas
-                                                        </span>
+                                                        </Link>
                                                         {isCosechasOpen && (
                                                             <span className="text-[10px] italic font-medium text-blue-500 animate-fadeIn">
                                                                 pendientes

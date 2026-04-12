@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { Order, Campaign, InventoryMovement, TransportSheet, Client, Lot, Farm } from '@/types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line } from 'recharts';
 
 const CHART_COLORS = ['#10b981', '#fbbf24', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
@@ -18,10 +18,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [farms, setFarms] = useState<Farm[]>([]);
     const [client, setClient] = useState<Client | null>(null);
     const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+    const [selectedPartner, setSelectedPartner] = useState<string>('');
     const searchParams = useSearchParams();
     const tabParam = searchParams.get('tab');
-    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals'>(
-        tabParam === 'withdrawals' ? 'withdrawals' : tabParam === 'surface' ? 'surface' : 'dates'
+    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas'>(
+        tabParam === 'cosechas' ? 'cosechas' : tabParam === 'withdrawals' ? 'withdrawals' : tabParam === 'surface' ? 'surface' : 'dates'
     );
     const [loading, setLoading] = useState(true);
 
@@ -158,6 +159,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             (m.transportSheets || []).forEach((sheet: TransportSheet) => {
                 const mark = sheet.partnermark;
                 if (!mark || mark === 'General') return;
+                
+                if (selectedPartner && mark !== selectedPartner) return;
 
                 const netoCampo = (sheet.grossWeight || 0) - (sheet.tareWeight || 0); // kg
                 const netoPlanta = (sheet.grossWeightPlant || 0) - (sheet.tareWeightPlant || 0); // kg
@@ -191,7 +194,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const partnerNamesInMovements = new Set<string>(partnerMap.keys());
         (client?.partners || []).forEach(p => {
             if (p.name && !partnerNamesInMovements.has(p.name)) {
-                partnerMap.set(p.name, { netoCampo: 0, netoPlanta: 0, viajes: 0 });
+                if (!selectedPartner || p.name === selectedPartner) {
+                    partnerMap.set(p.name, { netoCampo: 0, netoPlanta: 0, viajes: 0 });
+                }
             }
         });
 
@@ -255,10 +260,14 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             };
         });
 
-        // Reverse to newest on top
+        // Reverse to newest on top for the table, but keep chronological for graph
+        const chronologicalRows = [...evolutionRows];
         evolutionRows.reverse();
 
-        const allClientPartners = (client?.partners || []).map(p => p.name).filter(Boolean) as string[];
+        let allClientPartners = (client?.partners || []).map(p => p.name).filter(Boolean) as string[];
+        if (selectedPartner) {
+            allClientPartners = [selectedPartner];
+        }
 
         return { 
             rows, 
@@ -273,10 +282,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             },
             evolution: {
                 rows: evolutionRows,
+                chartData: chronologicalRows,
                 partners: allClientPartners
             }
         };
-    }, [movements, selectedCampaignId, client, lots, farms]);
+    }, [movements, selectedCampaignId, selectedPartner, client, lots, farms]);
 
     if (loading) return <div className="p-8 text-center text-slate-500">Cargando gráficos...</div>;
 
@@ -309,20 +319,42 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     >
                         Retiros por socio
                     </button>
+                    <button
+                        onClick={() => setActiveTab('cosechas')}
+                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'cosechas' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Cosechas
+                    </button>
                 </div>
             </div>
 
             <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden flex flex-col min-h-[500px]">
                 <div className="p-8 pb-4 flex justify-between items-center">
-                    {activeTab !== 'withdrawals' ? (
-                        <h2 className="text-xl font-bold text-slate-900">
-                            {activeTab === 'dates' ? 'Cronología de Siembra' : 'Distribución de Superficie'}
-                        </h2>
+                    {activeTab === 'dates' ? (
+                        <h2 className="text-xl font-bold text-slate-900">Cronología de Siembra</h2>
+                    ) : activeTab === 'surface' ? (
+                        <h2 className="text-xl font-bold text-slate-900">Distribución de Superficie</h2>
                     ) : (
                         <div /> // Spacer to keep Campaña selector on the right
                     )}
 
                     <div className="flex items-center gap-3">
+                        {activeTab === 'withdrawals' && (
+                            <>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Socio</span>
+                                <select
+                                    value={selectedPartner}
+                                    onChange={(e) => setSelectedPartner(e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 rounded-full px-4 py-1.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                                >
+                                    <option value="">Todos los socios</option>
+                                    {(client?.partners || []).map((p: any) => (
+                                        p.name ? <option key={p.name} value={p.name}>{p.name}</option> : null
+                                    ))}
+                                </select>
+                                <div className="border-r border-slate-200 h-6 mx-1" />
+                            </>
+                        )}
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Campaña</span>
                         <select
                             value={selectedCampaignId}
@@ -338,7 +370,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 </div>
 
                 <div className="flex-1 p-8 pt-4">
-                    {activeTab === 'withdrawals' ? (
+                    {activeTab === 'cosechas' ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
+                            <span className="text-5xl mb-4">🌾</span>
+                            <p className="font-medium">No hay datos de cosechas para mostrar</p>
+                        </div>
+                    ) : activeTab === 'withdrawals' ? (
                         withdrawalData.rows.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
                                 <span className="text-5xl mb-4">📊</span>
@@ -464,8 +501,51 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
 
                                 {/* Evolution Table: Evolución Diaria de Kg Acumulados */}
-                                <div className="overflow-x-auto rounded-lg border border-gray-400">
-                                    <table className="min-w-full border-collapse">
+                                <div className="space-y-8">
+                                    <h3 className="text-xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 inline-block">Evolución Diaria</h3>
+                                    
+                                    <div className="bg-white p-6 rounded-xl border border-slate-200">
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <ComposedChart data={withdrawalData.evolution.chartData}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis 
+                                                    dataKey="date" 
+                                                    tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })} 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#64748b', fontSize: 12 }} 
+                                                    dy={10} 
+                                                />
+                                                <YAxis 
+                                                    yAxisId="left" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#64748b', fontSize: 12 }} 
+                                                    tickFormatter={(val) => val.toLocaleString('es-AR')} 
+                                                />
+                                                <YAxis 
+                                                    yAxisId="right" 
+                                                    orientation="right" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }} 
+                                                    tickFormatter={(val) => val.toLocaleString('es-AR')} 
+                                                />
+                                                <Tooltip
+                                                    cursor={{ fill: '#f8fafc' }}
+                                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                    formatter={(value: any, name: any) => [value.toLocaleString('es-AR'), name]}
+                                                    labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
+                                                />
+                                                <Legend verticalAlign="top" align="right" iconType="circle" />
+                                                <Bar yAxisId="left" dataKey="netoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                                <Line yAxisId="right" type="monotone" dataKey="netoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
+                                            </ComposedChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    <div className="overflow-x-auto rounded-lg border border-gray-400 mt-6">
+                                        <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>
                                                 <th 
@@ -519,6 +599,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             ))}
                                         </tbody>
                                     </table>
+                                </div>
                                 </div>
                             </div>
 

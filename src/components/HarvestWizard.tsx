@@ -1020,6 +1020,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                         )}
                         {(step === 2 || step === 3) && (
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 animate-fadeIn">
+                                <span className="text-xs font-black uppercase text-indigo-800 border-r border-indigo-200 pr-3">
+                                    PESO NETO CAMPO: {totalYieldNum.toLocaleString('es-AR')} KG
+                                </span>
                                 {participationLedger.map(p => (
                                     <span key={p.name} className={`text-xs font-bold uppercase transition-all duration-300 ${p.isExceeded ? 'text-red-700 animate-pulse' : 'text-indigo-600'}`}>
                                         {p.name}: {p.realizedPercent.toFixed(1)}% / {p.targetPercent.toFixed(1)}%
