@@ -1,3 +1,4 @@
+
 'use client';
 
 import { use, useEffect, useState, useMemo } from 'react';
@@ -5,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/services/db';
 import { Order, Campaign, InventoryMovement, TransportSheet, Client, Lot, Farm } from '@/types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LineChart } from 'recharts';
 
 const CHART_COLORS = ['#10b981', '#fbbf24', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
@@ -131,6 +132,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             netoCampo: number;
             netoPlanta: number;
             partnerWeights: Record<string, number>;
+            partnerWeightsCampo: Record<string, number>;
         }>();
 
         // Helper to get lot display name
@@ -156,7 +158,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     viajes: 0,
                     netoCampo: 0,
                     netoPlanta: 0,
-                    partnerWeights: {}
+                    partnerWeights: {},
+                    partnerWeightsCampo: {}
                 });
             }
             const evo = evolutionMap.get(eventId)!;
@@ -183,6 +186,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 evo.netoCampo += (netoCampo > 0 ? netoCampo : 0);
                 evo.netoPlanta += (netoPlanta > 0 ? netoPlanta : 0);
                 evo.partnerWeights[mark] = (evo.partnerWeights[mark] || 0) + (netoPlanta > 0 ? netoPlanta : 0);
+                evo.partnerWeightsCampo[mark] = (evo.partnerWeightsCampo[mark] || 0) + (netoCampo > 0 ? netoCampo : 0);
 
                 // Matrix Data (Partner x Lot)
                 if (sheet.lotId) {
@@ -313,6 +317,20 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
         const latestActivity = dailyStats.length > 0 ? dailyStats[dailyStats.length - 1] : { netoCampo: 0, date: '', viajes: 0 };
 
+        // Partner Cumulative Data (Neto Campo)
+        const partnerRunTotals: Record<string, number> = {};
+        allClientPartners.forEach(p => partnerRunTotals[p] = 0);
+
+        const partnerCumulativeChartData = chronologicalRows.map(evo => {
+            const dataPoint: any = { date: fmtDate(evo.date) };
+            allClientPartners.forEach(p => {
+                const dayWeight = evo.partnerWeightsCampo?.[p] || 0;
+                partnerRunTotals[p] += dayWeight;
+                dataPoint[p] = Number((partnerRunTotals[p] / 1000).toFixed(2)); // tn
+            });
+            return dataPoint;
+        });
+
         return {
             rows,
             totalCampo,
@@ -328,6 +346,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 rows: evolutionRows,
                 chartData: chronologicalRows,
                 partners: allClientPartners,
+                partnerCumulativeChartData,
                 kpis: {
                     spanDays,
                     dateRange,
@@ -516,10 +535,155 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
                             </div>
 
-                            {/* Main Content Placeholder */}
-                            <div className="w-full bg-white rounded-[40px] border border-slate-200 border-dashed h-[450px] flex flex-col items-center justify-center gap-4 group hover:border-blue-200 transition-colors">
-                                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">📈</div>
-                                <p className="text-slate-400 font-medium tracking-tight">Gráfico de Evolución & Tabla de Datos</p>
+                            {/* Partner Cumulative Chart */}
+                            <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+                                <h3 className="text-lg font-bold text-slate-800 mb-8">Acumulado por socio diario</h3>
+                                <div className="h-[400px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={withdrawalData.evolution.partnerCumulativeChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <XAxis 
+                                                dataKey="date" 
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fill: '#64748b', fontSize: 12 }} 
+                                                dy={10}
+                                            />
+                                            <YAxis 
+                                                label={{ value: 'acumulado (tn)', angle: -90, position: 'insideLeft', offset: 15, fill: '#64748b', fontSize: 12, fontWeight: 500 }}
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fill: '#64748b', fontSize: 12 }}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                formatter={(value: number) => [`${value.toLocaleString('es-AR')} tn`, '']}
+                                            />
+                                            <Legend 
+                                                verticalAlign="bottom" 
+                                                height={36} 
+                                                iconType="rect" 
+                                                formatter={(value) => <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{value}</span>}
+                                                wrapperStyle={{ paddingTop: '30px' }}
+                                            />
+                                            {(withdrawalData.evolution.partners || []).map((partner, index) => {
+                                                const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#f43f5e', '#06b6d4'];
+                                                return (
+                                                    <Line 
+                                                        key={partner}
+                                                        type="monotone" 
+                                                        dataKey={partner} 
+                                                        stroke={colors[index % colors.length]} 
+                                                        strokeWidth={3}
+                                                        dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                                                        activeDot={{ r: 6, strokeWidth: 0 }}
+                                                        connectNulls
+                                                    />
+                                                );
+                                            })}
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            {/* Evolución Diaria: Daily Bar + Accumulation Line Chart */}
+                            <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+                                <h3 className="text-lg font-bold text-slate-800 mb-8">Evolución diaria de kg acumulados</h3>
+                                <ResponsiveContainer width="100%" height={400}>
+                                    <ComposedChart data={withdrawalData.evolution.chartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#64748b', fontSize: 12 }}
+                                            dy={10}
+                                        />
+                                        <YAxis
+                                            yAxisId="left"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#64748b', fontSize: 12 }}
+                                            tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                        />
+                                        <YAxis
+                                            yAxisId="right"
+                                            orientation="right"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
+                                            tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: '#f8fafc' }}
+                                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            formatter={(value: any, name: any) => [value.toLocaleString('es-AR'), name]}
+                                            labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
+                                        />
+                                        <Legend verticalAlign="top" align="right" iconType="circle" />
+                                        <Bar yAxisId="left" dataKey="netoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                        <Line yAxisId="right" type="monotone" dataKey="netoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+
+                                {/* Evolución Diaria Table */}
+                                <div className="overflow-x-auto rounded-lg border border-gray-400 mt-8">
+                                    <table className="min-w-full border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th
+                                                    colSpan={5 + withdrawalData.evolution.partners.length}
+                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
+                                                    style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
+                                                >
+                                                    Evolución Diaria de Kg Acumulados
+                                                </th>
+                                            </tr>
+                                            <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                {withdrawalData.evolution.partners.map(partner => (
+                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {partner}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {withdrawalData.evolution.rows.map((row, idx) => (
+                                                <tr
+                                                    key={idx}
+                                                    style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
+                                                >
+                                                    <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.viajes}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    {withdrawalData.evolution.partners.map(partner => (
+                                                        <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     ) : activeTab === 'socios' ? (
