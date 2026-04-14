@@ -557,7 +557,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             />
                                             <Tooltip 
                                                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                formatter={(value: number) => [`${value.toLocaleString('es-AR')} tn`, '']}
+                                                formatter={(value: any) => [`${(value ?? 0).toLocaleString('es-AR')} tn`, '']}
                                             />
                                             <Legend 
                                                 verticalAlign="bottom" 
@@ -618,7 +618,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         <Tooltip
                                             cursor={{ fill: '#f8fafc' }}
                                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                            formatter={(value: any, name: any) => [value.toLocaleString('es-AR'), name]}
+                                            formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
                                             labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
                                         />
                                         <Legend verticalAlign="top" align="right" iconType="circle" />
@@ -856,7 +856,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <Tooltip
                                                     cursor={{ fill: '#f8fafc' }}
                                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                    formatter={(value: any, name: any) => [value.toLocaleString('es-AR'), name]}
+                                                    formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
                                                     labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
                                                 />
                                                 <Legend verticalAlign="top" align="right" iconType="circle" />
