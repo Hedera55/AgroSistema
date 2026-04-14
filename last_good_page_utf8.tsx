@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { use, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -21,14 +21,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const searchParams = useSearchParams();
     const tabParam = searchParams.get('tab');
-    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
-        tabParam === 'evolucion' ? 'evolucion' :
-        tabParam === 'socios' ? 'socios' :
-        tabParam === 'cosechas' ? 'cosechas' : 
-        tabParam === 'withdrawals' ? 'withdrawals' : 
-        tabParam === 'surface' ? 'surface' : 'dates'
+    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas'>(
+        tabParam === 'cosechas' ? 'cosechas' : tabParam === 'withdrawals' ? 'withdrawals' : tabParam === 'surface' ? 'surface' : 'dates'
     );
-    const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -122,7 +117,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const partnerMap = new Map<string, { netoCampo: number; netoPlanta: number; viajes: number }>();
         const matrixMap = new Map<string, Map<string, number>>(); // [partnerName][lotId] -> kg
         const activeLotIds = new Set<string>();
-
+        
         const evolutionMap = new Map<string, {
             date: string;
             time: string;
@@ -132,7 +127,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             netoPlanta: number;
             partnerWeights: Record<string, number>;
         }>();
-
+        
         // Helper to get lot display name
         const getLotDisplayName = (lotId: string) => {
             const lot = lots.find(l => l.id === lotId);
@@ -141,13 +136,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             return `${lot.name} - ${lot.farmName || farm?.name || 'S/C'}`;
         };
 
-        const filteredMovements = movements.filter(m =>
+        const filteredMovements = movements.filter(m => 
             selectedCampaignId ? m.campaignId === selectedCampaignId : true
         );
-
+        
         filteredMovements.forEach(m => {
             const eventId = m.harvestBatchId || m.id;
-
+            
             if (!evolutionMap.has(eventId)) {
                 evolutionMap.set(eventId, {
                     date: m.date,
@@ -164,7 +159,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             (m.transportSheets || []).forEach((sheet: TransportSheet) => {
                 const mark = sheet.partnermark;
                 if (!mark || mark === 'General') return;
-
+                
                 if (selectedPartner && mark !== selectedPartner) return;
 
                 const netoCampo = (sheet.grossWeight || 0) - (sheet.tareWeight || 0); // kg
@@ -227,7 +222,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         // Matrix Header & Rows
         const sortedLotIds = Array.from(activeLotIds).sort((a, b) => getLotDisplayName(a).localeCompare(getLotDisplayName(b)));
         const matrixHeaders = sortedLotIds.map(id => ({ id, label: getLotDisplayName(id) }));
-
+        
         const matrixRows = rows.map(row => {
             const partnerLots = matrixMap.get(row.name) || new Map<string, number>();
             const lotValues: Record<string, number> = {};
@@ -274,49 +269,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             allClientPartners = [selectedPartner];
         }
 
-        // KPI Calculations
-        const fmtDate = (dStr: string) => {
-            if (!dStr) return '';
-            const parts = dStr.split('-');
-            if (parts.length < 3) return dStr;
-            return `${parts[2]}/${parts[1]}`;
-        };
-
-        let spanDays = 0;
-        let dateRange = 'Sin actividad';
-        if (chronologicalRows.length > 0) {
-            const first = chronologicalRows[0].date;
-            const last = chronologicalRows[chronologicalRows.length - 1].date;
-            const d1 = new Date(first + 'T12:00:00'); // Use noon to avoid TZ issues
-            const d2 = new Date(last + 'T12:00:00');
-            spanDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            dateRange = `${fmtDate(first)} → ${fmtDate(last)}`;
-        }
-
-        const dailyMap = new Map<string, { netoCampo: number; netoPlanta: number; viajes: number }>();
-        chronologicalRows.forEach(row => {
-            const current = dailyMap.get(row.date) || { netoCampo: 0, netoPlanta: 0, viajes: 0 };
-            dailyMap.set(row.date, {
-                netoCampo: current.netoCampo + row.netoCampo,
-                netoPlanta: current.netoPlanta + row.netoPlanta,
-                viajes: current.viajes + row.viajes
-            });
-        });
-        const dailyStats = Array.from(dailyMap.entries()).map(([date, stats]) => ({ date, ...stats }));
-        
-        let bestDay = { weight: 0, date: '', viajes: 0 };
-        dailyStats.forEach(stat => {
-            if (stat.netoCampo > bestDay.weight) {
-                bestDay = { weight: stat.netoCampo, date: stat.date, viajes: stat.viajes };
-            }
-        });
-
-        const latestActivity = dailyStats.length > 0 ? dailyStats[dailyStats.length - 1] : { netoCampo: 0, date: '', viajes: 0 };
-
-        return {
-            rows,
-            totalCampo,
-            totalPlanta,
+        return { 
+            rows, 
+            totalCampo, 
+            totalPlanta, 
             totalViajes,
             matrix: {
                 headers: matrixHeaders,
@@ -327,35 +283,21 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             evolution: {
                 rows: evolutionRows,
                 chartData: chronologicalRows,
-                partners: allClientPartners,
-                kpis: {
-                    spanDays,
-                    dateRange,
-                    bestDay: {
-                        weight: bestDay.weight / 1000,
-                        date: fmtDate(bestDay.date),
-                        viajes: bestDay.viajes
-                    },
-                    lastDay: {
-                        weight: latestActivity.netoCampo / 1000,
-                        date: fmtDate(latestActivity.date),
-                        viajes: latestActivity.viajes
-                    }
-                }
+                partners: allClientPartners
             }
         };
     }, [movements, selectedCampaignId, selectedPartner, client, lots, farms]);
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Cargando gráficos...</div>;
+    if (loading) return <div className="p-8 text-center text-slate-500">Cargando gr├íficos...</div>;
 
     return (
         <div className="space-y-6 max-w-6xl mx-auto">
             <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-4">
                     <Link href={`/clients/${clientId}`} className="text-slate-400 hover:text-emerald-600 transition-colors">
-                        <span className="text-2xl">←</span>
+                        <span className="text-2xl">ΓåÉ</span>
                     </Link>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Gráficos informativos</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Gr├íficos informativos</h1>
                 </div>
 
                 <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl w-fit">
@@ -369,7 +311,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         onClick={() => setActiveTab('surface')}
                         className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'surface' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        Hectáreas por cultivo
+                        Hect├íreas por cultivo
                     </button>
                     <button
                         onClick={() => setActiveTab('withdrawals')}
@@ -383,29 +325,17 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     >
                         Cosechas
                     </button>
-                    <button
-                        onClick={() => setActiveTab('evolucion')}
-                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'evolucion' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Evolución diaria
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('socios')}
-                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'socios' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Socios
-                    </button>
                 </div>
             </div>
 
             <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden flex flex-col min-h-[500px]">
                 <div className="p-8 pb-4 flex justify-between items-center">
                     {activeTab === 'dates' ? (
-                        <h2 className="text-xl font-bold text-slate-900">Cronología de Siembra</h2>
+                        <h2 className="text-xl font-bold text-slate-900">Cronolog├¡a de Siembra</h2>
                     ) : activeTab === 'surface' ? (
-                        <h2 className="text-xl font-bold text-slate-900">Distribución de Superficie</h2>
+                        <h2 className="text-xl font-bold text-slate-900">Distribuci├│n de Superficie</h2>
                     ) : (
-                        <div /> // Spacer to keep Campaña selector on the right
+                        <div /> // Spacer to keep Campa├▒a selector on the right
                     )}
 
                     <div className="flex items-center gap-3">
@@ -425,13 +355,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 <div className="border-r border-slate-200 h-6 mx-1" />
                             </>
                         )}
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Campaña</span>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Campa├▒a</span>
                         <select
                             value={selectedCampaignId}
                             onChange={(e) => setSelectedCampaignId(e.target.value)}
                             className="bg-slate-50 border border-slate-200 rounded-full px-4 py-1.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
                         >
-                            <option value="">Todas las campañas</option>
+                            <option value="">Todas las campa├▒as</option>
                             {campaigns.map((c: Campaign) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -440,103 +370,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 </div>
 
                 <div className="flex-1 p-8 pt-4">
-                    {activeTab === 'evolucion' ? (
-                        <div className="space-y-8 animate-fadeIn">
-                            {/* 4 Square-ish Boxes */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                {/* Box 1: Días con actividad */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Días con actividad</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-slate-900 leading-none">
-                                            {withdrawalData.evolution.kpis.spanDays || 0}
-                                        </p>
-                                        <p className="text-[11px] font-medium text-slate-400">
-                                            {withdrawalData.evolution.kpis.dateRange}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Box 2: Acumulado (Interactivo) */}
-                                <button 
-                                    onClick={() => setMetric(metric === 'planta' ? 'campo' : 'planta')}
-                                    className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full text-left group hover:bg-blue-50/30 hover:border-blue-200"
-                                >
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
-                                            Acumulado {metric}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-blue-600 leading-none">
-                                            {(metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000 > 0 
-                                                ? ((metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-                                                : '0'} <span className="text-sm font-normal">tn</span>
-                                        </p>
-                                        <p className="text-[11px] font-medium text-slate-400">
-                                            {withdrawalData.totalViajes} viajes
-                                        </p>
-                                    </div>
-                                </button>
-
-                                {/* Box 3: Mejor día */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Mejor día</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-emerald-700 leading-none">
-                                            {withdrawalData.evolution.kpis.bestDay.weight > 0
-                                                ? withdrawalData.evolution.kpis.bestDay.weight.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-                                                : '0'} <span className="text-sm font-normal">tn</span>
-                                        </p>
-                                        <p className="text-[11px] font-medium text-slate-400">
-                                            {withdrawalData.evolution.kpis.bestDay.date || '—'} · {withdrawalData.evolution.kpis.bestDay.viajes} viajes
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Box 4: Última cosecha */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Ritmo último día</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-amber-700 leading-none">
-                                            {withdrawalData.evolution.kpis.lastDay.weight > 0
-                                                ? withdrawalData.evolution.kpis.lastDay.weight.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-                                                : '0'} <span className="text-sm font-normal">tn</span>
-                                        </p>
-                                        <p className="text-[11px] font-medium text-slate-400">
-                                            {withdrawalData.evolution.kpis.lastDay.date || '—'} · {withdrawalData.evolution.kpis.lastDay.viajes} viajes
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Main Content Placeholder */}
-                            <div className="w-full bg-white rounded-[40px] border border-slate-200 border-dashed h-[450px] flex flex-col items-center justify-center gap-4 group hover:border-blue-200 transition-colors">
-                                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">📈</div>
-                                <p className="text-slate-400 font-medium tracking-tight">Gráfico de Evolución & Tabla de Datos</p>
-                            </div>
-                        </div>
-                    ) : activeTab === 'socios' ? (
+                    {activeTab === 'cosechas' ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
-                            <span className="text-5xl mb-4">👥</span>
-                            <p className="font-medium text-lg text-slate-900">Socios</p>
-                            <p className="text-sm">Próximamente: Detalle de participación por integrante.</p>
-                        </div>
-                    ) : activeTab === 'cosechas' ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
-                            <span className="text-5xl mb-4">🌾</span>
+                            <span className="text-5xl mb-4">≡ƒî╛</span>
                             <p className="font-medium">No hay datos de cosechas para mostrar</p>
                         </div>
                     ) : activeTab === 'withdrawals' ? (
                         withdrawalData.rows.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
-                                <span className="text-5xl mb-4">📊</span>
+                                <span className="text-5xl mb-4">≡ƒôè</span>
                                 <p className="font-medium">No hay retiros con marca de socio registrados</p>
                             </div>
                         ) : (
@@ -546,7 +388,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         <thead>
                                             <tr>
                                                 <th colSpan={5} className="px-6 py-2 text-left text-lg font-bold border-2 border-[#0C8A52]" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                    Camiones — Pesaje por Socio
+                                                    Camiones ΓÇö Pesaje por Socio
                                                 </th>
                                             </tr>
                                             <tr style={{ backgroundColor: '#0C8A52' }}>
@@ -559,8 +401,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         </thead>
                                         <tbody>
                                             {withdrawalData.rows.map((row, idx) => (
-                                                <tr
-                                                    key={idx}
+                                                <tr 
+                                                    key={idx} 
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
                                                 >
                                                     <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.name}</td>
@@ -604,9 +446,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>
-                                                <th
-                                                    colSpan={withdrawalData.matrix.headers.length + 2}
-                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
+                                                <th 
+                                                    colSpan={withdrawalData.matrix.headers.length + 2} 
+                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]" 
                                                     style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
                                                 >
                                                     Neto planta acumulado (kg)
@@ -624,8 +466,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         </thead>
                                         <tbody>
                                             {withdrawalData.matrix.rows.map((mRow, idx) => (
-                                                <tr
-                                                    key={idx}
+                                                <tr 
+                                                    key={idx} 
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
                                                 >
                                                     <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
@@ -658,36 +500,36 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     </table>
                                 </div>
 
-                                {/* Evolution Table: Evolución Diaria de Kg Acumulados */}
+                                {/* Evolution Table: Evoluci├│n Diaria de Kg Acumulados */}
                                 <div className="space-y-8">
-                                    <h3 className="text-xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 inline-block">Evolución Diaria</h3>
-
+                                    <h3 className="text-xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 inline-block">Evoluci├│n Diaria</h3>
+                                    
                                     <div className="bg-white p-6 rounded-xl border border-slate-200">
                                         <ResponsiveContainer width="100%" height={400}>
                                             <ComposedChart data={withdrawalData.evolution.chartData}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis
-                                                    dataKey="date"
-                                                    tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#64748b', fontSize: 12 }}
-                                                    dy={10}
+                                                <XAxis 
+                                                    dataKey="date" 
+                                                    tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })} 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#64748b', fontSize: 12 }} 
+                                                    dy={10} 
                                                 />
-                                                <YAxis
-                                                    yAxisId="left"
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#64748b', fontSize: 12 }}
-                                                    tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                                <YAxis 
+                                                    yAxisId="left" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#64748b', fontSize: 12 }} 
+                                                    tickFormatter={(val) => val.toLocaleString('es-AR')} 
                                                 />
-                                                <YAxis
-                                                    yAxisId="right"
-                                                    orientation="right"
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
-                                                    tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                                <YAxis 
+                                                    yAxisId="right" 
+                                                    orientation="right" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }} 
+                                                    tickFormatter={(val) => val.toLocaleString('es-AR')} 
                                                 />
                                                 <Tooltip
                                                     cursor={{ fill: '#f8fafc' }}
@@ -704,68 +546,68 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
                                     <div className="overflow-x-auto rounded-lg border border-gray-400 mt-6">
                                         <table className="min-w-full border-collapse">
-                                            <thead>
-                                                <tr>
-                                                    <th
-                                                        colSpan={5 + withdrawalData.evolution.partners.length}
-                                                        className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
-                                                        style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
-                                                    >
-                                                        Evolución Diaria de Kg Acumulados
+                                        <thead>
+                                            <tr>
+                                                <th 
+                                                    colSpan={5 + withdrawalData.evolution.partners.length} 
+                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]" 
+                                                    style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
+                                                >
+                                                    Evoluci├│n Diaria de Kg Acumulados
+                                                </th>
+                                            </tr>
+                                            <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                {withdrawalData.evolution.partners.map(partner => (
+                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {partner}
                                                     </th>
-                                                </tr>
-                                                <tr style={{ backgroundColor: '#0C8A52' }}>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {withdrawalData.evolution.rows.map((row, idx) => (
+                                                <tr 
+                                                    key={idx} 
+                                                    style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
+                                                >
+                                                    <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.viajes}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
                                                     {withdrawalData.evolution.partners.map(partner => (
-                                                        <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {partner}
-                                                        </th>
+                                                        <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
                                                     ))}
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {withdrawalData.evolution.rows.map((row, idx) => (
-                                                    <tr
-                                                        key={idx}
-                                                        style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
-                                                    >
-                                                        <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.viajes}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        {withdrawalData.evolution.partners.map(partner => (
-                                                            <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                                {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                            </td>
-                                                        ))}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                                 </div>
                             </div>
 
                         )
                     ) : sowingOrders.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                            <span className="text-5xl mb-4">📊</span>
-                            <p className="font-medium">No hay datos de siembra para esta campaña</p>
+                            <span className="text-5xl mb-4">≡ƒôè</span>
+                            <p className="font-medium">No hay datos de siembra para esta campa├▒a</p>
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={400}>
@@ -818,3 +660,4 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         </div>
     );
 }
+

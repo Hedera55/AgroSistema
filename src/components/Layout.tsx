@@ -355,7 +355,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                     <div className="w-full flex justify-between items-center">
                                         <div className="flex items-baseline gap-2">
                                             <Link 
-                                                href={`/clients/${effectiveId}/analytics?tab=cosechas`}
+                                                href={`/clients/${effectiveId}/analytics?tab=evolucion`}
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="text-[13px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer hover:text-blue-400"
                                             >
@@ -494,7 +494,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                                 <div className="w-full flex justify-between items-center">
                                                     <div className="flex items-baseline gap-2">
                                                         <Link 
-                                                            href={`/clients/${effectiveId}/analytics?tab=cosechas`}
+                                                            href={`/clients/${effectiveId}/analytics?tab=evolucion`}
                                                             onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); }}
                                                             className="text-[12px] font-medium text-blue-500 tracking-wide uppercase transition-colors cursor-pointer hover:text-blue-400"
                                                         >

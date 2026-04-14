@@ -1,0 +1,316 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary)}
+.page{background:var(--color-background-tertiary);padding:20px 24px;min-height:700px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.page-title{font-size:15px;font-weight:500}
+.badges{display:flex;gap:8px}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px}
+.bg{background:#EAF3DE;color:#3B6D11}
+.bgray{background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.kpi-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px}
+.kl{font-size:11px;color:var(--color-text-secondary);margin-bottom:4px}
+.kv{font-size:19px;font-weight:500}
+.ks{font-size:11px;color:var(--color-text-tertiary);margin-top:2px}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px 18px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.card-note{font-size:11px;color:var(--color-text-tertiary);font-weight:400}
+.two-col{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+.t th{font-size:11px;color:var(--color-text-secondary);font-weight:500;text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.t th:first-child{text-align:left}
+.t td{padding:8px 8px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:right;font-variant-numeric:tabular-nums}
+.t td:first-child{text-align:left}
+.t tr:last-child td{border-bottom:none}
+.t tr.total-row td{font-weight:500;border-top:0.5px solid var(--color-border-secondary);border-bottom:none;padding-top:10px}
+.t tr:not(.total-row):hover td{background:var(--color-background-secondary)}
+.sdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.ritmo-wrap{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.ritmo-label{font-size:12px;color:var(--color-text-secondary);width:54px;min-width:54px}
+.ritmo-track{flex:1;background:var(--color-background-secondary);border-radius:4px;overflow:hidden;height:22px}
+.ritmo-bar{height:22px;border-radius:4px;background:#B5D4F4;display:flex;align-items:center;padding-left:8px}
+.ritmo-val{font-size:12px;font-weight:500;min-width:52px;text-align:right}
+.ritmo-viajes{font-size:11px;color:var(--color-text-tertiary);min-width:36px;text-align:right}
+.proj-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)}
+.chip{font-size:11px;padding:4px 10px;border-radius:var(--border-radius-md)}
+.chip-blue{background:#E6F1FB;color:#0C447C}
+.chip-green{background:#EAF3DE;color:#3B6D11}
+.chip-amber{background:#FAEEDA;color:#633806}
+</style>
+
+<div class="page">
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="page-title">Evolución diaria</span>
+    <div class="badges">
+      <span class="badge bg">Soja</span>
+      <span class="badge bgray">Campaña 2025/2026</span>
+      <span class="badge bgray">Pool 5</span>
+    </div>
+  </div>
+  <div style="display:flex;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);overflow:hidden">
+    <button id="btn-planta" onclick="setMetric('planta')" style="padding:5px 14px;font-size:12px;background:#185FA5;color:#fff;border:none;cursor:pointer">Neto planta</button>
+    <button id="btn-campo" onclick="setMetric('campo')" style="padding:5px 14px;font-size:12px;background:transparent;color:var(--color-text-secondary);border:none;cursor:pointer">Neto campo</button>
+  </div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="kl">Días con actividad</div><div class="kv">3</div><div class="ks">30/03 → 01/04</div></div>
+  <div class="kpi"><div class="kl">Acumulado planta</div><div class="kv" style="color:#185FA5">181,4 tn</div><div class="ks">7 viajes</div></div>
+  <div class="kpi"><div class="kl">Mejor día</div><div class="kv" style="color:#3B6D11">91,4 tn</div><div class="ks">31/03 · 4 viajes</div></div>
+  <div class="kpi"><div class="kl">Promedio diario</div><div class="kv">60,5 tn</div><div class="ks">2,3 viajes/día</div></div>
+  <div class="kpi"><div class="kl">Ritmo último día</div><div class="kv" style="color:#854F0B">29,4 tn</div><div class="ks">01/04 · 2 viajes</div></div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-title">
+      Toneladas por día y acumulado
+      <span class="card-note" id="chart-note">neto planta</span>
+    </div>
+    <canvas id="chart-main" height="190"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Ritmo diario</div>
+    <div id="ritmo-container"></div>
+    <div class="proj-row">
+      <span class="chip chip-blue">Prom. diario: 60,5 tn/día</span>
+      <span class="chip chip-green">Prom. por viaje: 25,9 tn/viaje</span>
+      <span class="chip chip-amber">Días activos: 3</span>
+    </div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-title">
+      Acumulado por socio día a día
+      <span class="card-note">neto planta (tn)</span>
+    </div>
+    <canvas id="chart-socios" height="180"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Tabla diaria</div>
+    <table class="t">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Viajes</th><th>Kg campo</th><th>Kg planta</th><th>Acum. tn</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-diaria"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Aporte diario por socio (tn planta)</div>
+  <table class="t" id="tabla-sociosdia"></table>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+var COLORS_S = ['#639922','#378ADD','#EF9F27','#D4537E','#7F77DD'];
+var SOCIOS   = ['Laucarseed S.A.','Sistemia S.A.S.','Pablo Auliso','Don Juan S.A.','T. de Campo S.A.'];
+
+var dias = [
+  {fecha:'30/03', viajes:2, kgCampo:59760, kgPlanta:60600,
+   socios:{'Laucarseed S.A.':0,'Sistemia S.A.S.':30140,'Pablo Auliso':30460,'Don Juan S.A.':0,'T. de Campo S.A.':0}},
+  {fecha:'31/03', viajes:4, kgCampo:111750, kgPlanta:91440,
+   socios:{'Laucarseed S.A.':31100,'Sistemia S.A.S.':0,'Pablo Auliso':0,'Don Juan S.A.':30600,'T. de Campo S.A.':29740}},
+  {fecha:'01/04', viajes:2, kgCampo:29110, kgPlanta:29380,
+   socios:{'Laucarseed S.A.':29380,'Sistemia S.A.S.':0,'Pablo Auliso':0,'Don Juan S.A.':0,'T. de Campo S.A.':0}},
+];
+
+var acumPlanta = [], acumCampo = [];
+var rP = 0, rC = 0;
+for (var i = 0; i < dias.length; i++) {
+  rP += dias[i].kgPlanta; acumPlanta.push(parseFloat((rP/1000).toFixed(3)));
+  rC += dias[i].kgCampo;  acumCampo.push(parseFloat((rC/1000).toFixed(3)));
+}
+
+var acumSocios = {};
+for (var si = 0; si < SOCIOS.length; si++) {
+  var s = SOCIOS[si];
+  acumSocios[s] = [];
+  var run = 0;
+  for (var di = 0; di < dias.length; di++) {
+    run += (dias[di].socios[s] || 0);
+    acumSocios[s].push(parseFloat((run/1000).toFixed(3)));
+  }
+}
+
+var chartMain = null, chartSocios = null;
+var currentMetric = 'planta';
+
+function textColor() {
+  return getComputedStyle(document.body).getPropertyValue('--color-text-secondary') || 'rgba(0,0,0,0.45)';
+}
+function gridColor() {
+  return getComputedStyle(document.body).getPropertyValue('--color-border-tertiary') || 'rgba(0,0,0,0.07)';
+}
+
+function buildMain() {
+  var ctx = document.getElementById('chart-main').getContext('2d');
+  var isPlanta = currentMetric === 'planta';
+  var barVals  = dias.map(function(d){ return parseFloat(((isPlanta ? d.kgPlanta : d.kgCampo)/1000).toFixed(3)); });
+  var lineVals = isPlanta ? acumPlanta : acumCampo;
+  var barCol   = isPlanta ? '#B5D4F4' : '#C0DD97';
+  var lineCol  = isPlanta ? '#185FA5' : '#3B6D11';
+  if (chartMain) chartMain.destroy();
+  chartMain = new Chart(ctx, {
+    data: {
+      labels: dias.map(function(d){ return d.fecha; }),
+      datasets: [
+        {type:'bar',   label:'Diario (tn)',    data:barVals,  backgroundColor:barCol, borderRadius:4, yAxisID:'y',  order:2},
+        {type:'line',  label:'Acumulado (tn)', data:lineVals, borderColor:lineCol, backgroundColor:'transparent',
+         borderWidth:2, pointBackgroundColor:lineCol, pointRadius:5, tension:0.3, yAxisID:'y2', order:1}
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:true,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:11}}},
+        tooltip:{callbacks:{label:function(c){ return ' '+c.dataset.label+': '+c.parsed.y.toFixed(2)+' tn'; }}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()}, ticks:{font:{size:11}}},
+        y:{position:'left', grid:{color:gridColor()}, ticks:{font:{size:11}, callback:function(v){return v+' tn';}},
+           title:{display:true, text:'diario', font:{size:10}}},
+        y2:{position:'right', grid:{display:false}, ticks:{color:lineCol, font:{size:11}, callback:function(v){return v+' tn';}},
+            title:{display:true, text:'acumulado', color:lineCol, font:{size:10}}}
+      }
+    }
+  });
+}
+
+function buildSocios() {
+  var ctx = document.getElementById('chart-socios').getContext('2d');
+  if (chartSocios) chartSocios.destroy();
+  var datasets = SOCIOS.map(function(s, i) {
+    return {
+      label: s.split(' ')[0],
+      data: acumSocios[s],
+      borderColor: COLORS_S[i],
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointBackgroundColor: COLORS_S[i],
+      pointRadius: 4,
+      tension: 0.3
+    };
+  });
+  chartSocios = new Chart(ctx, {
+    type: 'line',
+    data: { labels: dias.map(function(d){ return d.fecha; }), datasets: datasets },
+    options: {
+      responsive:true, maintainAspectRatio:true,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:11}}},
+        tooltip:{callbacks:{label:function(c){ return ' '+c.dataset.label+': '+c.parsed.y.toFixed(3)+' tn'; }}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()}, ticks:{font:{size:11}}},
+        y:{grid:{color:gridColor()}, ticks:{font:{size:11}, callback:function(v){return v+' tn';}}}
+      }
+    }
+  });
+}
+
+function buildRitmo() {
+  var maxKg = Math.max.apply(null, dias.map(function(d){ return d.kgPlanta; }));
+  var html = '';
+  for (var i = 0; i < dias.length; i++) {
+    var d = dias[i];
+    var w = Math.round((d.kgPlanta / maxKg) * 100);
+    var tn = (d.kgPlanta / 1000).toFixed(1);
+    html += '<div class="ritmo-wrap">'
+      + '<div class="ritmo-label">' + d.fecha + '</div>'
+      + '<div class="ritmo-track"><div class="ritmo-bar" style="width:' + w + '%">'
+      + '<span style="font-size:11px;color:#0C447C;font-weight:500">' + tn + ' tn</span>'
+      + '</div></div>'
+      + '<div class="ritmo-viajes">' + d.viajes + ' v.</div>'
+      + '</div>';
+  }
+  document.getElementById('ritmo-container').innerHTML = html;
+}
+
+function buildTablaDiaria() {
+  var tb = document.getElementById('tbody-diaria');
+  var acum = 0;
+  for (var i = 0; i < dias.length; i++) {
+    var d = dias[i];
+    acum += d.kgPlanta;
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + d.fecha + '</td>'
+      + '<td>' + d.viajes + '</td>'
+      + '<td>' + d.kgCampo.toLocaleString('es-AR') + '</td>'
+      + '<td style="font-weight:500">' + d.kgPlanta.toLocaleString('es-AR') + '</td>'
+      + '<td style="color:#185FA5;font-weight:500">' + (acum/1000).toFixed(2) + '</td>';
+    tb.appendChild(tr);
+  }
+  var totC = dias.reduce(function(a,d){return a+d.kgCampo;},0);
+  var totP = dias.reduce(function(a,d){return a+d.kgPlanta;},0);
+  var totV = dias.reduce(function(a,d){return a+d.viajes;},0);
+  var tr2 = document.createElement('tr');
+  tr2.className = 'total-row';
+  tr2.innerHTML = '<td>Total</td><td>' + totV + '</td>'
+    + '<td>' + totC.toLocaleString('es-AR') + '</td>'
+    + '<td>' + totP.toLocaleString('es-AR') + '</td>'
+    + '<td style="color:#185FA5">' + (totP/1000).toFixed(2) + '</td>';
+  tb.appendChild(tr2);
+}
+
+function buildTablaSociosDia() {
+  var el = document.getElementById('tabla-sociosdia');
+  var head = '<thead><tr><th>Fecha</th><th>Viajes</th>';
+  for (var i = 0; i < SOCIOS.length; i++) {
+    head += '<th><span class="sdot" style="background:' + COLORS_S[i] + '"></span>' + SOCIOS[i].split(' ')[0] + '</th>';
+  }
+  head += '<th>Total día</th></tr></thead>';
+  var body = '<tbody>';
+  for (var di = 0; di < dias.length; di++) {
+    var d = dias[di];
+    var rowTot = 0;
+    for (var si = 0; si < SOCIOS.length; si++) { rowTot += (d.socios[SOCIOS[si]] || 0); }
+    body += '<tr><td>' + d.fecha + '</td><td>' + d.viajes + '</td>';
+    for (var si2 = 0; si2 < SOCIOS.length; si2++) {
+      var v = d.socios[SOCIOS[si2]] || 0;
+      body += '<td>' + (v > 0
+        ? '<span style="color:' + COLORS_S[si2] + ';font-weight:500">' + (v/1000).toFixed(3) + '</span>'
+        : '<span style="color:var(--color-text-tertiary)">—</span>') + '</td>';
+    }
+    body += '<td style="font-weight:500">' + (rowTot/1000).toFixed(3) + '</td></tr>';
+  }
+  var totRow = '<tr class="total-row"><td>Total</td><td>' + dias.reduce(function(a,d){return a+d.viajes;},0) + '</td>';
+  for (var si3 = 0; si3 < SOCIOS.length; si3++) {
+    var tot = dias.reduce(function(a,d){return a+(d.socios[SOCIOS[si3]]||0);},0);
+    totRow += '<td style="color:' + COLORS_S[si3] + ';font-weight:500">' + (tot > 0 ? (tot/1000).toFixed(3) : '—') + '</td>';
+  }
+  var totGen = dias.reduce(function(a,d){return a+SOCIOS.reduce(function(b,s){return b+(d.socios[s]||0);},0);},0);
+  totRow += '<td>' + (totGen/1000).toFixed(3) + '</td></tr>';
+  body += totRow + '</tbody>';
+  el.innerHTML = head + body;
+}
+
+function setMetric(m) {
+  currentMetric = m;
+  document.getElementById('btn-planta').style.background = m==='planta' ? '#185FA5' : 'transparent';
+  document.getElementById('btn-planta').style.color      = m==='planta' ? '#fff' : 'var(--color-text-secondary)';
+  document.getElementById('btn-campo').style.background  = m==='campo'  ? '#185FA5' : 'transparent';
+  document.getElementById('btn-campo').style.color       = m==='campo'  ? '#fff' : 'var(--color-text-secondary)';
+  document.getElementById('chart-note').textContent      = m==='planta' ? 'neto planta' : 'neto campo';
+  buildMain();
+}
+
+buildMain();
+buildSocios();
+buildRitmo();
+buildTablaDiaria();
+buildTablaSociosDia();
+</script>

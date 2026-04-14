@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Farm, Lot } from '@/types';
@@ -54,6 +54,15 @@ export function OrderLocationStep({
 }: OrderLocationStepProps) {
     const [editingHectaresId, setEditingHectaresId] = useState<string | null>(null);
     const [tempHectares, setTempHectares] = useState<string>('');
+    const [showMagnifierId, setShowMagnifierId] = useState<string | null>(null);
+
+    // Global click-to-close for magnifier
+    useEffect(() => {
+        if (!showMagnifierId) return;
+        const handleGlobalClick = () => setShowMagnifierId(null);
+        window.addEventListener('mousedown', handleGlobalClick);
+        return () => window.removeEventListener('mousedown', handleGlobalClick);
+    }, [showMagnifierId]);
 
     const handleLotClick = (lotId: string) => {
         if (selectedLotIds.includes(lotId)) return;
@@ -277,24 +286,74 @@ export function OrderLocationStep({
                                                 </button>
                                             </div>
                                         ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setEditingHectaresId(id);
-                                                    setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : lot.hectares.toString());
-                                                }}
-                                                className="px-2 py-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1"
-                                                title="recortar ha"
-                                            >
-                                                <span className="text-[10px] uppercase font-bold tracking-wider">
-                                                    {lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares
-                                                        ? `${lotHectares[id]}/${lot.hectares} ha`
-                                                        : 'recortar ha'}
-                                                </span>
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                </svg>
-                                            </button>
+                                            <div className="relative">
+                                                <div className="px-2 py-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1 group">
+                                                    <span 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const isChopped = lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares;
+                                                            if (isChopped) {
+                                                                setShowMagnifierId(showMagnifierId === id ? null : id);
+                                                            } else {
+                                                                setEditingHectaresId(id);
+                                                                setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : lot.hectares.toString());
+                                                            }
+                                                        }}
+                                                        className="text-[10px] uppercase font-bold tracking-wider cursor-pointer"
+                                                        title={lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares ? "Ver detalle" : "recortar ha"}
+                                                    >
+                                                        {lotHectares[id] !== undefined && lotHectares[id] !== lot.hectares
+                                                            ? `${lotHectares[id]}/${lot.hectares} ha`
+                                                            : 'recortar ha'}
+                                                    </span>
+                                                    <svg 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingHectaresId(id);
+                                                            setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : lot.hectares.toString());
+                                                        }}
+                                                        xmlns="http://www.w3.org/2000/svg" 
+                                                        className="h-3.5 w-3.5 cursor-pointer text-slate-400 group-hover:text-emerald-500 ml-0.5 opacity-60 hover:opacity-100 transition-opacity" 
+                                                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                                        title="Editar hectáreas"
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </div>
+                                                
+                                                {/* Literal Magnifier (Lupa) Style */}
+                                                {showMagnifierId === id && (
+                                                    <div 
+                                                        className="absolute -left-12 -top-6 z-[101] animate-in fade-in zoom-in duration-100 pointer-events-none"
+                                                        onClick={e => e.stopPropagation()}
+                                                    >
+                                                        <div className="bg-white p-2 rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.25)] border border-slate-200 pointer-events-auto w-max">
+                                                            <div className="px-4 py-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-3 group whitespace-nowrap">
+                                                                <span 
+                                                                    className="text-[28px] uppercase font-bold tracking-wider cursor-pointer whitespace-nowrap"
+                                                                    onClick={() => setShowMagnifierId(null)}
+                                                                >
+                                                                    {lotHectares[id] !== undefined ? lotHectares[id] : lot.hectares}/{lot.hectares} ha
+                                                                </span>
+                                                                <svg 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setEditingHectaresId(id);
+                                                                        setTempHectares(lotHectares[id] !== undefined ? lotHectares[id].toString() : lot.hectares.toString());
+                                                                        setShowMagnifierId(null);
+                                                                    }}
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    className="h-9 w-9 cursor-pointer text-slate-400 group-hover:text-emerald-500 ml-1 opacity-60 hover:opacity-100 transition-opacity" 
+                                                                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                                                    title="Editar hectáreas"
+                                                                >
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                                </svg>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                         <button
                                             type="button"

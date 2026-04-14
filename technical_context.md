@@ -367,3 +367,18 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
 - **Problem**: When reusing the same UI component (forms, data-entry ribbons, arrays) to both CREATE new and EDIT existing entities, secondary commit triggers (like pressing `Enter`) often bypass the `isEditing` checks, falling back to default "create/push" logic and causing silent array duplicates or database clashes.
 - **Universal Save Validation**: ALL commit triggers (Save buttons, `onKeyDown="Enter"` events, auto-saves) MUST converge into a single, central save handler. Never duplicate commit logic across different elements.
 - **Identity & Metadata Preservation**: When saving an edit, you MUST preserve the original entity's structural identity (like `id` or `stockId`), timestamps (`createdAt`), and background metadata. Always spread `...preloadedRecord` before applying changes to prevent the database layer from treating it as a new document and generating duplicates.
+
+## 🔍 Specific UI Component Patterns
+
+### Literal Magnifier (Lupa) Pattern
+- **Problem**: When rendering highly dense rows (like chopped lot areas), critical text and icons become tiny and hard to click or read.
+- **Solution**: The "Literal Magnifier" pattern. Clicking the dense zone opens an exact, massive replica floating above it. Assumes we don't invent new "Tooltip" text, but rather purely magnify the original visual elements.
+- **Why avoid `transform: scale()`?**: While CSS `scale()` escapes the container, it stretches pixels, leading to blurry fonts on some monitors, and offsets the hit-boxes of interactive child elements like SVG icons. Re-writing native sizes (`text-[28px]`, `w-8 h-8`) acts as the "gold standard" for crispness and accuracy.
+- **Implementation**:
+    1. **State**: `const [showMagnifierId, setShowMagnifierId] = useState<string | null>(null)`. Use a global `mousedown` listener (`useEffect`) to close it when clicking away.
+    2. **Trigger Zone**: Convert the tiny container into a `relative` div. Trigger `setShowMagnifierId` on the inline span text using `onClick={(e) => { e.stopPropagation(); setShow... }}`.
+    3. **Popup Container**: Inside the relative parent, absolute-position the magnifier:
+       `className="absolute -left-12 -top-6 z-[101] animate-in fade-in zoom-in duration-100 pointer-events-none"`
+    4. **Content Box**: `className="bg-white p-2 rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.25)] border border-slate-200 pointer-events-auto w-max"`. Ensure `w-max` and `whitespace-nowrap` are applied so the giant UI clone does not line-wrap due to flexbox container constraints.
+    5. **Clone Strategy**: Inside the box, perfectly clone the original's layout (colors, `uppercase`, `tracking-wider`, `opacity`, `hover` states) but manually bump the sizes e.g., `text-[10px]` -> `text-[28px]` and `h-3.5 w-3.5` -> `h-9 w-9`.
+

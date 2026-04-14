@@ -300,7 +300,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 identity: { displayName: displayName || 'Sistema' },
                 updaters: {
                     updateStock,
-                    updateLot: (l) => db.put('lots', l),
+                    updateLot,
                     addProduct
                 },
                 isEditing: isEditingHarvestPanel,

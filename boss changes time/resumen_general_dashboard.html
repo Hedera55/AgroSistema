@@ -1,0 +1,410 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary)}
+.page{background:var(--color-background-tertiary);padding:20px 24px;min-height:900px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.page-title{font-size:15px;font-weight:500}
+.badges{display:flex;gap:8px}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px}
+.bg{background:#EAF3DE;color:#3B6D11}
+.bgray{background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.bblue{background:#E6F1FB;color:#0C447C}
+.section-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;margin-top:22px}
+.section-label:first-child{margin-top:0}
+.kpi-hero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:6px}
+.kpi-hero2{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:13px 15px}
+.kpi.accent{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary)}
+.kl{font-size:11px;color:var(--color-text-secondary);margin-bottom:5px}
+.kv{font-size:22px;font-weight:500}
+.kv2{font-size:18px;font-weight:500}
+.ks{font-size:11px;color:var(--color-text-tertiary);margin-top:3px}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px 18px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.card-note{font-size:11px;color:var(--color-text-tertiary);font-weight:400}
+.two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.three-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.sdot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;flex-shrink:0}
+.pill{font-size:11px;padding:2px 8px;border-radius:20px;display:inline-block}
+.merma-ok{color:#3B6D11} .merma-warn{color:#854F0B} .merma-bad{color:#A32D2D}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+.t th{font-size:11px;color:var(--color-text-secondary);font-weight:500;text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.t th:first-child{text-align:left}
+.t td{padding:8px 8px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:right;font-variant-numeric:tabular-nums}
+.t td:first-child{text-align:left}
+.t tr:last-child td{border-bottom:none}
+.t tr.tot td{font-weight:500;border-top:0.5px solid var(--color-border-secondary);border-bottom:none;padding-top:10px}
+.t tr:not(.tot):hover td{background:var(--color-background-secondary)}
+.stat-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.stat-row:last-child{border-bottom:none}
+.stat-label{font-size:12px;color:var(--color-text-secondary);flex:1}
+.stat-val{font-size:13px;font-weight:500}
+.bar-wrap{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.bar-name{font-size:12px;color:var(--color-text-secondary);width:100px;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:10px;background:var(--color-background-secondary);border-radius:5px;overflow:hidden}
+.bar-fill{height:100%;border-radius:5px}
+.bar-val{font-size:12px;font-weight:500;min-width:52px;text-align:right}
+.bar-pct{font-size:11px;color:var(--color-text-tertiary);min-width:34px;text-align:right}
+.hum-chip{font-size:11px;padding:2px 7px;border-radius:20px}
+.hum-ok{background:#EAF3DE;color:#3B6D11}
+.hum-warn{background:#FAEEDA;color:#854F0B}
+.hum-bad{background:#FCEBEB;color:#A32D2D}
+.dif-pos{color:#3B6D11} .dif-neg{color:#A32D2D}
+.alert-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--border-radius-md);font-size:12px;margin-right:8px;margin-bottom:8px}
+.alert-warn{background:#FAEEDA;color:#633806}
+.alert-ok{background:#EAF3DE;color:#27500A}
+.alert-info{background:#E6F1FB;color:#0C447C}
+.progress-wrap{margin-bottom:12px}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+.progress-track{height:12px;background:var(--color-background-secondary);border-radius:6px;overflow:hidden}
+.progress-fill{height:100%;border-radius:6px}
+</style>
+
+<div class="page">
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="page-title">Resumen general</span>
+    <div class="badges">
+      <span class="badge bg">Soja</span>
+      <span class="badge bgray">Campaña 2025/2026</span>
+      <span class="badge bgray">Pool 5</span>
+      <span class="badge bblue">Al 01/04/2026</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button style="font-size:12px;padding:6px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer">Exportar PDF</button>
+    <button style="font-size:12px;padding:6px 14px;border:none;border-radius:var(--border-radius-md);background:#185FA5;color:#fff;cursor:pointer">Compartir con socios</button>
+  </div>
+</div>
+
+<div class="section-label">Totales de campaña</div>
+<div class="kpi-hero">
+  <div class="kpi accent">
+    <div class="kl">Neto planta total</div>
+    <div class="kv" style="color:#185FA5">181,42 tn</div>
+    <div class="ks">7 viajes camión registrados</div>
+  </div>
+  <div class="kpi accent">
+    <div class="kl">Neto campo total</div>
+    <div class="kv">200,62 tn</div>
+    <div class="ks">peso salida de campo</div>
+  </div>
+  <div class="kpi accent">
+    <div class="kl">Total bolsas</div>
+    <div class="kv" style="color:var(--color-text-tertiary)">0,00 tn</div>
+    <div class="ks">sin registros aún</div>
+  </div>
+  <div class="kpi accent" style="border:1.5px solid #185FA5">
+    <div class="kl">Total general</div>
+    <div class="kv" style="color:#185FA5">181,42 tn</div>
+    <div class="ks">planta + bolsas combinado</div>
+  </div>
+</div>
+
+<div class="kpi-hero2">
+  <div class="kpi">
+    <div class="kl">Merma total campo→planta</div>
+    <div class="kv2 merma-warn">−19,20 tn</div>
+    <div class="ks">−9,57% sobre neto campo</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">Humedad promedio</div>
+    <div class="kv2" style="color:#854F0B">14,1%</div>
+    <div class="ks">rango 12,7% – 16,1%</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">Días de cosecha</div>
+    <div class="kv2">3</div>
+    <div class="ks">30/03 → 01/04/2026</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">Promedio diario</div>
+    <div class="kv2">60,5 tn/día</div>
+    <div class="ks">2,3 viajes por día</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">Destino principal</div>
+    <div class="kv2" style="font-size:14px">Cargill</div>
+    <div class="ks">5 de 7 viajes</div>
+  </div>
+</div>
+
+<div class="section-label">Progreso de entrega por socio</div>
+<div class="card">
+  <div class="card-title">
+    Participación acumulada — neto planta
+    <span class="card-note">total combinado planta + bolsas</span>
+  </div>
+  <div id="progreso-socios"></div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-title">
+      Distribución por socio
+      <span class="card-note">neto planta (tn)</span>
+    </div>
+    <canvas id="chart-dona" height="220"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      Tabla resumen por socio
+    </div>
+    <table class="t" id="tabla-resumen"></table>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-title">
+      Acumulado diario
+      <span class="card-note">neto planta (tn)</span>
+    </div>
+    <canvas id="chart-acum" height="180"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      Merma por socio (campo → planta)
+      <span class="card-note">diferencia en toneladas</span>
+    </div>
+    <canvas id="chart-merma" height="180"></canvas>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-title">
+      Calidad — humedad por viaje
+      <span class="card-note">referencia: ≤14% óptimo</span>
+    </div>
+    <canvas id="chart-hum" height="180"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Estadísticas de calidad</div>
+    <div class="stat-row"><span class="stat-label">Humedad mínima registrada</span><span class="stat-val">12,7%</span></div>
+    <div class="stat-row"><span class="stat-label">Humedad máxima registrada</span><span class="stat-val" style="color:#A32D2D">16,1%</span></div>
+    <div class="stat-row"><span class="stat-label">Humedad promedio</span><span class="stat-val">14,1%</span></div>
+    <div class="stat-row"><span class="stat-label">Viajes dentro de rango (≤14%)</span><span class="stat-val" style="color:#3B6D11">3 de 5</span></div>
+    <div class="stat-row"><span class="stat-label">Viajes con humedad alta (&gt;15%)</span><span class="stat-val" style="color:#A32D2D">1 de 5</span></div>
+    <div class="stat-row"><span class="stat-label">Viajes sin dato de calidad</span><span class="stat-val" style="color:var(--color-text-tertiary)">2</span></div>
+    <div class="stat-row"><span class="stat-label">Destinos alcanzados</span><span class="stat-val">Cargill · Santa Rosa</span></div>
+    <div class="stat-row"><span class="stat-label">Transportistas distintos</span><span class="stat-val">6</span></div>
+  </div>
+</div>
+
+<div class="section-label">Alertas y observaciones</div>
+<div class="card">
+  <div class="card-title">Estado del cierre de campaña</div>
+  <div style="margin-bottom:12px">
+    <span class="alert-warn">Viaje N°6 sin pesaje planta — merma de T. de Campo S.A. afectada</span>
+    <span class="alert-warn">Humedad de Sistemia S.A.S. sobre 16% — verificar bonificación</span>
+    <span class="alert-ok">Todos los socios con al menos 1 viaje registrado</span>
+    <span class="alert-info">Bolsas sin registros — ¿quedan bolsas pendientes de descarga?</span>
+    <span class="alert-ok">Laucarseed S.A. con mayor volumen: 60,48 tn (33,3%)</span>
+  </div>
+  <div style="border-top:0.5px solid var(--color-border-tertiary);padding-top:12px;font-size:12px;color:var(--color-text-secondary)">
+    Responsable: <strong style="color:var(--color-text-primary)">Facundo Martini</strong>
+    &nbsp;·&nbsp; Última actualización: <strong style="color:var(--color-text-primary)">01/04/2026</strong>
+    &nbsp;·&nbsp; Estado: <span style="color:#3B6D11;font-weight:500">Cosecha en curso</span>
+  </div>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+var COLORS  = ['#639922','#378ADD','#EF9F27','#D4537E','#7F77DD'];
+var BG      = ['#EAF3DE','#E6F1FB','#FAEEDA','#FBEAF0','#EEEDFE'];
+var TC      = ['#27500A','#0C447C','#633806','#72243E','#3C3489'];
+var SOCIOS  = ['Laucarseed S.A.','Sistemia S.A.S.','Pablo Auliso','Don Juan S.A.','T. de Campo S.A.'];
+var NP      = [60480, 30140, 30460, 30600, 29740];
+var NC      = [60070, 29620, 30140, 30800, 49990];
+var HUMEDADES = [14.3, 14.3, 16.1, 12.7, 13.3];
+var VIAJES  = [2, 1, 1, 1, 2];
+var FECHAS  = ['30/03','31/03','01/04'];
+var ACUM    = [60.60, 152.04, 181.42];
+
+var totalPlanta = NP.reduce(function(a,b){return a+b;},0);
+
+function gridColor(){return 'rgba(0,0,0,0.06)'}
+
+function buildProgreso() {
+  var html = '';
+  for (var i = 0; i < SOCIOS.length; i++) {
+    var pct = ((NP[i]/totalPlanta)*100);
+    html += '<div class="progress-wrap">'
+      + '<div class="progress-label">'
+      + '<span><span class="sdot" style="background:'+COLORS[i]+'"></span>'+SOCIOS[i]+'</span>'
+      + '<span style="font-weight:500">'+( NP[i]/1000).toFixed(3)+' tn &nbsp;<span style="color:var(--color-text-tertiary);font-weight:400">'+pct.toFixed(1)+'%</span></span>'
+      + '</div>'
+      + '<div class="progress-track"><div class="progress-fill" style="width:'+pct.toFixed(1)+'%;background:'+COLORS[i]+'"></div></div>'
+      + '</div>';
+  }
+  document.getElementById('progreso-socios').innerHTML = html;
+}
+
+function buildDona() {
+  var ctx = document.getElementById('chart-dona').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: SOCIOS,
+      datasets:[{
+        data: NP.map(function(v){return (v/1000).toFixed(3);}),
+        backgroundColor: COLORS,
+        borderWidth: 2,
+        borderColor: 'var(--color-background-primary)',
+        hoverOffset: 6
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      cutout:'62%',
+      plugins:{
+        legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:11}, padding:12}},
+        tooltip:{callbacks:{label:function(c){return ' '+c.label+': '+(+c.raw).toFixed(3)+' tn ('+(+c.raw/181.42*100).toFixed(1)+'%)'}}}
+      }
+    }
+  });
+}
+
+function buildTabla() {
+  var el = document.getElementById('tabla-resumen');
+  var head = '<thead><tr><th>Socio</th><th>Viajes</th><th>Neto campo</th><th>Neto planta</th><th>Merma</th><th>%</th></tr></thead>';
+  var body = '<tbody>';
+  for (var i = 0; i < SOCIOS.length; i++) {
+    var merma = NP[i]-NC[i];
+    var mermaP = NC[i]>0?((merma/NC[i])*100):0;
+    var pct = ((NP[i]/totalPlanta)*100).toFixed(1);
+    var mclass = mermaP >= -5 ? 'merma-ok' : (mermaP >= -12 ? 'merma-warn' : 'merma-bad');
+    body += '<tr>'
+      +'<td><span class="sdot" style="background:'+COLORS[i]+'"></span>'+SOCIOS[i]+'</td>'
+      +'<td>'+VIAJES[i]+'</td>'
+      +'<td>'+(NC[i]/1000).toFixed(3)+'</td>'
+      +'<td style="font-weight:500">'+(NP[i]/1000).toFixed(3)+'</td>'
+      +'<td class="'+mclass+'">'+(mermaP>=0?'+':'')+mermaP.toFixed(1)+'%</td>'
+      +'<td><span class="pill" style="background:'+BG[i]+';color:'+TC[i]+'">'+pct+'%</span></td>'
+      +'</tr>';
+  }
+  var totMerma = totalPlanta - NC.reduce(function(a,b){return a+b;},0);
+  var totNC    = NC.reduce(function(a,b){return a+b;},0);
+  var totMermaP= totNC>0?((totMerma/totNC)*100):0;
+  body += '<tr class="tot">'
+    +'<td>Total</td>'
+    +'<td>'+VIAJES.reduce(function(a,b){return a+b;},0)+'</td>'
+    +'<td>'+(totNC/1000).toFixed(3)+'</td>'
+    +'<td>'+(totalPlanta/1000).toFixed(3)+'</td>'
+    +'<td class="merma-warn">'+(totMermaP>=0?'+':'')+totMermaP.toFixed(1)+'%</td>'
+    +'<td>100%</td>'
+    +'</tr></tbody>';
+  el.innerHTML = head + body;
+}
+
+function buildAcum() {
+  var ctx = document.getElementById('chart-acum').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: FECHAS,
+      datasets:[{
+        label:'Acumulado planta (tn)',
+        data: ACUM,
+        borderColor:'#185FA5',
+        backgroundColor:'#E6F1FB',
+        fill:true,
+        borderWidth:2,
+        pointBackgroundColor:'#185FA5',
+        pointRadius:5,
+        tension:0.3
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:function(c){return ' '+c.parsed.y.toFixed(2)+' tn acumuladas'}}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()}, ticks:{font:{size:11}}},
+        y:{grid:{color:gridColor()}, ticks:{font:{size:11}, callback:function(v){return v+' tn'}},
+           min:0, suggestedMax:220}
+      }
+    }
+  });
+}
+
+function buildMerma() {
+  var ctx = document.getElementById('chart-merma').getContext('2d');
+  var mermas = [];
+  for (var i=0;i<SOCIOS.length;i++) { mermas.push(parseFloat(((NP[i]-NC[i])/1000).toFixed(3))); }
+  var bgColors = mermas.map(function(v){ return v>=0?'#C0DD97':'#F09595'; });
+  new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: SOCIOS.map(function(s){return s.split(' ')[0];}),
+      datasets:[{
+        label:'Diferencia planta−campo (tn)',
+        data: mermas,
+        backgroundColor: bgColors,
+        borderRadius: 4
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:function(c){
+          var v=c.parsed.y;
+          return ' '+(v>=0?'+':'')+v.toFixed(3)+' tn (planta−campo)';
+        }}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()}, ticks:{font:{size:11}}},
+        y:{grid:{color:gridColor()}, ticks:{font:{size:11}, callback:function(v){return (v>=0?'+':'')+v+' tn'}}}
+      }
+    }
+  });
+}
+
+function buildHum() {
+  var ctx = document.getElementById('chart-hum').getContext('2d');
+  var labels = ['V1\nSistemia','V2\nT.Campo','V3\nDon Juan','V4\nLaucar.','V5\nPablo A.'];
+  var humData = [16.1, 13.3, 12.7, 14.3, 14.3];
+  var bgHum = humData.map(function(h){return h<=14?'#C0DD97':h<=15?'#FAC775':'#F09595';});
+  new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: labels,
+      datasets:[
+        {label:'Humedad (%)', data:humData, backgroundColor:bgHum, borderRadius:4},
+        {type:'line', label:'Límite óptimo (14%)', data:[14,14,14,14,14],
+         borderColor:'#185FA5', borderWidth:1.5, borderDash:[4,4],
+         pointRadius:0, backgroundColor:'transparent'}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{
+        legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:11}}},
+        tooltip:{callbacks:{label:function(c){return ' '+c.dataset.label+': '+c.parsed.y+'%'}}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()}, ticks:{font:{size:10}}},
+        y:{grid:{color:gridColor()}, ticks:{font:{size:11}, callback:function(v){return v+'%'}}, min:10, max:18}
+      }
+    }
+  });
+}
+
+buildProgreso();
+buildDona();
+buildTabla();
+buildAcum();
+buildMerma();
+buildHum();
+</script>

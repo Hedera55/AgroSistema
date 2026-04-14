@@ -1,0 +1,322 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary)}
+.page{background:var(--color-background-tertiary);padding:20px 24px;min-height:700px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.page-title{font-size:15px;font-weight:500}
+.badges{display:flex;gap:8px;align-items:center}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px}
+.badge-green{background:#EAF3DE;color:#3B6D11}
+.badge-gray{background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.kpi-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.kpi{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px}
+.kpi-label{font-size:11px;color:var(--color-text-secondary);margin-bottom:4px}
+.kpi-val{font-size:19px;font-weight:500}
+.kpi-sub{font-size:11px;color:var(--color-text-tertiary);margin-top:2px}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px 18px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.card-note{font-size:11px;color:var(--color-text-tertiary);font-weight:400}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+.t th{font-size:11px;color:var(--color-text-secondary);font-weight:500;text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.t th.r{text-align:right}
+.t td{padding:9px 8px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle}
+.t td.r{text-align:right;font-variant-numeric:tabular-nums}
+.t tr:last-child td{border-bottom:none}
+.t tr.total-row td{font-weight:500;border-top:0.5px solid var(--color-border-secondary);border-bottom:none;padding-top:10px}
+.t tr.data-row{cursor:pointer}
+.t tr.data-row:hover td{background:var(--color-background-secondary)}
+.t tr.data-row.selected td{background:#E6F1FB}
+.socio-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px;flex-shrink:0}
+.pill{font-size:11px;padding:2px 8px;border-radius:20px;display:inline-block}
+.merma-ok{color:#3B6D11}
+.merma-warn{color:#854F0B}
+.merma-bad{color:#A32D2D}
+.bar-mini{display:inline-block;height:6px;border-radius:3px;vertical-align:middle;margin-right:4px}
+.tn-link{color:#185FA5;cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-weight:500}
+.tn-link:hover{color:#0C447C}
+
+.drawer{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:0;margin-bottom:14px;overflow:hidden;display:none}
+.drawer.open{display:block}
+.drawer-header{padding:13px 18px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between;background:var(--color-background-secondary)}
+.drawer-title{font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+.drawer-kpis{display:flex;gap:20px;align-items:center}
+.drawer-kpi{font-size:12px;color:var(--color-text-secondary)}
+.drawer-kpi strong{color:var(--color-text-primary);font-weight:500}
+.drawer-close{width:24px;height:24px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);background:var(--color-background-primary);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text-secondary);font-size:14px}
+.drawer-body{padding:14px 18px}
+.mov-table{width:100%;border-collapse:collapse;font-size:12px}
+.mov-table th{font-size:11px;color:var(--color-text-secondary);font-weight:500;text-align:left;padding:4px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.mov-table th.r{text-align:right}
+.mov-table td{padding:8px 8px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle}
+.mov-table td.r{text-align:right;font-variant-numeric:tabular-nums}
+.mov-table tr:last-child td{border-bottom:none}
+.tag-dest{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.dif-pos{color:#3B6D11}
+.dif-neg{color:#A32D2D}
+.hum-chip{font-size:11px;padding:2px 7px;border-radius:20px}
+.hum-ok{background:#EAF3DE;color:#3B6D11}
+.hum-warn{background:#FAEEDA;color:#854F0B}
+.hum-bad{background:#FCEBEB;color:#A32D2D}
+.drawer-summary{display:flex;gap:10px;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)}
+.dsumcard{flex:1;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px}
+.dsumcard-label{font-size:11px;color:var(--color-text-secondary);margin-bottom:3px}
+.dsumcard-val{font-size:15px;font-weight:500}
+</style>
+
+<div class="page">
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="page-title">Resumen socios</span>
+    <div class="badges">
+      <span class="badge badge-green">Soja</span>
+      <span class="badge badge-gray">Campaña 2025/2026</span>
+      <span class="badge badge-gray">Pool 5</span>
+    </div>
+  </div>
+  <button style="font-size:12px;padding:6px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer">Exportar</button>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Total socios</div>
+    <div class="kpi-val">5</div>
+    <div class="kpi-sub">activos en cosecha</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Neto planta total</div>
+    <div class="kpi-val" style="color:#185FA5">181,4 tn</div>
+    <div class="kpi-sub">7 viajes camión</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Merma promedio</div>
+    <div class="kpi-val" style="color:#854F0B">−9,5%</div>
+    <div class="kpi-sub">campo vs planta</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Humedad promedio</div>
+    <div class="kpi-val" style="color:#3B6D11">14,1%</div>
+    <div class="kpi-sub">rango 12,7 – 16,1</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Último movimiento</div>
+    <div class="kpi-val" style="font-size:15px">01/04/26</div>
+    <div class="kpi-sub">Laucarseed S.A.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    Detalle por socio
+    <span class="card-note">hacé click en las toneladas para ver los movimientos</span>
+  </div>
+  <table class="t">
+    <thead>
+      <tr>
+        <th>Socio</th>
+        <th class="r">Neto planta</th>
+        <th class="r">Neto campo</th>
+        <th class="r">Merma</th>
+        <th class="r">Merma %</th>
+        <th class="r">Viajes</th>
+        <th class="r">% del total</th>
+        <th class="r">Hum. prom.</th>
+        <th class="r">Último viaje</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-main"></tbody>
+  </table>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">
+      <span class="socio-dot" id="drawer-dot"></span>
+      <span id="drawer-nombre"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="drawer-kpis" id="drawer-kpis"></div>
+      <div class="drawer-close" onclick="closeDrawer()">×</div>
+    </div>
+  </div>
+  <div class="drawer-body">
+    <table class="mov-table">
+      <thead>
+        <tr>
+          <th>N°</th>
+          <th>Fecha</th>
+          <th>Campo</th>
+          <th>Destino</th>
+          <th>Chofer</th>
+          <th>Pat. chasis</th>
+          <th class="r">Neto campo (kg)</th>
+          <th class="r">Neto planta (kg)</th>
+          <th class="r">Dif.</th>
+          <th class="r">Humedad</th>
+        </tr>
+      </thead>
+      <tbody id="drawer-tbody"></tbody>
+    </table>
+    <div class="drawer-summary" id="drawer-summary"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+var COLORS=['#378ADD','#7F77DD','#639922','#EF9F27','#D4537E'];
+var BG=['#E6F1FB','#EEEDFE','#EAF3DE','#FAEEDA','#FBEAF0'];
+var TC=['#0C447C','#3C3489','#27500A','#633806','#72243E'];
+
+var movimientos=[
+  {n:1,fecha:'30/03',campo:'San José',destino:'Cargill',chofer:'Ruartes C.',pat:'VPW285',nCampo:30140,nPlanta:30460,hum:14.3,socio:'Pablo Auliso'},
+  {n:2,fecha:'30/03',campo:'San José',destino:'Cargill',chofer:'Castaño J.',pat:'TBU939',nCampo:29620,nPlanta:30140,hum:16.1,socio:'Sistemia S.A.S.'},
+  {n:3,fecha:'31/03',campo:'San José',destino:'Cargill',chofer:'Pinsuti N.',pat:'TQL553',nCampo:30330,nPlanta:29740,hum:13.3,socio:'T. de Campo S.A.'},
+  {n:4,fecha:'31/03',campo:'San José',destino:'Cargill',chofer:'Cavalleris S.',pat:'TIR768',nCampo:30800,nPlanta:30600,hum:12.7,socio:'Don Juan S.A.'},
+  {n:5,fecha:'31/03',campo:'San José',destino:'Santa Rosa',chofer:'Smith L.',pat:'MJS696',nCampo:30960,nPlanta:31100,hum:14.3,socio:'Laucarseed S.A.'},
+  {n:6,fecha:'31/03',campo:'San José',destino:'Cargill',chofer:'Canales B.',pat:'WZJ766',nCampo:19660,nPlanta:null,hum:null,socio:'T. de Campo S.A.'},
+  {n:7,fecha:'01/04',campo:'San José',destino:'Santa Rosa',chofer:'Hippimayer C.',pat:'AF0930L',nCampo:29110,nPlanta:29380,hum:null,socio:'Laucarseed S.A.'},
+];
+
+var socios=[
+  {nombre:'Laucarseed S.A.',  color:COLORS[2],bg:BG[2],tc:TC[2]},
+  {nombre:'T. de Campo S.A.', color:COLORS[1],bg:BG[1],tc:TC[1]},
+  {nombre:'Pablo Auliso',     color:COLORS[3],bg:BG[3],tc:TC[3]},
+  {nombre:'Don Juan S.A.',    color:COLORS[4],bg:BG[4],tc:TC[4]},
+  {nombre:'Sistemia S.A.S.',  color:COLORS[0],bg:BG[0],tc:TC[0]},
+];
+
+function fmt2(n){return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtKg(n){return n!=null?n.toLocaleString('es-AR'):'—'}
+
+var totalPlanta=movimientos.reduce(function(s,m){return s+(m.nPlanta||0)},0);
+
+var selectedIdx=null;
+
+socios.forEach(function(s,i){
+  var movs=movimientos.filter(function(m){return m.socio===s.nombre});
+  var sumCampo=movs.reduce(function(a,m){return a+m.nCampo},0);
+  var sumPlanta=movs.reduce(function(a,m){return a+(m.nPlanta||0)},0);
+  var viajes=movs.length;
+  var mermaKg=sumPlanta-sumCampo;
+  var mermaP=sumCampo>0?((mermaKg/sumCampo)*100):0;
+  var pctTotal=totalPlanta>0?((sumPlanta/totalPlanta)*100):0;
+  var humsValidas=movs.filter(function(m){return m.hum!=null}).map(function(m){return m.hum});
+  var humProm=humsValidas.length>0?(humsValidas.reduce(function(a,b){return a+b},0)/humsValidas.length):null;
+  var ultFecha=movs.length>0?movs[movs.length-1].fecha:'—';
+
+  var mermaClass=mermaP>=-5?'merma-ok':mermaP>=-12?'merma-warn':'merma-bad';
+  var mermaStr=(mermaP>=0?'+':'')+mermaP.toFixed(1)+'%';
+
+  var barW=Math.round((pctTotal/40)*100);
+
+  s._sumCampo=sumCampo; s._sumPlanta=sumPlanta; s._viajes=viajes;
+  s._mermaKg=mermaKg; s._mermaP=mermaP; s._humProm=humProm;
+
+  var tr=document.createElement('tr');
+  tr.className='data-row';
+  tr.id='row-'+i;
+  tr.innerHTML=
+    '<td><span class="socio-dot" style="background:'+s.color+'"></span>'+s.nombre+'</td>'
+    +'<td class="r"><span class="tn-link" onclick="toggleDrawer('+i+',event)">'+fmt2(sumPlanta/1000)+' tn</span></td>'
+    +'<td class="r" style="color:var(--color-text-secondary)">'+fmt2(sumCampo/1000)+'</td>'
+    +'<td class="r '+mermaClass+'">'+fmtKg(mermaKg)+' kg</td>'
+    +'<td class="r '+mermaClass+'">'+mermaStr+'</td>'
+    +'<td class="r">'+viajes+'</td>'
+    +'<td class="r">'
+      +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px">'
+      +'<div style="width:50px;height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden"><div style="width:'+Math.round(pctTotal)+'%;height:100%;background:'+s.color+';border-radius:3px"></div></div>'
+      +'<span class="pill" style="background:'+s.bg+';color:'+s.tc+'">'+pctTotal.toFixed(1)+'%</span>'
+      +'</div></td>'
+    +'<td class="r">'+(humProm!=null?('<span class="hum-chip '+(humProm<=14?'hum-ok':humProm<=15?'hum-warn':'hum-bad')+'">'+humProm.toFixed(1)+'%</span>'):'—')+'</td>'
+    +'<td class="r" style="color:var(--color-text-secondary)">'+ultFecha+'</td>';
+
+  document.getElementById('tbody-main').appendChild(tr);
+
+  var totRow=document.createElement('tr');
+  totRow.className='total-row';
+  var totMermaKg=movimientos.reduce(function(a,m){return a+(m.nPlanta||0)-m.nCampo},0);
+  var totCampo=movimientos.reduce(function(a,m){return a+m.nCampo},0);
+  var totMermaP=totCampo>0?((totMermaKg/totCampo)*100):0;
+  var allHums=movimientos.filter(function(m){return m.hum!=null}).map(function(m){return m.hum});
+  var avgHum=allHums.length>0?(allHums.reduce(function(a,b){return a+b},0)/allHums.length):null;
+  if(i===socios.length-1){
+    totRow.innerHTML='<td>Total</td>'
+      +'<td class="r">'+fmt2(totalPlanta/1000)+' tn</td>'
+      +'<td class="r" style="color:var(--color-text-secondary)">'+fmt2(totCampo/1000)+'</td>'
+      +'<td class="r '+(totMermaKg>=0?'merma-ok':'merma-warn')+'">'+fmtKg(totMermaKg)+' kg</td>'
+      +'<td class="r '+(totMermaKg>=0?'merma-ok':'merma-warn')+'">'+(totMermaP>=0?'+':'')+totMermaP.toFixed(1)+'%</td>'
+      +'<td class="r">'+movimientos.length+'</td>'
+      +'<td class="r">100%</td>'
+      +'<td class="r">'+(avgHum!=null?avgHum.toFixed(1)+'%':'—')+'</td>'
+      +'<td class="r"></td>';
+    document.getElementById('tbody-main').appendChild(totRow);
+  }
+});
+
+function toggleDrawer(idx,e){
+  e.stopPropagation();
+  if(selectedIdx===idx){closeDrawer();return;}
+  selectedIdx=idx;
+  document.querySelectorAll('.data-row').forEach(function(r){r.classList.remove('selected')});
+  document.getElementById('row-'+idx).classList.add('selected');
+  openDrawer(idx);
+}
+
+function openDrawer(idx){
+  var s=socios[idx];
+  var movs=movimientos.filter(function(m){return m.socio===s.nombre});
+  document.getElementById('drawer-dot').style.background=s.color;
+  document.getElementById('drawer-nombre').textContent=s.nombre;
+  document.getElementById('drawer').classList.add('open');
+
+  var sumP=s._sumPlanta, sumC=s._sumCampo;
+  var mermaStr=(s._mermaP>=0?'+':'')+s._mermaP.toFixed(1)+'%';
+  document.getElementById('drawer-kpis').innerHTML=
+    '<div class="drawer-kpi"><strong>'+fmt2(sumP/1000)+' tn</strong> planta</div>'
+    +'<div class="drawer-kpi"><strong>'+s._viajes+'</strong> viajes</div>'
+    +'<div class="drawer-kpi" style="color:'+(s._mermaP>=-5?'#3B6D11':s._mermaP>=-12?'#854F0B':'#A32D2D')+'"><strong>'+mermaStr+'</strong> merma</div>'
+    +(s._humProm!=null?'<div class="drawer-kpi"><strong>'+s._humProm.toFixed(1)+'%</strong> hum. prom.</div>':'');
+
+  var tb=document.getElementById('drawer-tbody');
+  tb.innerHTML='';
+  movs.forEach(function(m){
+    var dif=m.nPlanta!=null?m.nPlanta-m.nCampo:null;
+    var difStr=dif!=null?((dif>=0?'+':'')+fmtKg(dif)+' kg'):'—';
+    var difClass=dif==null?'':(dif>=0?'dif-pos':'dif-neg');
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td style="color:var(--color-text-tertiary)">'+m.n+'</td>'
+      +'<td>'+m.fecha+'</td>'
+      +'<td>'+m.campo+'</td>'
+      +'<td><span class="tag-dest">'+m.destino+'</span></td>'
+      +'<td>'+m.chofer+'</td>'
+      +'<td style="color:var(--color-text-secondary);font-size:11px">'+m.pat+'</td>'
+      +'<td class="r">'+fmtKg(m.nCampo)+'</td>'
+      +'<td class="r" style="font-weight:500">'+fmtKg(m.nPlanta)+'</td>'
+      +'<td class="r '+difClass+'">'+difStr+'</td>'
+      +'<td class="r">'+(m.hum!=null?('<span class="hum-chip '+(m.hum<=14?'hum-ok':m.hum<=15?'hum-warn':'hum-bad')+'">'+m.hum.toFixed(1)+'%</span>'):'—')+'</td>';
+    tb.appendChild(tr);
+  });
+
+  var sumMovsP=movs.reduce(function(a,m){return a+(m.nPlanta||0)},0);
+  var sumMovsC=movs.reduce(function(a,m){return a+m.nCampo},0);
+  var mermaTotal=sumMovsP-sumMovsC;
+  var mermaPct=sumMovsC>0?((mermaTotal/sumMovsC)*100):0;
+  var mClass=mermaPct>=-5?'dif-pos':'dif-neg';
+  document.getElementById('drawer-summary').innerHTML=
+    '<div class="dsumcard"><div class="dsumcard-label">Neto campo total</div><div class="dsumcard-val">'+fmt2(sumMovsC/1000)+' tn</div></div>'
+    +'<div class="dsumcard"><div class="dsumcard-label">Neto planta total</div><div class="dsumcard-val" style="color:#185FA5">'+fmt2(sumMovsP/1000)+' tn</div></div>'
+    +'<div class="dsumcard"><div class="dsumcard-label">Diferencia total</div><div class="dsumcard-val '+mClass+'">'+(mermaTotal>=0?'+':'')+fmt2(mermaTotal/1000)+' tn ('+mermaPct.toFixed(1)+'%)</div></div>'
+    +(s._humProm!=null?'<div class="dsumcard"><div class="dsumcard-label">Humedad promedio</div><div class="dsumcard-val">'+s._humProm.toFixed(1)+'%</div></div>':'');
+
+  document.getElementById('drawer').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function closeDrawer(){
+  selectedIdx=null;
+  document.querySelectorAll('.data-row').forEach(function(r){r.classList.remove('selected')});
+  document.getElementById('drawer').classList.remove('open');
+}
+</script>

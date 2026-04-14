@@ -111,6 +111,13 @@ export function useLots(farmId: string) {
         refresh();
     }, [refresh]);
 
+    // Global refresh listener
+    useEffect(() => {
+        const handleUpdate = () => refresh();
+        window.addEventListener('lotsUpdated', handleUpdate);
+        return () => window.removeEventListener('lotsUpdated', handleUpdate);
+    }, [refresh]);
+
     const addLot = async (lot: Lot) => {
         const finalLot = { ...lot, synced: false, updatedAt: new Date().toISOString() };
         await db.put('lots', finalLot);
@@ -176,6 +183,13 @@ export function useAllLots(clientId: string) {
 
     useEffect(() => {
         refresh();
+    }, [refresh]);
+
+    // Global refresh listener
+    useEffect(() => {
+        const handleUpdate = () => refresh();
+        window.addEventListener('lotsUpdated', handleUpdate);
+        return () => window.removeEventListener('lotsUpdated', handleUpdate);
     }, [refresh]);
 
     return { lots, loading, refresh };

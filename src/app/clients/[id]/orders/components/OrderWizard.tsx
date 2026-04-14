@@ -169,7 +169,7 @@ export function OrderWizard({ clientId, editId, onClose, onOrderCreated }: Order
     }, [selectedLots, lotHectares]);
 
     const availableProducts = useMemo(() => {
-        return products.filter(p => p.clientId === clientId);
+        return products.filter(p => p.clientId === clientId && p.type !== 'GRAIN');
     }, [products, clientId]);
 
     const containsSeeds = useMemo(() => {
