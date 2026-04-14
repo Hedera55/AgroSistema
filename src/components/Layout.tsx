@@ -541,7 +541,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     )
                 }
 
-                <main className={`p-6 md:p-8 w-full ${pathname?.includes('/stock/history') || pathname?.includes('/admin/tables') ? '' : 'max-w-7xl mx-auto'}`}>
+                <main className={`p-6 md:p-8 w-full ${pathname?.includes('/stock/history') || pathname?.includes('/admin/tables') || pathname?.includes('/analytics') ? '' : 'max-w-7xl mx-auto'}`}>
                     {children}
                 </main>
             </div >

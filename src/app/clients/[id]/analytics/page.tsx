@@ -4,6 +4,7 @@
 import { use, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { db } from '@/services/db';
 import { Order, Campaign, InventoryMovement, TransportSheet, Client, Lot, Farm } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LineChart } from 'recharts';
@@ -31,6 +32,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     );
     const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
+    
+    // Horizontal scroll refs for tables
+    const evolutionScrollRef = useHorizontalScroll();
+    const dailyTableScrollRef = useHorizontalScroll();
+    const summaryScrollRef = useHorizontalScroll();
+    const matrixScrollRef = useHorizontalScroll();
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -159,21 +166,31 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     netoCampo: 0,
                     netoPlanta: 0,
                     partnerWeights: {},
-                    partnerWeightsCampo: {}
+                    partnerWeightsCampo: {},
+                    contributionWeightsCampo: {}
                 });
             }
             const evo = evolutionMap.get(eventId)!;
 
             (m.transportSheets || []).forEach((sheet: TransportSheet) => {
                 const mark = sheet.partnermark;
+                const netoCampo = (sheet.grossWeight || 0) - (sheet.tareWeight || 0); // kg
+                const netoPlanta = (sheet.grossWeightPlant || 0) - (sheet.tareWeightPlant || 0); // kg
+
+                // Batch Totals (Global) - Now outside the mark check to include unassigned
+                evo.viajes += 1;
+                evo.netoCampo += (netoCampo > 0 ? netoCampo : 0);
+                evo.netoPlanta += (netoPlanta > 0 ? netoPlanta : 0);
+
+                // Identify Contribution Key (Socio or GALPONES)
+                const contribKey = mark && mark !== 'General' ? mark : 'GALPONES';
+                evo.contributionWeightsCampo[contribKey] = (evo.contributionWeightsCampo[contribKey] || 0) + (netoCampo > 0 ? netoCampo : 0);
+
                 if (!mark || mark === 'General') return;
 
                 if (selectedPartner && mark !== selectedPartner) return;
 
-                const netoCampo = (sheet.grossWeight || 0) - (sheet.tareWeight || 0); // kg
-                const netoPlanta = (sheet.grossWeightPlant || 0) - (sheet.tareWeightPlant || 0); // kg
-
-                // Summary Data (Partner Totals)
+                // Summary Data (Partner Totals for existing summaries)
                 const existing = partnerMap.get(mark) || { netoCampo: 0, netoPlanta: 0, viajes: 0 };
                 partnerMap.set(mark, {
                     netoCampo: existing.netoCampo + (netoCampo > 0 ? netoCampo : 0),
@@ -181,10 +198,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     viajes: existing.viajes + 1
                 });
 
-                // Evolution Data
-                evo.viajes += 1;
-                evo.netoCampo += (netoCampo > 0 ? netoCampo : 0);
-                evo.netoPlanta += (netoPlanta > 0 ? netoPlanta : 0);
+                // Original Evolution Data (for the older table)
                 evo.partnerWeights[mark] = (evo.partnerWeights[mark] || 0) + (netoPlanta > 0 ? netoPlanta : 0);
                 evo.partnerWeightsCampo[mark] = (evo.partnerWeightsCampo[mark] || 0) + (netoCampo > 0 ? netoCampo : 0);
 
@@ -273,6 +287,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const chronologicalRows = [...evolutionRows];
         evolutionRows.reverse();
 
+        // Unique Contribution Names (Socios + GALPONES)
+        const allContribNamesSet = new Set<string>();
+        chronologicalRows.forEach(row => {
+            Object.keys(row.contributionWeightsCampo || {}).forEach(name => {
+                if (name !== 'GALPONES') allContribNamesSet.add(name);
+            });
+        });
+        // Sort partners alphabetically, then always put GALPONES last
+        const contributionNames = [...Array.from(allContribNamesSet).sort(), 'GALPONES'];
+
         let allClientPartners = (client?.partners || []).map(p => p.name).filter(Boolean) as string[];
         if (selectedPartner) {
             allClientPartners = [selectedPartner];
@@ -343,9 +367,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 grandTotal: totalPlanta
             },
             evolution: {
-                rows: evolutionRows,
+                rows: evolutionRows.map(r => ({
+                    ...r,
+                    totalDia: Object.values(r.contributionWeightsCampo || {}).reduce((s: number, v: any) => s + (v || 0), 0)
+                })),
                 chartData: chronologicalRows,
                 partners: allClientPartners,
+                contributionNames,
                 partnerCumulativeChartData,
                 kpis: {
                     spanDays,
@@ -368,7 +396,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     if (loading) return <div className="p-8 text-center text-slate-500">Cargando gráficos...</div>;
 
     return (
-        <div className="space-y-6 max-w-6xl mx-auto">
+        <div className="space-y-6 w-full">
             <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-4">
                     <Link href={`/clients/${clientId}`} className="text-slate-400 hover:text-emerald-600 transition-colors">
@@ -628,7 +656,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </ResponsiveContainer>
 
                                 {/* Evolución Diaria Table */}
-                                <div className="overflow-x-auto rounded-lg border border-gray-400 mt-8">
+                                <div ref={evolutionScrollRef} className="overflow-x-auto rounded-lg border border-gray-400 mt-8">
                                     <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>
@@ -641,13 +669,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 </th>
                                             </tr>
                                             <tr style={{ backgroundColor: '#0C8A52' }}>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10 whitespace-nowrap" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
                                                 {withdrawalData.evolution.partners.map(partner => (
-                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {partner}
                                                     </th>
                                                 ))}
@@ -684,6 +712,60 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <div ref={dailyTableScrollRef} className="overflow-x-auto rounded-lg border border-gray-400 mt-12 bg-white">
+                                    <table className="min-w-full border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th
+                                                    colSpan={6 + (withdrawalData.evolution.contributionNames?.length || 0)}
+                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
+                                                    style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
+                                                >
+                                                    Tabla diaria
+                                                </th>
+                                            </tr>
+                                            <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10 whitespace-nowrap" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                {(withdrawalData.evolution.contributionNames || []).map(name => (
+                                                    <th key={name} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {name}
+                                                    </th>
+                                                ))}
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 bg-[#0A7445] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Total Día</th>
+                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 bg-[#0A7445] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acum.</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {withdrawalData.evolution.rows.map((row, idx) => (
+                                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}>
+                                                    <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.viajes}</td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                                                    {(withdrawalData.evolution.contributionNames || []).map(name => (
+                                                        <td key={name} className="px-6 py-3 text-sm font-mono text-gray-700 text-right border border-gray-300 font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {(row.contributionWeightsCampo?.[name] || 0) > 0 
+                                                                ? (row.contributionWeightsCampo[name] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                                                : '—'}
+                                                        </td>
+                                                    ))}
+                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-emerald-900 text-right border border-gray-300 bg-[#C8E1D4]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {(row.totalDia || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-[#0C8A52] text-right border border-gray-300 bg-[#B8D7C6]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     ) : activeTab === 'socios' ? (
@@ -705,7 +787,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             </div>
                         ) : (
                             <div className="space-y-12">
-                                <div className="overflow-x-auto rounded-lg border border-gray-400">
+                                <div ref={summaryScrollRef} className="overflow-x-auto rounded-lg border border-gray-400">
                                     <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>
@@ -764,7 +846,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
 
                                 {/* Matrix Table: Neto planta by Partner and Lot */}
-                                <div className="overflow-x-auto rounded-lg border border-gray-400">
+                                <div ref={matrixScrollRef} className="overflow-x-auto rounded-lg border border-gray-400">
                                     <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>

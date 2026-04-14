@@ -78,9 +78,20 @@ When an automated audit detects an integrity issue (e.g., negative grain balance
 
 ### Layout & Width Standards
 - **Standard Width**: Most pages MUST follow a `max-w-7xl mx-auto` constraint to maintain a clean, centered reading column and consistent alignment.
-- **Extended Width (Data-Heavy Tables)**: For pages with high horizontal data density (e.g., Stock History), the preferred pattern is to bypass the `7xl` constraint to prevent row overcrowding.
+- **Global Widening Policy (Data-Heavy Pages)**: For pages with high horizontal data density (e.g., Stock History, Analytics), the preferred pattern is to bypass the `7xl` constraint to allow the UI to "open up" and breathe when zooming out.
     - **Implementation**: In `Layout.tsx`, use a conditional check on `pathname` to apply `w-full` instead of the standard `max-w-7xl mx-auto`.
+    - **The "Local Constraint" Snag**: 
+        > [!WARNING]
+        > Global layout widening will fail if the individual page component has its own local `max-w-` constraint (e.g., `max-w-6xl mx-auto`). When enabling widening for a route in `Layout.tsx`, always ensure the page component's root element uses `w-full`.
     - **Rule**: This "surgical expansion" should only be applied to routes that explicitly require it, ensuring that the general navigation experience remains stable and predictable.
+
+### Horizontal Scrolling Standard
+- **Capture Logic**: All large tables MUST use the `useHorizontalScroll` custom hook to provide a premium desktop experience.
+- **Implementation**:
+    1. **Import**: `import { useHorizontalScroll } from '@/hooks/useHorizontalScroll'`.
+    2. **Refs**: Initialize a unique ref for each table container: `const tableRef = useHorizontalScroll()`.
+    3. **Container**: Attach the ref to the div wrapping the table: `<div ref={tableRef} className="overflow-x-auto ...">`.
+- **Reasoning**: This pattern captures mouse wheel events to scroll the container horizontally, preventing vertical scroll leakage and making wide data sets easily navigable without searching for the scrollbar.
 
 - **Numerical Notation (Spanish/Argentine)**:
     - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator and dot (`.`) as thousands separator.
