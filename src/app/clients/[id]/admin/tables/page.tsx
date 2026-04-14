@@ -538,18 +538,16 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
                         <Button
                             size="sm"
                             onClick={handleAddNew}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-3 text-xs font-semibold whitespace-nowrap gap-1.5"
                         >
-                            <div className="flex flex-col items-center leading-[0.85] text-[10px] font-bold py-0.5">
-                                <span>+Nuevo</span>
-                                <span>registro</span>
-                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Nuevo registro
                         </Button>
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => { loadData(); loadLookups(); }}
-                            className="text-slate-600 border-slate-200 h-9 px-3 text-xs"
+                            className="text-slate-600 border-slate-200 h-9 px-3 text-xs font-semibold"
                         >
                             Refrescar
                         </Button>
