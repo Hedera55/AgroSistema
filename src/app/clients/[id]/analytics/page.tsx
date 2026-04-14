@@ -23,16 +23,18 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const searchParams = useSearchParams();
     const tabParam = searchParams.get('tab');
-    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
-        tabParam === 'evolucion' ? 'evolucion' :
-            tabParam === 'socios' ? 'socios' :
-                tabParam === 'cosechas' ? 'cosechas' :
-                    tabParam === 'withdrawals' ? 'withdrawals' :
-                        tabParam === 'surface' ? 'surface' : 'dates'
+    const [activeTab, setActiveTab] = useState<'summary' | 'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
+        tabParam === 'summary' ? 'summary' :
+            tabParam === 'evolucion' ? 'evolucion' :
+                tabParam === 'socios' ? 'socios' :
+                    tabParam === 'cosechas' ? 'cosechas' :
+                        tabParam === 'withdrawals' ? 'withdrawals' :
+                            tabParam === 'surface' ? 'surface' : 
+                                tabParam === 'dates' ? 'dates' : 'summary'
     );
     const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
-    const [isPinned, setIsPinned] = useState(false);
+    const [isPinned, setIsPinned] = useState(true);
 
     // Horizontal scroll refs for tables
     const dailyTableScrollRef = useHorizontalScroll();
@@ -449,12 +451,20 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     >
                         Socios
                     </button>
+                    <button
+                        onClick={() => setActiveTab('summary')}
+                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'summary' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Resumen general
+                    </button>
                 </div>
             </div>
 
             <div className="relative bg-white rounded-[32px] shadow-xl border border-slate-200 flex flex-col min-h-[500px]">
                 <div className="p-8 pb-4 flex justify-between items-center">
-                    {activeTab === 'dates' ? (
+                    {activeTab === 'summary' ? (
+                        <h2 className="text-xl font-bold text-slate-900">Resumen General de Campaña</h2>
+                    ) : activeTab === 'dates' ? (
                         <h2 className="text-xl font-bold text-slate-900">Cronología de Siembra</h2>
                     ) : activeTab === 'surface' ? (
                         <h2 className="text-xl font-bold text-slate-900">Distribución de Superficie</h2>
@@ -494,7 +504,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 </div>
 
                 <div className="flex-1 p-8 pt-4">
-                    {activeTab === 'evolucion' ? (
+                    {activeTab === 'summary' ? (
+                        <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 animate-fadeIn">
+                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-3xl opacity-50">📊</div>
+                            <div className="text-center">
+                                <p className="font-bold text-slate-600">Resumen General de Campaña</p>
+                                <p className="text-sm">Panel informativo en construcción. Aquí se consolidarán los indicadores clave.</p>
+                            </div>
+                        </div>
+                    ) : activeTab === 'evolucion' ? (
                         <div className="space-y-8 animate-fadeIn">
                             {/* 5 Square-ish Boxes */}
                             <div className="flex flex-wrap items-center justify-center gap-6">
@@ -722,10 +740,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                 : '—'}
                                                         </td>
                                                     ))}
-                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-emerald-900 text-right border border-gray-300 bg-[#C8E1D4]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-emerald-900 text-right border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#C8E1D4' : '#A9D1BD', fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {(row.totalDia || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                     </td>
-                                                    <td className="px-6 py-3 text-sm font-mono font-black text-[#0C8A52] text-right border border-gray-300 bg-[#B8D7C6]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-[#0C8A52] text-right border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#B8D7C6' : '#8EBC9F', fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
@@ -889,6 +907,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 />
                                                 <YAxis
                                                     yAxisId="left"
+                                                    width={100}
                                                     axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#64748b', fontSize: 12 }}
@@ -897,6 +916,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <YAxis
                                                     yAxisId="right"
                                                     orientation="right"
+                                                    width={100}
                                                     axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
@@ -921,7 +941,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             <thead>
                                                 <tr>
                                                     <th
-                                                        colSpan={5 + withdrawalData.evolution.partners.length}
+                                                        colSpan={5 + (withdrawalData.evolution.partners?.length || 0)}
                                                         className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
                                                         style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
                                                     >
@@ -933,12 +953,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
                                                     <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
                                                     <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
-                                                    {withdrawalData.evolution.partners.map(partner => (
+                                                    {(withdrawalData.evolution.partners || []).map(partner => (
                                                         <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                             {partner}
                                                         </th>
                                                     ))}
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Total Día</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acum.</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -959,14 +980,17 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                         <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                             {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                         </td>
-                                                        <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        {withdrawalData.evolution.partners.map(partner => (
+                                                        {(withdrawalData.evolution.partners || []).map(partner => (
                                                             <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                                 {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                             </td>
                                                         ))}
+                                                        <td className="px-6 py-3 text-sm font-mono font-bold text-right whitespace-nowrap border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#C8E1D4' : '#A9D1BD', color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#B8D7C6' : '#8EBC9F', color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                            {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -974,7 +998,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     </div>
                                 </div>
                             </div>
-
                         )
                     ) : sowingOrders.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
