@@ -528,24 +528,28 @@ export default function BaseTableEditor({ params }: { params: Promise<{ id: stri
                         </Link>
                         <h1 className="text-2xl font-bold text-slate-800">Tablas Base</h1>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <Input
                             placeholder="Buscar..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-64"
+                            className="w-64 h-9 text-xs"
                         />
                         <Button
+                            size="sm"
                             onClick={handleAddNew}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Nuevo Registro
+                            <div className="flex flex-col items-center leading-[0.85] text-[10px] font-bold py-0.5">
+                                <span>+Nuevo</span>
+                                <span>registro</span>
+                            </div>
                         </Button>
                         <Button
                             variant="outline"
+                            size="sm"
                             onClick={() => { loadData(); loadLookups(); }}
-                            className="text-slate-600 border-slate-200"
+                            className="text-slate-600 border-slate-200 h-9 px-3 text-xs"
                         >
                             Refrescar
                         </Button>

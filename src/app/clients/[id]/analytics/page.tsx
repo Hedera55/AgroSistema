@@ -462,9 +462,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     {activeTab === 'evolucion' ? (
                         <div className="space-y-8 animate-fadeIn">
                             {/* 4 Square-ish Boxes */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                            <div className="flex flex-wrap items-center justify-center gap-16">
                                 {/* Box 1: Días con actividad */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
                                     <div className="space-y-0.5">
                                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Días con actividad</p>
                                     </div>
@@ -481,7 +481,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 {/* Box 2: Acumulado (Interactivo) */}
                                 <button 
                                     onClick={() => setMetric(metric === 'planta' ? 'campo' : 'planta')}
-                                    className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full text-left group hover:bg-blue-50/30 hover:border-blue-200"
+                                    className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full text-left group hover:bg-blue-50/30 hover:border-blue-200"
                                 >
                                     <div className="space-y-0.5">
                                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
@@ -501,7 +501,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </button>
 
                                 {/* Box 3: Mejor día */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
                                     <div className="space-y-0.5">
                                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Mejor día</p>
                                     </div>
@@ -518,7 +518,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
 
                                 {/* Box 4: Última cosecha */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[22px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
                                     <div className="space-y-0.5">
                                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Ritmo último día</p>
                                     </div>
