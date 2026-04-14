@@ -23,18 +23,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const searchParams = useSearchParams();
     const tabParam = searchParams.get('tab');
-    const [activeTab, setActiveTab] = useState<'summary' | 'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
-        tabParam === 'summary' ? 'summary' :
-            tabParam === 'evolucion' ? 'evolucion' :
-                tabParam === 'socios' ? 'socios' :
-                    tabParam === 'cosechas' ? 'cosechas' :
-                        tabParam === 'withdrawals' ? 'withdrawals' :
-                            tabParam === 'surface' ? 'surface' : 
-                                tabParam === 'dates' ? 'dates' : 'summary'
+    const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
+        tabParam === 'evolucion' ? 'evolucion' :
+            tabParam === 'socios' ? 'socios' :
+                tabParam === 'cosechas' ? 'cosechas' :
+                    tabParam === 'withdrawals' ? 'withdrawals' :
+                        tabParam === 'surface' ? 'surface' : 'dates'
     );
     const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
-    const [isPinned, setIsPinned] = useState(true);
+    const [isPinned, setIsPinned] = useState(false);
 
     // Horizontal scroll refs for tables
     const dailyTableScrollRef = useHorizontalScroll();
@@ -451,20 +449,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     >
                         Socios
                     </button>
-                    <button
-                        onClick={() => setActiveTab('summary')}
-                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'summary' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Resumen general
-                    </button>
                 </div>
             </div>
 
             <div className="relative bg-white rounded-[32px] shadow-xl border border-slate-200 flex flex-col min-h-[500px]">
                 <div className="p-8 pb-4 flex justify-between items-center">
-                    {activeTab === 'summary' ? (
-                        <h2 className="text-xl font-bold text-slate-900">Resumen General de Campaña</h2>
-                    ) : activeTab === 'dates' ? (
+                    {activeTab === 'dates' ? (
                         <h2 className="text-xl font-bold text-slate-900">Cronología de Siembra</h2>
                     ) : activeTab === 'surface' ? (
                         <h2 className="text-xl font-bold text-slate-900">Distribución de Superficie</h2>
@@ -504,15 +494,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 </div>
 
                 <div className="flex-1 p-8 pt-4">
-                    {activeTab === 'summary' ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 animate-fadeIn">
-                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-3xl opacity-50">📊</div>
-                            <div className="text-center">
-                                <p className="font-bold text-slate-600">Resumen General de Campaña</p>
-                                <p className="text-sm">Panel informativo en construcción. Aquí se consolidarán los indicadores clave.</p>
-                            </div>
-                        </div>
-                    ) : activeTab === 'evolucion' ? (
+                    {activeTab === 'evolucion' ? (
                         <div className="space-y-8 animate-fadeIn">
                             {/* 5 Square-ish Boxes */}
                             <div className="flex flex-wrap items-center justify-center gap-6">
@@ -740,10 +722,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                 : '—'}
                                                         </td>
                                                     ))}
-                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-emerald-900 text-right border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#C8E1D4' : '#A9D1BD', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-emerald-900 text-right border border-gray-300 bg-[#C8E1D4]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {(row.totalDia || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                     </td>
-                                                    <td className="px-6 py-3 text-sm font-mono font-black text-[#0C8A52] text-right border border-gray-300" style={{ backgroundColor: idx % 2 === 0 ? '#B8D7C6' : '#8EBC9F', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-[#0C8A52] text-right border border-gray-300 bg-[#B8D7C6]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                                                         {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
@@ -754,64 +736,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             </div>
                         </div>
                     ) : activeTab === 'socios' ? (
-                        <div className="space-y-8 animate-fadeIn">
-                            {/* 5 KPI Boxes */}
-                            <div className="flex flex-wrap items-center justify-center gap-6">
-                                {/* Box 1: Socios activos */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Socios activos</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-slate-900 leading-none">—</p>
-                                        <p className="text-[11px] font-medium text-slate-400">de — registrados</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 2: Mayor aporte */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Mayor aporte</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-emerald-700 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 3: Menor aporte */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Menor aporte</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-amber-600 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 4: Promedio por socio */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Promedio por socio</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-blue-600 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">— viajes promedio</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 5: Concentración */}
-                                <div className="bg-indigo-50/20 border border-indigo-100 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-tight">Concentración</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-indigo-700 leading-none">—%</p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
-                                    </div>
-                                </div>
-                            </div>
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
+                            <span className="text-5xl mb-4">👥</span>
+                            <p className="font-medium text-lg text-slate-900">Socios</p>
+                            <p className="text-sm">Próximamente: Detalle de participación por integrante.</p>
                         </div>
                     ) : activeTab === 'cosechas' ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
@@ -961,7 +889,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 />
                                                 <YAxis
                                                     yAxisId="left"
-                                                    width={100}
                                                     axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#64748b', fontSize: 12 }}
@@ -970,7 +897,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <YAxis
                                                     yAxisId="right"
                                                     orientation="right"
-                                                    width={100}
                                                     axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
@@ -1048,6 +974,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     </div>
                                 </div>
                             </div>
+
                         )
                     ) : sowingOrders.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
