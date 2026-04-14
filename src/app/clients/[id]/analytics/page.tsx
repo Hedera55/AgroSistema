@@ -25,16 +25,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const tabParam = searchParams.get('tab');
     const [activeTab, setActiveTab] = useState<'dates' | 'surface' | 'withdrawals' | 'cosechas' | 'evolucion' | 'socios'>(
         tabParam === 'evolucion' ? 'evolucion' :
-        tabParam === 'socios' ? 'socios' :
-        tabParam === 'cosechas' ? 'cosechas' : 
-        tabParam === 'withdrawals' ? 'withdrawals' : 
-        tabParam === 'surface' ? 'surface' : 'dates'
+            tabParam === 'socios' ? 'socios' :
+                tabParam === 'cosechas' ? 'cosechas' :
+                    tabParam === 'withdrawals' ? 'withdrawals' :
+                        tabParam === 'surface' ? 'surface' : 'dates'
     );
     const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
-    
+    const [isPinned, setIsPinned] = useState(false);
+
     // Horizontal scroll refs for tables
-    const evolutionScrollRef = useHorizontalScroll();
     const dailyTableScrollRef = useHorizontalScroll();
     const summaryScrollRef = useHorizontalScroll();
     const matrixScrollRef = useHorizontalScroll();
@@ -233,6 +233,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             totalViajes += v.viajes;
         });
 
+        // Global Totals (Campaign-wide) for KPIs
+        const totalCampoGlobal = Array.from(evolutionMap.values()).reduce((sum, e) => sum + e.netoCampo, 0);
+        const totalPlantaGlobal = Array.from(evolutionMap.values()).reduce((sum, e) => sum + e.netoPlanta, 0);
+        const totalViajesGlobal = Array.from(evolutionMap.values()).reduce((sum, e) => sum + e.viajes, 0);
+        const avgWeightPerTrip = totalViajesGlobal > 0 ? totalCampoGlobal / totalViajesGlobal : 0;
+
         // Summary Rows (Sorted)
         const rows = Array.from(partnerMap.entries())
             .map(([name, data]) => ({
@@ -331,7 +337,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             });
         });
         const dailyStats = Array.from(dailyMap.entries()).map(([date, stats]) => ({ date, ...stats }));
-        
+
         let bestDay = { weight: 0, date: '', viajes: 0 };
         dailyStats.forEach(stat => {
             if (stat.netoCampo > bestDay.weight) {
@@ -357,9 +363,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
         return {
             rows,
-            totalCampo,
-            totalPlanta,
-            totalViajes,
+            totalCampo: totalCampoGlobal,
+            totalPlanta: totalPlantaGlobal,
+            totalViajes: totalViajesGlobal,
+            avgWeightPerTrip,
             matrix: {
                 headers: matrixHeaders,
                 rows: matrixRows,
@@ -396,7 +403,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     if (loading) return <div className="p-8 text-center text-slate-500">Cargando gráficos...</div>;
 
     return (
-        <div className="space-y-6 w-full">
+        <div className={`space-y-6 w-full ${isPinned ? 'max-w-7xl mx-auto px-4 md:px-8' : ''}`}>
             <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-4">
                     <Link href={`/clients/${clientId}`} className="text-slate-400 hover:text-emerald-600 transition-colors">
@@ -445,7 +452,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 </div>
             </div>
 
-            <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden flex flex-col min-h-[500px]">
+            <div className="relative bg-white rounded-[32px] shadow-xl border border-slate-200 flex flex-col min-h-[500px]">
                 <div className="p-8 pb-4 flex justify-between items-center">
                     {activeTab === 'dates' ? (
                         <h2 className="text-xl font-bold text-slate-900">Cronología de Siembra</h2>
@@ -489,8 +496,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 <div className="flex-1 p-8 pt-4">
                     {activeTab === 'evolucion' ? (
                         <div className="space-y-8 animate-fadeIn">
-                            {/* 4 Square-ish Boxes */}
-                            <div className="flex flex-wrap items-center justify-center gap-16">
+                            {/* 5 Square-ish Boxes */}
+                            <div className="flex flex-wrap items-center justify-center gap-6">
                                 {/* Box 1: Días con actividad */}
                                 <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
                                     <div className="space-y-0.5">
@@ -507,7 +514,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
 
                                 {/* Box 2: Acumulado (Interactivo) */}
-                                <button 
+                                <button
                                     onClick={() => setMetric(metric === 'planta' ? 'campo' : 'planta')}
                                     className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full text-left group hover:bg-blue-50/30 hover:border-blue-200"
                                 >
@@ -518,7 +525,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-[28px] font-bold text-blue-600 leading-none">
-                                            {(metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000 > 0 
+                                            {(metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000 > 0
                                                 ? ((metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
                                                 : '0'} <span className="text-sm font-normal">tn</span>
                                         </p>
@@ -551,13 +558,26 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Ritmo último día</p>
                                     </div>
                                     <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-amber-700 leading-none">
-                                            {withdrawalData.evolution.kpis.lastDay.weight > 0
-                                                ? withdrawalData.evolution.kpis.lastDay.weight.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-                                                : '0'} <span className="text-sm font-normal">tn</span>
+                                        <p className="text-[28px] font-bold text-amber-600 leading-none">
+                                            {(withdrawalData.evolution.kpis.lastDay.weight).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span className="text-sm font-normal">tn</span>
                                         </p>
                                         <p className="text-[11px] font-medium text-slate-400">
-                                            {withdrawalData.evolution.kpis.lastDay.date || '—'} · {withdrawalData.evolution.kpis.lastDay.viajes} viajes
+                                            {withdrawalData.evolution.kpis.lastDay.viajes} viajes
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Box 5: Promedio por viaje */}
+                                <div className="bg-indigo-50/20 border border-indigo-100 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                    <div className="space-y-0.5">
+                                        <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-tight">Promedio por viaje</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[28px] font-bold text-indigo-700 leading-none">
+                                            {(withdrawalData.avgWeightPerTrip / 1000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span className="text-sm font-normal">tn</span>
+                                        </p>
+                                        <p className="text-[11px] font-medium text-slate-400">
+                                            Promedio campaña
                                         </p>
                                     </div>
                                 </div>
@@ -568,40 +588,42 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 <h3 className="text-lg font-bold text-slate-800 mb-8">Acumulado por socio diario</h3>
                                 <div className="h-[400px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={withdrawalData.evolution.partnerCumulativeChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis 
-                                                dataKey="date" 
-                                                axisLine={false} 
-                                                tickLine={false} 
-                                                tick={{ fill: '#64748b', fontSize: 12 }} 
+                                        <LineChart data={withdrawalData.evolution.partnerCumulativeChartData} margin={{ top: 20, right: 120, left: 20, bottom: 20 }}>
+                                            <CartesianGrid yAxisId="left" strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
+                                            <XAxis
+                                                dataKey="date"
+                                                axisLine={{ stroke: '#cbd5e1' }}
+                                                tickLine={false}
+                                                tick={{ fill: '#64748b', fontSize: 12 }}
                                                 dy={10}
                                             />
-                                            <YAxis 
-                                                label={{ value: 'acumulado (tn)', angle: -90, position: 'insideLeft', offset: 15, fill: '#64748b', fontSize: 12, fontWeight: 500 }}
-                                                axisLine={false} 
-                                                tickLine={false} 
+                                            <YAxis
+                                                width={100}
+                                                label={{ value: 'acumulado (tn)', angle: -90, position: 'insideLeft', offset: 20, fill: '#64748b', fontSize: 12, fontWeight: 500 }}
+                                                axisLine={{ stroke: '#cbd5e1' }}
+                                                tickLine={false}
                                                 tick={{ fill: '#64748b', fontSize: 12 }}
                                             />
-                                            <Tooltip 
+                                            <Tooltip
+                                                isAnimationActive={false}
                                                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                                 formatter={(value: any) => [`${(value ?? 0).toLocaleString('es-AR')} tn`, '']}
                                             />
-                                            <Legend 
-                                                verticalAlign="bottom" 
-                                                height={36} 
-                                                iconType="rect" 
+                                            <Legend
+                                                verticalAlign="bottom"
+                                                height={36}
+                                                iconType="rect"
                                                 formatter={(value) => <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{value}</span>}
                                                 wrapperStyle={{ paddingTop: '30px' }}
                                             />
                                             {(withdrawalData.evolution.partners || []).map((partner, index) => {
                                                 const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#f43f5e', '#06b6d4'];
                                                 return (
-                                                    <Line 
+                                                    <Line
                                                         key={partner}
-                                                        type="monotone" 
-                                                        dataKey={partner} 
-                                                        stroke={colors[index % colors.length]} 
+                                                        type="monotone"
+                                                        dataKey={partner}
+                                                        stroke={colors[index % colors.length]}
                                                         strokeWidth={3}
                                                         dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
                                                         activeDot={{ r: 6, strokeWidth: 0 }}
@@ -618,19 +640,20 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
                                 <h3 className="text-lg font-bold text-slate-800 mb-8">Evolución diaria de kg acumulados</h3>
                                 <ResponsiveContainer width="100%" height={400}>
-                                    <ComposedChart data={withdrawalData.evolution.chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <ComposedChart data={withdrawalData.evolution.chartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                                        <CartesianGrid yAxisId="left" strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
                                         <XAxis
                                             dataKey="date"
                                             tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                                            axisLine={false}
+                                            axisLine={{ stroke: '#cbd5e1' }}
                                             tickLine={false}
                                             tick={{ fill: '#64748b', fontSize: 12 }}
                                             dy={10}
                                         />
                                         <YAxis
                                             yAxisId="left"
-                                            axisLine={false}
+                                            width={100}
+                                            axisLine={{ stroke: '#cbd5e1' }}
                                             tickLine={false}
                                             tick={{ fill: '#64748b', fontSize: 12 }}
                                             tickFormatter={(val) => val.toLocaleString('es-AR')}
@@ -638,82 +661,26 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         <YAxis
                                             yAxisId="right"
                                             orientation="right"
-                                            axisLine={false}
+                                            width={100}
+                                            axisLine={{ stroke: '#cbd5e1' }}
                                             tickLine={false}
                                             tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
                                             tickFormatter={(val) => val.toLocaleString('es-AR')}
                                         />
                                         <Tooltip
+                                            isAnimationActive={false}
                                             cursor={{ fill: '#f8fafc' }}
                                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                             formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
                                             labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
                                         />
-                                        <Legend verticalAlign="top" align="right" iconType="circle" />
+                                        <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                                         <Bar yAxisId="left" dataKey="netoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                                         <Line yAxisId="right" type="monotone" dataKey="netoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
-
-                                {/* Evolución Diaria Table */}
-                                <div ref={evolutionScrollRef} className="overflow-x-auto rounded-lg border border-gray-400 mt-8">
-                                    <table className="min-w-full border-collapse">
-                                        <thead>
-                                            <tr>
-                                                <th
-                                                    colSpan={5 + withdrawalData.evolution.partners.length}
-                                                    className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
-                                                    style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
-                                                >
-                                                    Evolución Diaria de Kg Acumulados
-                                                </th>
-                                            </tr>
-                                            <tr style={{ backgroundColor: '#0C8A52' }}>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10 whitespace-nowrap" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
-                                                <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
-                                                {withdrawalData.evolution.partners.map(partner => (
-                                                    <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {partner}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {withdrawalData.evolution.rows.map((row, idx) => (
-                                                <tr
-                                                    key={idx}
-                                                    style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
-                                                >
-                                                    <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {row.viajes}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    {withdrawalData.evolution.partners.map(partner => (
-                                                        <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div ref={dailyTableScrollRef} className="overflow-x-auto rounded-lg border border-gray-400 mt-12 bg-white">
+                                {/* Tabla diaria */}
+                                <div ref={dailyTableScrollRef} className="overflow-x-auto rounded-lg border border-gray-400 mt-8 bg-white">
                                     <table className="min-w-full border-collapse">
                                         <thead>
                                             <tr>
@@ -750,7 +717,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                                                     {(withdrawalData.evolution.contributionNames || []).map(name => (
                                                         <td key={name} className="px-6 py-3 text-sm font-mono text-gray-700 text-right border border-gray-300 font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {(row.contributionWeightsCampo?.[name] || 0) > 0 
+                                                            {(row.contributionWeightsCampo?.[name] || 0) > 0
                                                                 ? (row.contributionWeightsCampo[name] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
                                                                 : '—'}
                                                         </td>
@@ -910,19 +877,19 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
                                     <div className="bg-white p-6 rounded-xl border border-slate-200">
                                         <ResponsiveContainer width="100%" height={400}>
-                                            <ComposedChart data={withdrawalData.evolution.chartData}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <ComposedChart data={withdrawalData.evolution.chartData} margin={{ top: 20, right: 40, left: 20, bottom: 20 }}>
+                                                <CartesianGrid yAxisId="left" strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
                                                 <XAxis
                                                     dataKey="date"
                                                     tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                                                    axisLine={false}
+                                                    axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#64748b', fontSize: 12 }}
                                                     dy={10}
                                                 />
                                                 <YAxis
                                                     yAxisId="left"
-                                                    axisLine={false}
+                                                    axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#64748b', fontSize: 12 }}
                                                     tickFormatter={(val) => val.toLocaleString('es-AR')}
@@ -930,18 +897,19 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                 <YAxis
                                                     yAxisId="right"
                                                     orientation="right"
-                                                    axisLine={false}
+                                                    axisLine={{ stroke: '#cbd5e1' }}
                                                     tickLine={false}
                                                     tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
                                                     tickFormatter={(val) => val.toLocaleString('es-AR')}
                                                 />
                                                 <Tooltip
+                                                    isAnimationActive={false}
                                                     cursor={{ fill: '#f8fafc' }}
                                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                                     formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
                                                     labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
                                                 />
-                                                <Legend verticalAlign="top" align="right" iconType="circle" />
+                                                <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                                                 <Bar yAxisId="left" dataKey="netoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                                                 <Line yAxisId="right" type="monotone" dataKey="netoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
                                             </ComposedChart>
@@ -1017,10 +985,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <ResponsiveContainer width="100%" height={400}>
                             {activeTab === 'dates' ? (
                                 <BarChart data={barData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                                    <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
+                                    <XAxis dataKey="name" axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                                    <YAxis axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                                     <Tooltip
+                                        isAnimationActive={false}
                                         cursor={{ fill: '#f8fafc' }}
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                     />
@@ -1052,6 +1021,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         ))}
                                     </Pie>
                                     <Tooltip
+                                        isAnimationActive={false}
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                     />
                                     <Legend verticalAlign="bottom" height={36} iconType="circle" />
@@ -1060,6 +1030,28 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         </ResponsiveContainer>
                     )}
                 </div>
+
+                {/* Pin Width Toggle - Professional SVG Toggle in corner vertex */}
+                <button
+                    onClick={() => setIsPinned(!isPinned)}
+                    className={`absolute bottom-4 right-4 z-50 transition-all hover:scale-110 active:scale-95 outline-none select-none ${
+                        isPinned ? 'text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.4)] opacity-100' : 'text-slate-400 opacity-40 hover:opacity-100'
+                    }`}
+                >
+                    <svg 
+                        width="14" 
+                        height="14" 
+                        viewBox="0 0 24 24" 
+                        fill={isPinned ? "currentColor" : "none"} 
+                        stroke="currentColor" 
+                        strokeWidth="2.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                    >
+                        <line x1="12" y1="17" x2="12" y2="22"></line>
+                        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                    </svg>
+                </button>
             </div>
         </div>
     );

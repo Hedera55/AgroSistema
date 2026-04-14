@@ -93,6 +93,51 @@ When an automated audit detects an integrity issue (e.g., negative grain balance
     3. **Container**: Attach the ref to the div wrapping the table: `<div ref={tableRef} className="overflow-x-auto ...">`.
 - **Reasoning**: This pattern captures mouse wheel events to scroll the container horizontally, preventing vertical scroll leakage and making wide data sets easily navigable without searching for the scrollbar.
 
+### 📊 Analytics & Data Visualization Standard
+To maintain a high-contrast, professional "Harvest Wizard" look, all Recharts implementations must follow these constraints:
+
+- **Containers & Borders**: Chart cards must use `border-slate-400` (for high contrast) and `rounded-[32px]`.
+- **Grid Lines (CartesianGrid)**:
+    - **Color**: Use `stroke="#94a3b8"` (Slate-400) for high-contrast horizontal lines.
+    - **Spacing**: Use `strokeDasharray="4 6"` for distinct, widely spaced dashes.
+    - **Dual-Axis Fix**: 
+        > [!IMPORTANT]
+        > In charts with multiple Y-axes (e.g., Daily Kg vs Cumulative), the `CartesianGrid` must be explicitly linked to the primary axis using `yAxisId="left"`. Failing to do this causes the grid lines to disappear or misalign.
+- **Axis Styling**:
+    - **Line**: Use a subtle solid line: `axisLine={{ stroke: '#cbd5e1' }}`.
+    - **Ticks**: Keep `tickLine={false}` for a cleaner look, using only the axis line for structure.
+    - **Fonts**: Axis ticks use `fill: '#64748b'` and `fontSize: 12`.
+- **Label Separation & Legends**:
+    - **Legend Position**: Always use `verticalAlign="bottom"` and `align="center"`.
+    - **Overlap Prevention**: Use `margin={{ top: 20, right: 40, left: 20, bottom: 20 }}` on the Chart component. This prevents the legend or the top Y-axis ticks (e.g., "80.000") from overlapping or being clipped.
+- **Grid Refinement**:
+    - **Color**: Use Slate-400 (`#94a3b8`) for better contrast.
+    - **Pattern**: Standardize `strokeDasharray="4 6"` for cleaner visuals.
+    - **Dual-Axis Linking**: In multi-axis charts, always link `CartesianGrid` to the primary axis (`yAxisId="left"`) to ensure horizontal lines align with tick marks.
+- **Horizontal Alignment (Locked Grid Policy)**:
+    - To ensure multiple stacked charts end at the exact same horizontal points (Symmetry):
+    - **Fixed Left Width**: Use a fixed **`width={100}`** for the left `YAxis` on all charts in the stack. This locks the starting line of the grid.
+    - **Right Side Compensation**: To handle charts that have a right-side axis vs. those that don't:
+        - **Charts WITH a Right Axis**: Set fixed **`width={100}`** on the right `YAxis` + **`margin.right={20}`** (Total gap: 120px).
+        - **Charts WITHOUT a Right Axis**: Set **`margin.right={120}`** (Matching the total gap of the dual-axis chart).
+    - **Standard Margins**: Use `margin={{ left: 20 }}` (in addition to the axis width) to provide consistent "air" around the grid.
+- **Interaction (Tooltips)**:
+    - **Static Behavior**: Disable "dancing" animations by setting `isAnimationActive={false}` on the `Tooltip` component. This ensures the tooltip appears instantly and statically at the current data point.
+
+- **Method for Width-Pin Feature**:
+    - **Purpose**: Allows users to toggle between a "Fluid" dashboard (expands infinitely) and a "Locked" dashboard (standardized 1280px width) to maintain readability on ultra-wide or zoomed-out screens.
+    - **Implementation**:
+        - **State**: Use a local `isPinned` boolean state.
+        - **Wrapper Transition**: Conditionally apply `max-w-7xl mx-auto px-4 md:px-8` to the main Page wrapper when `isPinned` is true. Use `w-full` when false.
+    - **Geometric Positioning (The Vertex Rule)**:
+        - The Pin icon must be placed at the **diagonal bisector** of the container's corner radius.
+        - **Standard Formula**: Offset = `Radius / 2`.
+        - **Example**: For the standard analytics card (`rounded-[32px]`), the icon is positioned at `bottom-4 right-4` (16px). This anchors it perfectly at the midpoint of the curve's depth.
+    - **Visual Standards**:
+        - **Icon**: Use a 14px professional SVG pin.
+        - **Active (Pinned)**: Emerald Green (`text-emerald-500`) with a solid fill and light glow.
+        - **Inactive (Free)**: Slate-400 at 40% opacity (`text-slate-400 opacity-40`) with a hollow fill.
+
 - **Numerical Notation (Spanish/Argentine)**:
     - **Entry**: All numeric inputs MUST support comma (`,`) as the decimal separator and dot (`.`) as thousands separator.
     - **Implementation**: 
