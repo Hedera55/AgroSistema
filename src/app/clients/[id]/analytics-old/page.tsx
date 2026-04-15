@@ -140,6 +140,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             netoPlanta: number;
             partnerWeights: Record<string, number>;
             partnerWeightsCampo: Record<string, number>;
+            contributionWeightsCampo: Record<string, number>;
         }>();
 
         // Helper to get lot display name

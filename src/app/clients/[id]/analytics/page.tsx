@@ -8,6 +8,7 @@ import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { db } from '@/services/db';
 import { Order, Campaign, InventoryMovement, TransportSheet, Client, Lot, Farm } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line, LineChart } from 'recharts';
+import { calculateCampaignPartnerShares } from '@/utils/financial';
 
 const CHART_COLORS = ['#10b981', '#fbbf24', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
@@ -35,6 +36,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [metric, setMetric] = useState<'planta' | 'campo'>('planta');
     const [loading, setLoading] = useState(true);
     const [isPinned, setIsPinned] = useState(true);
+    const [selectedSocioDetail, setSelectedSocioDetail] = useState<string | null>(null);
+    const [selectedSocioRetiroDetail, setSelectedSocioRetiroDetail] = useState<string | null>(null);
 
     // Horizontal scroll refs for tables
     const dailyTableScrollRef = useHorizontalScroll();
@@ -54,7 +57,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
             const clientOrders = allOrders.filter((o: Order) => o.clientId === clientId && !o.deleted);
             const clientCampaigns = allCampaigns.filter((c: Campaign) => c.clientId === clientId && !c.deleted);
-            const clientMovements = allMovements.filter((m: InventoryMovement) => m.clientId === clientId && !m.deleted && m.transportSheets && m.transportSheets.length > 0);
+            // Updated filter: Allow OUT movements (stock withdrawals) even if they lack transportSheets, and keep standard harvests with sheets
+            const clientMovements = allMovements.filter((m: InventoryMovement) => 
+                m.clientId === clientId && !m.deleted && 
+                (m.type === 'OUT' || (m.transportSheets && m.transportSheets.length > 0))
+            );
             const foundClient = allClients.find((c: Client) => c.id === clientId);
 
             setOrders(clientOrders);
@@ -129,7 +136,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
     // Withdrawal aggregation by partnermark
     const withdrawalData = useMemo(() => {
-        const partnerMap = new Map<string, { netoCampo: number; netoPlanta: number; viajes: number }>();
+        // 1. Calculate contractual participation shares from campaign financials
+        const campaignShares = calculateCampaignPartnerShares(movements, orders);
+        const currentCampaignShares = selectedCampaignId ? (campaignShares[selectedCampaignId] || {}) : {};
+
+        const partnerMap = new Map<string, { netoCampo: number; netoPlanta: number; viajes: number; humiditySum: number; humidityCount: number; lastDate: string; withdrawn: number }>();
         const matrixMap = new Map<string, Map<string, number>>(); // [partnerName][lotId] -> kg
         const activeLotIds = new Set<string>();
 
@@ -142,7 +153,21 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             netoPlanta: number;
             partnerWeights: Record<string, number>;
             partnerWeightsCampo: Record<string, number>;
+            contributionWeightsCampo: Record<string, number>;
         }>();
+
+        // Helper to get partner name correctly (stripping % or handle JSON)
+        const getPartnerName = (name?: string) => {
+            if (!name) return 'Sin Asignar';
+            let pName = name;
+            if (pName.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(pName);
+                    if (parsed && parsed.name) pName = parsed.name;
+                } catch (e) { }
+            }
+            return pName.split(' (')[0].trim();
+        };
 
         // Helper to get lot display name
         const getLotDisplayName = (lotId: string) => {
@@ -156,7 +181,30 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             selectedCampaignId ? m.campaignId === selectedCampaignId : true
         );
 
+        // Humidity tracking (across ALL sheets in campaign)
+        let humiditySum = 0;
+        let humidityCount = 0;
+
+        // Last activity tracking
+        let lastStockWithdrawalDate = "";
+        let lastStockWithdrawalPartner = "";
+
+        // Track partner withdrawals (OUT + Partner Harvests)
+        const partnerWithdrawals: Record<string, number> = {};
+
         filteredMovements.forEach(m => {
+            // Track stock withdrawals (Retiros from galpon/field)
+            if ((m.type === 'OUT' || (m.type === 'HARVEST' && !m.warehouseId)) && (m.receiverName || m.investorName)) {
+                const partnerName = getPartnerName(m.receiverName || m.investorName);
+                partnerWithdrawals[partnerName] = (partnerWithdrawals[partnerName] || 0) + m.quantity;
+                
+                const dateTime = m.date + (m.time ? 'T' + m.time : '');
+                if (dateTime > lastStockWithdrawalDate) {
+                    lastStockWithdrawalDate = dateTime;
+                    lastStockWithdrawalPartner = partnerName;
+                }
+            }
+
             const eventId = m.harvestBatchId || m.id;
 
             if (!evolutionMap.has(eventId)) {
@@ -184,8 +232,14 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 evo.netoCampo += (netoCampo > 0 ? netoCampo : 0);
                 evo.netoPlanta += (netoPlanta > 0 ? netoPlanta : 0);
 
-                // Identify Contribution Key (Socio or GALPONES)
-                const contribKey = mark && mark !== 'General' ? mark : 'GALPONES';
+                // Humidity accumulation
+                if (sheet.humidity != null && sheet.humidity > 0) {
+                    humiditySum += sheet.humidity;
+                    humidityCount += 1;
+                }
+
+                // Identify Contribution Key (Socio or Galpones)
+                const contribKey = mark && mark !== 'General' ? mark : 'Galpones';
                 evo.contributionWeightsCampo[contribKey] = (evo.contributionWeightsCampo[contribKey] || 0) + (netoCampo > 0 ? netoCampo : 0);
 
                 if (!mark || mark === 'General') return;
@@ -193,11 +247,17 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 if (selectedPartner && mark !== selectedPartner) return;
 
                 // Summary Data (Partner Totals for existing summaries)
-                const existing = partnerMap.get(mark) || { netoCampo: 0, netoPlanta: 0, viajes: 0 };
+                const existing = partnerMap.get(mark) || { netoCampo: 0, netoPlanta: 0, viajes: 0, humiditySum: 0, humidityCount: 0, lastDate: "", withdrawn: 0 };
+                const sheetDateTime = m.date + (m.time ? 'T' + m.time : '');
+                
                 partnerMap.set(mark, {
                     netoCampo: existing.netoCampo + (netoCampo > 0 ? netoCampo : 0),
                     netoPlanta: existing.netoPlanta + (netoPlanta > 0 ? netoPlanta : 0),
-                    viajes: existing.viajes + 1
+                    viajes: existing.viajes + 1,
+                    humiditySum: existing.humiditySum + (sheet.humidity != null && sheet.humidity > 0 ? sheet.humidity : 0),
+                    humidityCount: existing.humidityCount + (sheet.humidity != null && sheet.humidity > 0 ? 1 : 0),
+                    lastDate: sheetDateTime > existing.lastDate ? sheetDateTime : existing.lastDate,
+                    withdrawn: partnerWithdrawals[mark] || 0
                 });
 
                 // Original Evolution Data (for the older table)
@@ -220,7 +280,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         (client?.partners || []).forEach(p => {
             if (p.name && !partnerNamesInMovements.has(p.name)) {
                 if (!selectedPartner || p.name === selectedPartner) {
-                    partnerMap.set(p.name, { netoCampo: 0, netoPlanta: 0, viajes: 0 });
+                    partnerMap.set(p.name, { netoCampo: 0, netoPlanta: 0, viajes: 0, humiditySum: 0, humidityCount: 0, lastDate: "", withdrawn: partnerWithdrawals[p.name] || 0 });
                 }
             }
         });
@@ -241,14 +301,92 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const totalViajesGlobal = Array.from(evolutionMap.values()).reduce((sum, e) => sum + e.viajes, 0);
         const avgWeightPerTrip = totalViajesGlobal > 0 ? totalCampoGlobal / totalViajesGlobal : 0;
 
+        // Calculate GALPONES Row
+        const partnerHumiditySum = Array.from(partnerMap.values()).reduce((sum, v) => sum + v.humiditySum, 0);
+        const partnerHumidityCount = Array.from(partnerMap.values()).reduce((sum, v) => sum + v.humidityCount, 0);
+        
+        const allTrips: any[] = [];
+        movements.forEach(m => {
+            if (m.transportSheets) {
+                m.transportSheets.forEach((sheet, idx) => {
+                    const mark = sheet.partnermark && sheet.partnermark !== 'General' ? sheet.partnermark : 'Galpones';
+                    const netoCampo = (sheet.grossWeight || 0) - (sheet.tareWeight || 0);
+                    const netoPlanta = (sheet.grossWeightPlant || 0) - (sheet.tareWeightPlant || 0);
+                    
+                    allTrips.push({
+                        id: `${m.id}-${idx}`,
+                        movementId: m.id,
+                        fecha: m.date,
+                        socio: mark,
+                        campo: lots.find(l => l.id === sheet.lotId)?.name || 'Desconocido',
+                        destino: sheet.destinationCompany || '---',
+                        chofer: sheet.driverName || '---',
+                        patente: sheet.truckPlate || '---',
+                        netoCampo: netoCampo > 0 ? netoCampo : 0,
+                        netoPlanta: netoPlanta > 0 ? netoPlanta : 0,
+                        merma: (netoPlanta > 0 ? netoPlanta : 0) - (netoCampo > 0 ? netoCampo : 0),
+                        humedad: sheet.humidity
+                    });
+                });
+            }
+        });
+
+        const galponesNetoCampo = totalCampoGlobal - totalCampo;
+        const galponesNetoPlanta = totalPlantaGlobal - totalPlanta;
+        const galponesViajes = totalViajesGlobal - totalViajes;
+        const galponesHumiditySum = humiditySum - partnerHumiditySum;
+        const galponesHumidityCount = humidityCount - partnerHumidityCount;
+
+        const rawRows = Array.from(partnerMap.entries()).map(([name, data]) => ({ name, ...data, isGalpones: false }));
+        
+        if (galponesViajes > 0 || galponesNetoCampo > 0) {
+            rawRows.push({
+                name: 'Galpones',
+                netoCampo: galponesNetoCampo,
+                netoPlanta: galponesNetoPlanta,
+                viajes: galponesViajes,
+                humiditySum: galponesHumiditySum > 0 ? galponesHumiditySum : 0,
+                humidityCount: galponesHumidityCount > 0 ? galponesHumidityCount : 0,
+                lastDate: '',
+                isGalpones: true,
+                withdrawn: 0
+            });
+        }
+
         // Summary Rows (Sorted)
-        const rows = Array.from(partnerMap.entries())
-            .map(([name, data]) => ({
-                name,
-                ...data,
-                percentage: totalPlanta > 0 ? (data.netoPlanta / totalPlanta) * 100 : 0
-            }))
-            .sort((a, b) => b.netoPlanta - a.netoPlanta);
+        const rows = rawRows
+            .map(data => {
+                const merma = data.netoPlanta - data.netoCampo;
+                const mermaPercent = data.netoCampo > 0 ? (merma / data.netoCampo) * 100 : 0;
+                
+                // Format date locally
+                let formattedLastDate = '—';
+                if (data.lastDate) {
+                    const parts = data.lastDate.split('T')[0].split('-');
+                    if (parts.length >= 3) {
+                        formattedLastDate = `${parts[2]}/${parts[1]}`;
+                    }
+                }
+                
+                const sharePercentage = currentCampaignShares[data.name] || 0;
+                const withdrawnPercentage = totalPlantaGlobal > 0 ? ((partnerWithdrawals[data.name] || 0) / totalPlantaGlobal) * 100 : 0;
+
+                return {
+                    ...data,
+                    merma,
+                    mermaPercent,
+                    avgHumidity: data.humidityCount > 0 ? data.humiditySum / data.humidityCount : null,
+                    formattedLastDate,
+                    percentage: sharePercentage, // Contractual Share
+                    withdrawnWeight: partnerWithdrawals[data.name] || 0,
+                    withdrawnPercentage // Portion of global total taken so far
+                };
+            })
+            .sort((a, b) => {
+                if (a.isGalpones) return 1;
+                if (b.isGalpones) return -1;
+                return b.netoPlanta - a.netoPlanta;
+            });
 
         // Matrix Header & Rows
         const sortedLotIds = Array.from(activeLotIds).sort((a, b) => getLotDisplayName(a).localeCompare(getLotDisplayName(b)));
@@ -295,15 +433,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const chronologicalRows = [...evolutionRows];
         evolutionRows.reverse();
 
-        // Unique Contribution Names (Socios + GALPONES)
+        // Unique Contribution Names (Socios + Galpones)
         const allContribNamesSet = new Set<string>();
         chronologicalRows.forEach(row => {
             Object.keys(row.contributionWeightsCampo || {}).forEach(name => {
-                if (name !== 'GALPONES') allContribNamesSet.add(name);
+                if (name !== 'Galpones') allContribNamesSet.add(name);
             });
         });
-        // Sort partners alphabetically, then always put GALPONES last
-        const contributionNames = [...Array.from(allContribNamesSet).sort(), 'GALPONES'];
+        // Sort partners alphabetically, then always put Galpones last
+        const contributionNames = [...Array.from(allContribNamesSet).sort(), 'Galpones'];
 
         let allClientPartners = (client?.partners || []).map(p => p.name).filter(Boolean) as string[];
         if (selectedPartner) {
@@ -369,6 +507,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             totalPlanta: totalPlantaGlobal,
             totalViajes: totalViajesGlobal,
             avgWeightPerTrip,
+            avgHumidity: humidityCount > 0 ? humiditySum / humidityCount : 0,
+            humidityCount,
+            allTrips,
             matrix: {
                 headers: matrixHeaders,
                 rows: matrixRows,
@@ -396,11 +537,36 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         weight: latestActivity.netoCampo / 1000,
                         date: fmtDate(latestActivity.date),
                         viajes: latestActivity.viajes
-                    }
+                    },
+                    lastActivity: (() => {
+                        let finalDate = lastStockWithdrawalDate;
+                        let finalPartner = lastStockWithdrawalPartner;
+
+                        if (evolutionRows.length > 0) {
+                            const latestHarvest = evolutionRows[0]; // Already newest first
+                            const harvestDate = latestHarvest.date + (latestHarvest.time ? 'T' + latestHarvest.time : '');
+                            if (harvestDate >= finalDate) {
+                                finalDate = harvestDate;
+                                const pWeights = latestHarvest.partnerWeightsCampo || {};
+                                const topPartner = Object.entries(pWeights).sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0];
+                                if (topPartner) finalPartner = topPartner;
+                            }
+                        }
+
+                        return {
+                            date: finalDate ? fmtDate(finalDate.split('T')[0]) : '—',
+                            partner: finalPartner || '—'
+                        };
+                    })()
                 }
             }
         };
-    }, [movements, selectedCampaignId, selectedPartner, client, lots, farms]);
+    }, [movements, selectedCampaignId, selectedPartner, client, lots, farms, orders]);
+
+    // Campaign participation shares for Socios KPI
+    const campaignShares = useMemo(() => {
+        return calculateCampaignPartnerShares(movements, orders);
+    }, [movements, orders]);
 
     if (loading) return <div className="p-8 text-center text-slate-500">Cargando gráficos...</div>;
 
@@ -758,62 +924,600 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             {/* 5 KPI Boxes */}
                             <div className="flex flex-wrap items-center justify-center gap-6">
                                 {/* Box 1: Socios activos */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                {(() => {
+                                    const shares = selectedCampaignId ? (campaignShares[selectedCampaignId] || {}) : {};
+                                    const activeFromViajes = new Set(withdrawalData.rows.filter(r => r.viajes > 0 && !r.isGalpones).map(r => r.name));
+                                    const activeFromShares = new Set(Object.entries(shares).filter(([, v]) => v > 0).map(([k]) => k));
+                                    const allActive = new Set([...activeFromViajes, ...activeFromShares]);
+                                    const totalRegistered = (client?.partners || []).length;
+                                    return (
+                                        <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                            <div className="space-y-0.5">
+                                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Socios activos</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[28px] font-bold text-slate-900 leading-none">{allActive.size}</p>
+                                                <p className="text-[11px] font-medium text-slate-400">de {totalRegistered} registrados</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Box 2: Acumulado total */}
+                                <button
+                                    onClick={() => setMetric(metric === 'planta' ? 'campo' : 'planta')}
+                                    className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full text-left group hover:bg-blue-50/30 hover:border-blue-200"
+                                >
                                     <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Socios activos</p>
+                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
+                                            Acumulado {metric}
+                                        </p>
                                     </div>
                                     <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-slate-900 leading-none">—</p>
-                                        <p className="text-[11px] font-medium text-slate-400">de — registrados</p>
+                                        <p className="text-[28px] font-bold text-blue-600 leading-none">
+                                            {(metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000 > 0
+                                                ? ((metric === 'planta' ? withdrawalData.totalPlanta : withdrawalData.totalCampo) / 1000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                                                : '0'} <span className="text-sm font-normal">tn</span>
+                                        </p>
+                                        <p className="text-[11px] font-medium text-slate-400">
+                                            {withdrawalData.totalViajes} viajes
+                                        </p>
+                                    </div>
+                                </button>
+
+                                {/* Box 3: Merma total */}
+                                {(() => {
+                                    const mermaPercent = withdrawalData.totalCampo > 0
+                                        ? ((withdrawalData.totalPlanta - withdrawalData.totalCampo) / withdrawalData.totalCampo) * 100
+                                        : 0;
+                                    const mermaTn = (withdrawalData.totalPlanta - withdrawalData.totalCampo) / 1000;
+                                    return (
+                                        <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                            <div className="space-y-0.5">
+                                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Merma total</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[28px] font-bold text-amber-600 leading-none">
+                                                    {mermaPercent !== 0 ? mermaPercent.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'}%
+                                                </p>
+                                                <p className="text-[11px] font-medium text-slate-400">
+                                                    {mermaTn.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} tn merma
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Box 4: Humedad promedio */}
+                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
+                                    <div className="space-y-0.5">
+                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Humedad promedio</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[28px] font-bold text-blue-600 leading-none">
+                                            {withdrawalData.avgHumidity > 0
+                                                ? withdrawalData.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                                                : '—'}%
+                                        </p>
+                                        <p className="text-[11px] font-medium text-slate-400">
+                                            {withdrawalData.humidityCount} viajes con dato
+                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Box 2: Mayor aporte */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Mayor aporte</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-emerald-700 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 3: Menor aporte */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Menor aporte</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-amber-600 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 4: Promedio por socio */}
-                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Promedio por socio</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-blue-600 leading-none">— <span className="text-sm font-normal">tn</span></p>
-                                        <p className="text-[11px] font-medium text-slate-400">— viajes promedio</p>
-                                    </div>
-                                </div>
-
-                                {/* Box 5: Concentración */}
+                                {/* Box 5: Último movimiento */}
                                 <div className="bg-indigo-50/20 border border-indigo-100 rounded-[14px] py-4 px-5 flex flex-col justify-between min-h-[110px] transition-all max-w-[180px] w-full">
                                     <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-tight">Concentración</p>
+                                        <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-tight">Último movimiento</p>
                                     </div>
                                     <div className="space-y-1">
-                                        <p className="text-[28px] font-bold text-indigo-700 leading-none">—%</p>
-                                        <p className="text-[11px] font-medium text-slate-400">—</p>
+                                        <p className="text-[28px] font-bold text-indigo-700 leading-none">
+                                            {withdrawalData.evolution.kpis.lastActivity.date}
+                                        </p>
+                                        <p className="text-[11px] font-medium text-slate-400 truncate" title={withdrawalData.evolution.kpis.lastActivity.partner}>
+                                            {withdrawalData.evolution.kpis.lastActivity.partner}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Main "Detalle por socio - cosecha" Table */}
+                            {withdrawalData.rows.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
+                                    <span className="text-5xl mb-4">👥</span>
+                                    <p className="font-medium">No hay retiros con marca de socio registrados para esta campaña.</p>
+                                </div>
+                            ) : (
+                        <div className="p-8 space-y-16 animate-fadeInUp">
+                            <div className="rounded-xl border-2 border-gray-400 overflow-hidden shadow-sm">
+                                    <div ref={summaryScrollRef} className="overflow-x-auto pb-2">
+                                        <table className="min-w-full border-separate border-spacing-0">
+                                            <thead>
+                                                <tr>
+                                                    <th colSpan={9} className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        Detalle por socio - cosecha
+                                                    </th>
+                                                </tr>
+                                                <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 sticky left-0 z-10 whitespace-nowrap" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Socio</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Neto campo acumulado</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Neto planta acumulado</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Merma (kg)</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Merma %</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 min-w-[120px] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>% Retiro</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Hum. prom.</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Último retiro</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {withdrawalData.rows.map((row, idx) => (
+                                                    <tr 
+                                                        key={idx} 
+                                                        onClick={() => setSelectedSocioDetail(selectedSocioDetail === row.name ? null : row.name)}
+                                                        className="cursor-pointer transition-all hover:brightness-95"
+                                                        style={{ backgroundColor: row.isGalpones ? '#f1f5f9' : (idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1') }}
+                                                    >
+                                                        <td className={`px-6 py-3 text-sm font-bold border-r border-b border-gray-300 sticky left-0 z-10 whitespace-nowrap ${row.isGalpones ? 'text-slate-400' : 'text-gray-800'}`} style={{ backgroundColor: row.isGalpones ? '#f8fafc' : (idx % 2 === 0 ? (selectedSocioDetail === row.name ? '#C6F6D5' : '#EBF5F0') : (selectedSocioDetail === row.name ? '#B2F5EA' : '#D7EBE1')), fontFamily: 'Helvetica, Arial, sans-serif', borderLeft: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>{row.name}</td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border-r border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border-r border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border-r border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.merma.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-right border-r border-b border-gray-300 whitespace-nowrap font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            <div className={`inline-flex items-center justify-end px-2 py-0.5 rounded-full ${
+                                                                row.mermaPercent >= -5 ? 'text-emerald-700 bg-emerald-100/80' :
+                                                                row.mermaPercent >= -12 ? 'text-amber-700 bg-amber-100/80' :
+                                                                'text-red-700 bg-red-100/80'
+                                                            }`}>
+                                                                {row.mermaPercent.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center border-r border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.viajes}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 border-r border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            <div className="flex items-center gap-3 min-w-[120px]">
+                                                                {!row.isGalpones ? (
+                                                                    <>
+                                                                        <div className="w-14 h-1.5 bg-slate-200/50 rounded-full overflow-hidden flex-shrink-0">
+                                                                            <div 
+                                                                                className="h-full bg-emerald-500 transition-all duration-500"
+                                                                                style={{ width: `${Math.min(100, (row.withdrawnPercentage / (row.percentage || 1)) * 100)}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                                            <span className="text-[12px] font-black text-slate-700">
+                                                                                {row.withdrawnPercentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                            </span>
+                                                                            <span className="text-[10px] font-bold text-slate-400">/</span>
+                                                                            <span className="text-[10px] font-black text-slate-400">
+                                                                                {row.percentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                            </span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex items-center justify-center w-full">
+                                                                        <span className="text-xs font-bold text-slate-300">—</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-3 text-[12px] font-mono text-center border-r border-b border-gray-300 whitespace-nowrap font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.avgHumidity != null ? (
+                                                                <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded shadow-sm ${
+                                                                    row.avgHumidity <= 14 ? 'bg-emerald-500 text-white border border-emerald-600' :
+                                                                    row.avgHumidity <= 15 ? 'bg-amber-500 text-white border border-amber-600' :
+                                                                    'bg-red-500 text-white border border-red-600'
+                                                                }`}>
+                                                                    {row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-gray-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-slate-600 text-center border-b border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderRight: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
+                                                            {row.formattedLastDate}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="bg-slate-50 border-t-2 border-[#0C8A52]">
+                                                    <td className="px-6 py-3 text-sm font-black uppercase tracking-wider border-r border-b border-slate-300 sticky left-0 z-10 whitespace-nowrap" style={{ color: '#0C8A52', backgroundColor: '#f8fafc', fontFamily: 'Helvetica, Arial, sans-serif' }}>Total</td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.totalCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.totalPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {(withdrawalData.totalPlanta - withdrawalData.totalCampo).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-right border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.totalCampo > 0 ? (((withdrawalData.totalPlanta - withdrawalData.totalCampo) / withdrawalData.totalCampo) * 100).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'}%
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-center border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.totalViajes}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-center border-r border-b border-slate-300 text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        —
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-center border-r border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.avgHumidity > 0 ? withdrawalData.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'}%
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-mono font-black text-center border-b border-slate-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        {withdrawalData.evolution.kpis.lastActivity.date}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            
+
+                            {/* Second Table: Detalles por socio - Retiros galpón (Simplified 5-Column Layout) */}
+                            
+                                <div className="rounded-xl border-2 border-gray-400 overflow-hidden shadow-sm">
+                                    <div className="overflow-x-auto pb-2">
+                                        <table className="min-w-full border-separate border-spacing-0">
+                                            <thead>
+                                                <tr>
+                                                    <th colSpan={5} className="px-6 py-2 text-left text-lg font-bold border-b border-blue-600" style={{ color: '#2563eb', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                        Detalles por socio - Retiros galpón
+                                                    </th>
+                                                </tr>
+                                                <tr className="bg-blue-600">
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 sticky left-0 z-10 whitespace-nowrap" style={{ backgroundColor: '#2563eb', fontFamily: 'Helvetica, Arial, sans-serif' }}>Socio</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Cantidad retirada</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 min-w-[120px] whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>% Retiro</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-r border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Humedad promedio</th>
+                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border-b border-white/10 whitespace-nowrap" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Último retiro</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {withdrawalData.rows.map((row, idx) => (
+                                                    <tr 
+                                                        key={idx} 
+                                                        onClick={() => setSelectedSocioRetiroDetail(selectedSocioRetiroDetail === row.name ? null : row.name)}
+                                                        className="cursor-pointer transition-all hover:brightness-95 border-b border-gray-400"
+                                                        style={{ backgroundColor: row.isGalpones ? '#f8fafc' : (idx % 2 === 0 ? '#f0f9ff' : '#e0f2fe') }}
+                                                    >
+                                                        <td className={`px-6 py-3 text-sm font-bold border-r border-b border-gray-300 sticky left-0 z-10 whitespace-nowrap ${row.isGalpones ? 'text-slate-400' : 'text-gray-800'}`} style={{ backgroundColor: row.isGalpones ? '#f8fafc' : (idx % 2 === 0 ? (selectedSocioRetiroDetail === row.name ? '#C6F6D5' : '#f0f9ff') : (selectedSocioRetiroDetail === row.name ? '#B2F5EA' : '#e0f2fe')), fontFamily: 'Helvetica, Arial, sans-serif', borderLeft: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>{row.name}</td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right border-r border-b border-gray-300" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>
+                                                            {row.withdrawnWeight.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 border-r border-b border-gray-300" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>
+                                                            <div className="flex items-center gap-3 min-w-[120px]">
+                                                                {!row.isGalpones ? (
+                                                                    <>
+                                                                        <div className="w-14 h-1.5 bg-slate-200/50 rounded-full overflow-hidden flex-shrink-0">
+                                                                            <div 
+                                                                                className="h-full bg-blue-500 transition-all duration-500"
+                                                                                style={{ width: `${Math.min(100, (row.withdrawnPercentage / (row.percentage || 1)) * 100)}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                                            <span className="text-[12px] font-black text-slate-700">
+                                                                                {row.withdrawnPercentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                            </span>
+                                                                            <span className="text-[10px] font-bold text-slate-400">/</span>
+                                                                            <span className="text-[10px] font-black text-slate-400">
+                                                                                {row.percentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                            </span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex items-center justify-center w-full">
+                                                                        <span className="text-xs font-bold text-slate-300">—</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-center border-r border-b border-gray-300 text-slate-600" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>
+                                                            {row.avgHumidity != null ? (
+                                                                <span className="font-bold text-slate-600">{row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%</span>
+                                                            ) : (
+                                                                <span className="text-gray-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-mono text-center border-r border-b border-slate-200 text-slate-600" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '' }}>
+                                                            {row.formattedLastDate}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                     {/* Detail View (Integrated Movement Details Style) */}
+                            {(() => {
+                                const row = selectedSocioDetail ? withdrawalData.rows.find(r => r.name === selectedSocioDetail) : null;
+                                if (!row) return null;
+
+                                return (
+                                    <div className="space-y-6 animate-fadeInUp mt-12 border-t-2 border-slate-100 pt-8" id="socio-detail-view">
+                                        {/* Container Card */}
+                                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                            {/* Section 1: Header (Laucarseed Style - Grey Background + Shadow) */}
+                                            <div className="px-6 py-4 flex items-center justify-between bg-slate-50 border-b border-slate-200">
+                                                <div className="flex items-center gap-4 flex-1">
+                                                    <h3 className="text-lg font-bold text-slate-800 tracking-tight">{row.name}</h3>
+                                                    
+                                                    <div className="flex items-center gap-8 ml-auto mr-8">
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className="text-[13px] font-bold text-slate-800">{(row.netoPlanta / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tn planta</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className="text-[13px] font-bold text-slate-800">{row.viajes} viajes</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className={`text-[13px] font-bold ${row.mermaPercent >= -5 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                {row.mermaPercent > 0 ? '+' : ''}{row.mermaPercent.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                            </span>
+                                                            <span className="text-[13px] font-medium text-slate-400">merma</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className={`text-[13px] font-bold ${row.avgHumidity != null && row.avgHumidity <= 14.5 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}%
+                                                            </span>
+                                                            <span className="text-[13px] font-medium text-slate-400">hum. prom.</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => setSelectedSocioDetail(null)}
+                                                    className="transition-colors text-slate-400 hover:text-red-500 p-1"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+
+                                            {/* Section 2: Middle (Trip Table) - Added Header Shadow, No Border */}
+                                            <div className="overflow-hidden">
+                                                <div className="overflow-x-auto bg-white border-b border-slate-50" style={{ maxHeight: '400px' }}>
+                                                    <table className="min-w-full divide-y divide-slate-100 border-separate border-spacing-0">
+                                                        <thead className="bg-[#0C8A52] sticky top-0 z-20 shadow-sm">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">N°</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Fecha</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Campo</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Destino</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Chofer</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Pat. Chasis</th>
+                                                                <th className="px-4 py-3 text-right text-[9px] font-black text-white uppercase tracking-widest border-0">Neto Campo (kg)</th>
+                                                                <th className="px-4 py-3 text-right text-[9px] font-black text-white uppercase tracking-widest border-0">Neto Planta (kg)</th>
+                                                                <th className="px-4 py-3 text-right text-[9px] font-black text-white uppercase tracking-widest border-0">Merma</th>
+                                                                <th className="px-4 py-3 text-center text-[9px] font-black text-white uppercase tracking-widest border-0">Hum.</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {withdrawalData.allTrips
+                                                                .filter(t => t.socio === row.name)
+                                                                .map((trip, tIdx) => (
+                                                                    <tr key={trip.id} className="hover:bg-slate-50/80 transition-colors">
+                                                                        <td className="px-4 py-3 text-[11px] font-black text-slate-300">{tIdx + 1}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-bold text-slate-600 whitespace-nowrap">{trip.fecha ? trip.fecha.split('-').reverse().slice(0, 2).join('/') : '---'}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-bold text-slate-900">{trip.campo}</td>
+                                                                        <td className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{trip.destino}</td>
+                                                                        <td className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{trip.chofer}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-mono font-bold text-slate-400 uppercase">{trip.patente}</td>
+                                                                        <td className="px-4 py-3 text-right font-mono font-black text-slate-600">
+                                                                            {trip.netoCampo.toLocaleString('es-AR')}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right font-mono font-black text-emerald-700">
+                                                                            {trip.netoPlanta.toLocaleString('es-AR')}
+                                                                        </td>
+                                                                        <td className={`px-4 py-3 text-right font-mono font-bold ${trip.merma < 0 ? 'text-amber-600' : 'text-emerald-500'}`}>
+                                                                            {trip.merma > 0 ? '+' : ''}{trip.merma.toLocaleString('es-AR')}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            {trip.humedad != null ? (
+                                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${trip.humedad >= 14 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                                                    {trip.humedad.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 3: Footer (KPI Boxes - Minimalist Style) */}
+                                            <div className="bg-slate-50/10 p-6 border-t border-slate-100">
+                                                <div className="flex flex-wrap justify-center gap-14">
+                                                    {/* Box 1: Neto Campo */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Neto campo</p>
+                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                            <span className="text-xl font-bold text-slate-800">
+                                                                {(row.netoCampo / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                            <span className="text-[11px] font-bold text-slate-400">tn</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Box 2: Neto Planta */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Neto planta</p>
+                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                            <span className="text-xl font-bold text-slate-800">
+                                                                {(row.netoPlanta / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                            <span className="text-[11px] font-bold text-slate-400">tn</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Box 3: Diferencia */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Merma</p>
+                                                        <div className={`flex items-baseline gap-1.5 font-bold whitespace-nowrap ${row.merma < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                            <span className="text-xl">
+                                                                {row.merma > 0 ? '+' : ''}{(row.merma / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tn
+                                                            </span>
+                                                            <span className="text-[10px] font-bold opacity-80">({row.mermaPercent > 0 ? '+' : ''}{row.mermaPercent.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Box 4: Humedad */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Humedad promedio</p>
+                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                            <span className="text-xl font-bold text-slate-800">
+                                                                {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
+                                                            </span>
+                                                            <span className="text-[11px] font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Detail View for Retiros Galpón */}
+                            {(() => {
+                                const row = selectedSocioRetiroDetail ? withdrawalData.rows.find(r => r.name === selectedSocioRetiroDetail) : null;
+                                if (!row) return null;
+
+                                return (
+                                    <div className="space-y-6 animate-fadeInUp mt-12 border-t-2 border-slate-100 pt-8" id="socio-retiro-detail-view">
+                                        {/* Container Card */}
+                                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                            {/* Section 1: Header (Matching Blue Theme) */}
+                                            <div className="px-6 py-4 flex items-center justify-between bg-blue-50 border-b border-blue-100">
+                                                <div className="flex items-center gap-4 flex-1">
+                                                    <h3 className="text-lg font-bold text-slate-800 tracking-tight">{row.name}</h3>
+                                                    
+                                                    <div className="flex items-center gap-8 ml-auto mr-8">
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className="text-[13px] font-bold text-slate-800">{(row.withdrawnWeight / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tn retirada</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className="text-[13px] font-bold text-slate-800">{row.viajes} viajes</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                            <span className={`text-[13px] font-bold ${row.avgHumidity != null && row.avgHumidity <= 14.5 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}%
+                                                            </span>
+                                                            <span className="text-[13px] font-medium text-slate-400">hum. prom.</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <button 
+                                                        onClick={() => setSelectedSocioRetiroDetail(null)}
+                                                        className="transition-colors text-slate-400 hover:text-red-500 p-1"
+                                                        title="Cerrar detalle"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                            <line x1="18" y1="18" x2="6" y2="6"></line>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 2: Middle (Trip Table) - Blue Header Shadow */}
+                                            <div className="overflow-hidden">
+                                                <div className="overflow-x-auto bg-white border-b border-slate-100" style={{ maxHeight: '400px' }}>
+                                                    <table className="min-w-full divide-y divide-slate-100 border-separate border-spacing-0">
+                                                        <thead className="bg-[#2563eb] sticky top-0 z-20 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.25)]">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">N°</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Fecha</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Origen</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Destino</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Chofer</th>
+                                                                <th className="px-4 py-3 text-left text-[9px] font-black text-white uppercase tracking-widest border-0">Patente</th>
+                                                                <th className="px-4 py-3 text-right text-[9px] font-black text-white uppercase tracking-widest border-0">Cantidad (kg)</th>
+                                                                <th className="px-4 py-3 text-center text-[9px] font-black text-white uppercase tracking-widest border-0">Hum.</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {withdrawalData.allTrips
+                                                                .filter(t => t.socio === row.name)
+                                                                .map((trip, tIdx) => (
+                                                                    <tr key={trip.id} className="hover:bg-blue-50/30 transition-colors">
+                                                                        <td className="px-4 py-3 text-[11px] font-black text-slate-300">{tIdx + 1}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-bold text-slate-600 whitespace-nowrap">{trip.fecha ? trip.fecha.split('-').reverse().slice(0, 2).join('/') : '---'}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-bold text-slate-900">{trip.campo}</td>
+                                                                        <td className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{trip.destino}</td>
+                                                                        <td className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{trip.chofer}</td>
+                                                                        <td className="px-4 py-3 text-[11px] font-mono font-bold text-slate-400 uppercase">{trip.patente}</td>
+                                                                        <td className="px-4 py-3 text-right font-mono font-black text-slate-600">
+                                                                            {trip.netoPlanta.toLocaleString('es-AR')}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            {trip.humedad != null ? (
+                                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${trip.humedad >= 14 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                                    {trip.humedad.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            {withdrawalData.allTrips.filter(t => t.socio === row.name).length === 0 && (
+                                                                <tr>
+                                                                    <td colSpan={8} className="px-4 py-12 text-center text-sm italic text-slate-400 font-medium">
+                                                                        No hay movimientos de retiro registrados específicamente para {row.name}
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 3: Footer (Simplified KPI Boxes for Retiros) */}
+                                            <div className="bg-slate-50/10 p-6 border-t border-slate-100">
+                                                <div className="flex flex-wrap justify-start gap-14">
+                                                    {/* Box 1: Cantidad Retirada Acumulada */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Cantidad retirada</p>
+                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                            <span className="text-xl font-bold text-slate-800">
+                                                                {(row.withdrawnWeight / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                            <span className="text-[11px] font-bold text-slate-400">tn</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Box 2: Humedad Promedio */}
+                                                    <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Humedad promedio</p>
+                                                        <div className="flex items-baseline gap-1 whitespace-nowrap">
+                                                            <span className="text-xl font-bold text-slate-800">
+                                                                {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
+                                                            </span>
+                                                            <span className="text-[11px] font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
-                    ) : activeTab === 'cosechas' ? (
+                    )}
+                </div>
+            ) : activeTab === 'cosechas' ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
                             <span className="text-5xl mb-4">🌾</span>
                             <p className="font-medium">No hay datos de cosechas para mostrar</p>
@@ -843,7 +1547,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {withdrawalData.rows.map((row, idx) => (
+                                            {withdrawalData.rows.filter(r => r.name !== 'GALPONES').map((row, idx) => (
                                                 <tr
                                                     key={idx}
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
@@ -859,7 +1563,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                         {row.viajes}
                                                     </td>
                                                     <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                        {row.percentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                        {(withdrawalData.totalPlanta > 0 ? (row.netoPlanta / withdrawalData.totalPlanta) * 100 : 0).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
                                                     </td>
                                                 </tr>
                                             ))}
@@ -884,7 +1588,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                     </table>
                                 </div>
 
-                                {/* Matrix Table: Neto planta by Partner and Lot */}
                                 <div ref={matrixScrollRef} className="overflow-x-auto rounded-lg border border-gray-400">
                                     <table className="min-w-full border-collapse">
                                         <thead>
@@ -908,7 +1611,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {withdrawalData.matrix.rows.map((mRow, idx) => (
+                                            {withdrawalData.matrix.rows.filter(r => r.partnerName !== 'GALPONES').map((mRow, idx) => (
                                                 <tr
                                                     key={idx}
                                                     style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
@@ -944,109 +1647,124 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 </div>
 
                                 {/* Evolution Table: Evolución Diaria de Kg Acumulados */}
-                                <div className="space-y-8">
-                                    <h3 className="text-xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 inline-block">Evolución Diaria</h3>
+                                {(() => {
+                                    // Custom calculation for "Partner-only" evolution to match old version
+                                    let partnerAcc = 0;
+                                    const partnersToInclude = (withdrawalData.evolution.partners || []).filter(p => p !== 'GALPONES');
+                                    const partnerEvolutionRows = [...(withdrawalData.evolution.chartData || [])].map(evo => {
+                                        const pWeight = partnersToInclude.reduce((sum, p) => sum + (evo.partnerWeightsCampo?.[p] || 0), 0);
+                                        partnerAcc += pWeight;
+                                        return {
+                                            ...evo,
+                                            partnerNetoCampo: pWeight,
+                                            partnerNetoCampoAcumulado: partnerAcc
+                                        };
+                                    });
 
-                                    <div className="bg-white p-6 rounded-xl border border-slate-200">
-                                        <ResponsiveContainer width="100%" height={400}>
-                                            <ComposedChart data={withdrawalData.evolution.chartData} margin={{ top: 20, right: 40, left: 20, bottom: 20 }}>
-                                                <CartesianGrid yAxisId="left" strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
-                                                <XAxis
-                                                    dataKey="date"
-                                                    tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                                                    axisLine={{ stroke: '#cbd5e1' }}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#64748b', fontSize: 12 }}
-                                                    dy={10}
-                                                />
-                                                <YAxis
-                                                    yAxisId="left"
-                                                    width={100}
-                                                    axisLine={{ stroke: '#cbd5e1' }}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#64748b', fontSize: 12 }}
-                                                    tickFormatter={(val) => val.toLocaleString('es-AR')}
-                                                />
-                                                <YAxis
-                                                    yAxisId="right"
-                                                    orientation="right"
-                                                    width={100}
-                                                    axisLine={{ stroke: '#cbd5e1' }}
-                                                    tickLine={false}
-                                                    tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
-                                                    tickFormatter={(val) => val.toLocaleString('es-AR')}
-                                                />
-                                                <Tooltip
-                                                    isAnimationActive={false}
-                                                    cursor={{ fill: '#f8fafc' }}
-                                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                    formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
-                                                    labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
-                                                />
-                                                <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                                                <Bar yAxisId="left" dataKey="netoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
-                                                <Line yAxisId="right" type="monotone" dataKey="netoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                    return (
+                                        <div className="space-y-8">
+                                            <h3 className="text-xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 inline-block">Evolución Diaria</h3>
 
-                                    <div className="overflow-x-auto rounded-lg border border-gray-400 mt-6">
-                                        <table className="min-w-full border-collapse">
-                                            <thead>
-                                                <tr>
-                                                    <th
-                                                        colSpan={5 + withdrawalData.evolution.partners.length}
-                                                        className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
-                                                        style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
-                                                    >
-                                                        Evolución Diaria de Kg Acumulados
-                                                    </th>
-                                                </tr>
-                                                <tr style={{ backgroundColor: '#0C8A52' }}>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
-                                                    <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
-                                                    {withdrawalData.evolution.partners.map(partner => (
-                                                        <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {partner}
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {withdrawalData.evolution.rows.map((row, idx) => (
-                                                    <tr
-                                                        key={idx}
-                                                        style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
-                                                    >
-                                                        <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.viajes}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                            {row.netoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                        </td>
-                                                        {withdrawalData.evolution.partners.map(partner => (
-                                                            <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                                                {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                            </td>
+                                            <div className="bg-white p-6 rounded-xl border border-slate-200">
+                                                <ResponsiveContainer width="100%" height={400}>
+                                                    <ComposedChart data={partnerEvolutionRows} margin={{ top: 20, right: 40, left: 20, bottom: 20 }}>
+                                                        <CartesianGrid yAxisId="left" strokeDasharray="4 6" vertical={false} stroke="#94a3b8" />
+                                                        <XAxis
+                                                            dataKey="date"
+                                                            tickFormatter={(date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                                            axisLine={{ stroke: '#cbd5e1' }}
+                                                            tickLine={false}
+                                                            tick={{ fill: '#64748b', fontSize: 12 }}
+                                                            dy={10}
+                                                        />
+                                                        <YAxis
+                                                            yAxisId="left"
+                                                            axisLine={{ stroke: '#cbd5e1' }}
+                                                            tickLine={false}
+                                                            tick={{ fill: '#64748b', fontSize: 12 }}
+                                                            tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                                        />
+                                                        <YAxis
+                                                            yAxisId="right"
+                                                            orientation="right"
+                                                            axisLine={{ stroke: '#cbd5e1' }}
+                                                            tickLine={false}
+                                                            tick={{ fill: '#0C8A52', fontSize: 12, fontWeight: 'bold' }}
+                                                            tickFormatter={(val) => val.toLocaleString('es-AR')}
+                                                        />
+                                                        <Tooltip
+                                                            isAnimationActive={false}
+                                                            cursor={{ fill: '#f8fafc' }}
+                                                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                            formatter={(value: any, name: any) => [(value ?? 0).toLocaleString('es-AR'), name]}
+                                                            labelFormatter={(label) => new Date(`${label}T12:00:00`).toLocaleDateString('es-AR')}
+                                                        />
+                                                        <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                                                        <Bar yAxisId="left" dataKey="partnerNetoCampo" name="Neto Campo Diario (kg)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                                        <Line yAxisId="right" type="monotone" dataKey="partnerNetoCampoAcumulado" name="Acumulado (kg)" stroke="#0C8A52" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
+                                                    </ComposedChart>
+                                                </ResponsiveContainer>
+                                            </div>
+
+                                            <div className="overflow-x-auto rounded-lg border border-gray-400 mt-6">
+                                                <table className="min-w-full border-collapse">
+                                                    <thead>
+                                                        <tr>
+                                                            <th
+                                                                colSpan={5 + partnersToInclude.length}
+                                                                className="px-6 py-2 text-left text-lg font-bold border-b border-[#0C8A52]"
+                                                                style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif', border: '2px solid #0C8A52', borderBottom: '1px solid #0C8A52' }}
+                                                            >
+                                                                Evolución Diaria de Kg Acumulados
+                                                            </th>
+                                                        </tr>
+                                                        <tr style={{ backgroundColor: '#0C8A52' }}>
+                                                            <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 sticky left-0 z-10" style={{ backgroundColor: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>Fecha</th>
+                                                            <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Viajes</th>
+                                                            <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo</th>
+                                                            <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Planta</th>
+                                                            <th className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Kg Campo Acumulado</th>
+                                                            {partnersToInclude.map(partner => (
+                                                                <th key={partner} className="px-6 py-3 text-center text-[11px] font-bold text-white uppercase tracking-wider border border-gray-400 min-w-[120px]" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {partner}
+                                                                </th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {[...partnerEvolutionRows].reverse().map((row, idx) => (
+                                                            <tr
+                                                                key={idx}
+                                                                style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1' }}
+                                                            >
+                                                                <td className="px-6 py-3 text-sm font-bold text-gray-800 whitespace-nowrap border border-gray-300 sticky left-0 z-10" style={{ backgroundColor: idx % 2 === 0 ? '#EBF5F0' : '#D7EBE1', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {new Date(`${row.date}T12:00:00`).toLocaleDateString('es-AR')}
+                                                                </td>
+                                                                <td className="px-6 py-3 text-sm font-mono text-gray-700 text-center whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {row.viajes}
+                                                                </td>
+                                                                <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {row.partnerNetoCampo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                </td>
+                                                                <td className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {row.netoPlanta.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                </td>
+                                                                <td className="px-6 py-3 text-sm font-mono font-black text-right whitespace-nowrap border border-gray-300" style={{ color: '#0C8A52', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                    {row.partnerNetoCampoAcumulado.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                </td>
+                                                                {partnersToInclude.map(partner => (
+                                                                    <td key={partner} className="px-6 py-3 text-sm font-mono text-gray-700 text-right whitespace-nowrap border border-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                                                        {(row.partnerWeights[partner] || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
                                                         ))}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )
                     ) : sowingOrders.length === 0 ? (
