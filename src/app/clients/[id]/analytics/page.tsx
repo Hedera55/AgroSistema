@@ -671,11 +671,114 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
                 <div className="flex-1 p-8 pt-4">
                     {activeTab === 'summary' ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 animate-fadeIn">
-                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-3xl opacity-50">📊</div>
-                            <div className="text-center">
-                                <p className="font-bold text-slate-600">Resumen General de Campaña</p>
-                                <p className="text-sm">Panel informativo en construcción. Aquí se consolidarán los indicadores clave.</p>
+                        <div className="space-y-10 animate-fadeIn">
+                            {/* Row 1: Totales de Campaña */}
+                            <div className="space-y-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Totales de Campaña</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-1">
+                                    {[
+                                        { title: "Neto Planta Total", value: "0,00", sub: "0 viajes camión registrados" },
+                                        { title: "Neto Campo Total", value: "0,00", sub: "peso salida de campo" },
+                                        { title: "Total Bolsas", value: "0,00", sub: "sin registros aún" },
+                                        { title: "Total General", value: "0,00", sub: "planta + bolsas combinado", highlight: true },
+                                    ].map((kpi, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className={`bg-white border rounded-2xl p-6 shadow-sm min-h-[135px] flex flex-col justify-between transition-all ${kpi.highlight ? 'border-blue-500 bg-blue-50/10 ring-1 ring-blue-500/20' : 'border-slate-200 hover:border-slate-300'}`}
+                                        >
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{kpi.title}</p>
+                                            <div className="space-y-1">
+                                                <div className="flex items-baseline gap-1">
+                                                    <p className={`text-3xl font-bold ${kpi.highlight ? 'text-blue-600' : 'text-slate-900'}`}>{kpi.value}</p>
+                                                    <span className="text-sm font-bold text-slate-400">tn</span>
+                                                </div>
+                                                <p className="text-[11px] font-medium text-slate-400">{kpi.sub}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Row 2: Rendimiento y Calidad */}
+                            <div className="space-y-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Indicadores de Rendimiento y Calidad</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-1">
+                                    {[
+                                        { title: "Merma Total", value: "0,0", sub: "0,0 tn diferencia total", unit: "%" },
+                                        { title: "Humedad Promedio", value: "0,0", sub: "rango: 0,0% - 0,0%", unit: "%" },
+                                        { title: "Días de Cosecha", value: "0", sub: "periodo: ---", unit: "días" },
+                                        { title: "Promedio Diario", value: "0,0", sub: "0,0 viajes/día", unit: "tn/día" },
+                                    ].map((kpi, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[135px] flex flex-col justify-between transition-all hover:border-slate-300"
+                                        >
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{kpi.title}</p>
+                                            <div className="space-y-1">
+                                                <div className="flex items-baseline gap-1">
+                                                    <p className="text-3xl font-bold text-slate-900">{kpi.value}</p>
+                                                    <span className="text-sm font-bold text-slate-400">{kpi.unit || 'tn'}</span>
+                                                </div>
+                                                <p className="text-[11px] font-medium text-slate-400">{kpi.sub}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Section: Participación Acumulada */}
+                            <div className="space-y-4 pt-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Participación acumulada</p>
+                                <div className="bg-white border border-slate-200 rounded-[24px] md:rounded-[28px] p-6 md:p-8 shadow-sm">
+                                    <div className="flex justify-between items-center mb-8 md:mb-10">
+                                        <h3 className="text-base md:text-lg font-bold text-slate-800 tracking-tight">Participación acumulada — neto planta</h3>
+                                    </div>
+
+                                    <div className="space-y-8 md:space-y-10">
+                                        {withdrawalData.rows
+                                            .filter(row => !row.isGalpones && row.netoPlanta > 0)
+                                            .map((row, idx) => {
+                                                const percentage = withdrawalData.totalPlanta > 0 
+                                                    ? (row.netoPlanta / withdrawalData.totalPlanta) * 100 
+                                                    : 0;
+                                                const color = CHART_COLORS[idx % CHART_COLORS.length];
+                                                
+                                                return (
+                                                    <div key={row.name} className="space-y-3">
+                                                        <div className="flex justify-between items-end">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                                                                <span className="text-sm md:text-[15px] font-bold text-slate-700">{row.name}</span>
+                                                            </div>
+                                                            <div className="flex items-baseline gap-2">
+                                                                <span className="text-xs md:text-sm font-bold text-slate-600">
+                                                                    {(row.netoPlanta / 1000).toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} tn
+                                                                </span>
+                                                                <span className="text-xs md:text-sm font-bold text-slate-400">
+                                                                    {percentage.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="w-full h-2.5 bg-slate-50 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className="h-full transition-all duration-1000 ease-out"
+                                                                style={{ 
+                                                                    width: `${percentage}%`,
+                                                                    backgroundColor: color
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        
+                                        {withdrawalData.rows.filter(row => !row.isGalpones && row.netoPlanta > 0).length === 0 && (
+                                            <div className="text-center py-10 text-slate-400 italic text-sm">
+                                                No hay datos de entrega registrados para esta campaña.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     ) : activeTab === 'evolucion' ? (
