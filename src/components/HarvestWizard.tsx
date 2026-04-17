@@ -181,6 +181,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         const firstSheet: TransportSheet = { 
             id: `sheet_${Date.now()}`, 
             dischargeNumber: '1',
+            transportType: 'TRUCK',
             originAddress: originStr,
             departureDateTime: formattedNow
         };
@@ -539,6 +540,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         const newSheet: TransportSheet = applyProfileData({
             id: `sheet_${Date.now()}`,
             dischargeNumber: getNextDischargeNumber(),
+            transportType: 'TRUCK',
             profileName: profileOptions.find(p => p.id === selectedProfileId)?.label || 'GENERAL',
             departureDateTime: formattedNow,
             originAddress: originStr
@@ -696,7 +698,27 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                     <h4 className="text-sm font-black text-blue-800 uppercase tracking-wide flex items-center gap-2">
                         {isExecutingPlan ? 'Registrar Cosecha' : 'Editar Cosecha'} <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px]">Paso {step} de 4</span>
                     </h4>
-                    <button type="button" onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 transition-colors" title="Cancelar cosecha">✕</button>
+                    
+                    <div className="flex items-center gap-6">
+                        {step === 2 && (
+                            <div className="flex items-center gap-4 mr-2">
+                                <span className="text-sm font-black text-blue-800 uppercase tracking-wide">
+                                    {activeSheet?.transportType === 'BOLSA' ? 'Bolsa' : 'Camión'}
+                                </span>
+                                <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner h-10 items-center">
+                                    <div 
+                                        className={`w-16 h-8 rounded-lg transition-all duration-300 ${activeSheet?.transportType !== 'BOLSA' ? 'bg-white shadow-md cursor-pointer' : 'cursor-default'}`} 
+                                        onClick={() => activeSheet?.transportType !== 'BOLSA' && updateSheetField('transportType', 'BOLSA')}
+                                    />
+                                    <div 
+                                        className={`w-16 h-8 rounded-lg transition-all duration-300 ${activeSheet?.transportType === 'BOLSA' ? 'bg-white shadow-md cursor-pointer' : 'cursor-default'}`} 
+                                        onClick={() => activeSheet?.transportType === 'BOLSA' && updateSheetField('transportType', 'TRUCK')}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        <button type="button" onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 transition-colors" title="Cancelar cosecha">✕</button>
+                    </div>
                 </div>
 
                 {/* STEP 1: PARAMETERS */}
@@ -803,21 +825,42 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                 </div>
                                             </div>
 
-                                            {/* Row 3: Empresa Transporte | Chofer | Patente Camion | Patente Acoplado */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-6 sm:col-span-3">
-                                                    <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
+                                            {/* Row 3: Truck/Bolsa specific fields */}
+                                            {activeSheet?.transportType === 'BOLSA' ? (
+                                                <div className="grid grid-cols-12 gap-4 animate-fadeIn">
+                                                    <div className="col-span-12 sm:col-span-4">
+                                                        <Input 
+                                                            label="Nro de Bolsa" 
+                                                            placeholder="Ej: Silo 01..." 
+                                                            value={getSheetValue('bolsaNumber')} 
+                                                            onChange={e => updateSheetField('bolsaNumber', e.target.value)} 
+                                                            className="bg-blue-50/30 border-blue-100"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-12 sm:col-span-8 flex items-center">
+                                                        <div className="w-full p-3 bg-blue-50/50 rounded-lg border border-blue-100/50">
+                                                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight italic">
+                                                                * Modo Bolsa activado: Se omiten datos de patente y chofer.
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="col-span-6 sm:col-span-3">
-                                                    <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
+                                            ) : (
+                                                <div className="grid grid-cols-12 gap-4 animate-fadeIn">
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
+                                                    </div>
+                                                    <div className="col-span-6 sm:col-span-3">
+                                                        <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
+                                                    </div>
                                                 </div>
-                                                <div className="col-span-6 sm:col-span-3">
-                                                    <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
-                                                </div>
-                                                <div className="col-span-6 sm:col-span-3">
-                                                    <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
-                                                </div>
-                                            </div>
+                                            )}
 
                                             {/* Weights Group (Campo & Planta + Calcs) */}
                                             <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-4">
@@ -1020,7 +1063,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                             <span className="text-sm text-slate-600 flex-1 truncate">{sheet.driverName || 'Sin chofer'}</span>
                                             <div className="flex flex-col items-end min-w-[80px]">
                                                 <span className="text-xs font-black text-slate-700">{net.toLocaleString()} kg</span>
-                                                <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">{sheet.partnermark || 'General'}</span>
+                                                <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">
+                                                    {sheet.transportType === 'BOLSA' ? `BOLSA: ${sheet.bolsaNumber || '—'}` : (sheet.partnermark || 'General')}
+                                                </span>
                                             </div>
                                         </div>
                                     );

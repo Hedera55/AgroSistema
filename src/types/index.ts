@@ -253,6 +253,8 @@ export interface TransportSheet {
     earthPercentage?: number;
     greenPercentage?: number;
     lotId?: string; // Links to a specific lot
+    transportType?: 'TRUCK' | 'BOLSA';
+    bolsaNumber?: string;
 }
 
 export interface InventoryMovement {
