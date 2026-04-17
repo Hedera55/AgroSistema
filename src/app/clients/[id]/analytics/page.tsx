@@ -1302,7 +1302,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     maxBarSize={32}
                                                     label={({ x, y, width, value, index }: any) => {
                                                         const entry = withdrawalData.quality.chartData[index];
-                                                        if (entry?.isPadding) return null;
+                                                        if ((entry as any)?.isPadding) return null;
                                                         if (!entry?.hasData) {
                                                             return <text x={x + width / 2} y={y - 8} textAnchor="middle" fill="#cbd5e1" fontSize={10} fontWeight={800} fontStyle="italic">s/d</text>;
                                                         }

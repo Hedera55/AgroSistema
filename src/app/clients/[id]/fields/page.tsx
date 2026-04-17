@@ -816,7 +816,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                         author: m.createdBy || 'Sistema',
                         timestamp: new Date(`${m.date}T${m.time || '00:00'}`).getTime(),
                         movements: [],
-                        transportSheets: harvestOrder?.transportSheets || [],
+                        transportSheets: (harvestOrder as any)?.transportSheets || [],
                         harvestOrder: harvestOrder
                     };
                 }
