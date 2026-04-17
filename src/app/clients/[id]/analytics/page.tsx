@@ -2027,8 +2027,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                     </span>
                                                                     <span className="text-[13px] font-medium text-slate-400">merma</span>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                                    <span className={`text-[13px] font-bold ${row.avgHumidity != null && row.avgHumidity <= 14.5 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                <div className="flex items-center gap-1.5 whitespace-nowrap" id="hum-prom-header-1">
+                                                                    <span className={`text-[13px] font-bold ${
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' : 'text-red-500'
+                                                                    }`}>
                                                                         {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}%
                                                                     </span>
                                                                     <span className="text-[13px] font-medium text-slate-400">hum. prom.</span>
@@ -2140,10 +2143,14 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                             </div>
 
                                                             {/* Box 4: Humedad */}
-                                                            <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
+                                                            <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]" id="hum-prom-footer-1">
                                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Humedad promedio</p>
                                                                 <div className="flex items-baseline gap-1 whitespace-nowrap">
-                                                                    <span className="text-xl font-bold text-slate-800">
+                                                                    <span className={`text-xl font-bold ${
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                        row.avgHumidity != null ? 'text-red-500' : 'text-slate-800'
+                                                                    }`}>
                                                                         {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                                                                     </span>
                                                                     <span className="text-[11px] font-bold text-slate-400">%</span>
@@ -2177,8 +2184,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                                     <span className="text-[13px] font-bold text-slate-800">{row.viajes} viajes</span>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                                    <span className={`text-[13px] font-bold ${row.avgHumidity != null && row.avgHumidity <= 14.5 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                <div className="flex items-center gap-1.5 whitespace-nowrap" id="hum-prom-header-2">
+                                                                    <span className={`text-[13px] font-bold ${
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' : 'text-red-500'
+                                                                    }`}>
                                                                         {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}%
                                                                     </span>
                                                                     <span className="text-[13px] font-medium text-slate-400">hum. prom.</span>
