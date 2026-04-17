@@ -255,6 +255,9 @@ export interface TransportSheet {
     lotId?: string; // Links to a specific lot
     transportType?: 'TRUCK' | 'BOLSA';
     bolsaNumber?: string;
+    operatorName?: string;
+    notes?: string;
+    harvestOrderId?: string;
 }
 
 export interface InventoryMovement {
@@ -279,6 +282,8 @@ export interface InventoryMovement {
     source?: 'HARVEST' | 'PURCHASE';
     referenceId: string; // ID of the Order, Purchase, or Sale event
     notes?: string;
+    harvestOrderId?: string;
+    transportMode?: 'TRUCK' | 'BOLSA';
     facturaDate?: string; // Fecha de emisión
     dueDate?: string; // Fecha de vencimiento
     facturaImageUrl?: string; // URL to uploaded invoice/receipt image

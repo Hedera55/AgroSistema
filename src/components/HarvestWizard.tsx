@@ -34,8 +34,10 @@ interface HarvestData {
         targetName: string;
         amount: number;
         logistics: any;
+        transportMode?: 'TRUCK' | 'BOLSA';
     }>;
     transportSheets: TransportSheet[];
+    harvestOrderId?: string;
 }
 
 interface HarvestWizardProps {
@@ -66,6 +68,7 @@ interface HarvestWizardProps {
     onBalanceError?: (error: { partner: string, equation: string, formula: string } | null) => void;
     initialStep?: number;
     initialActiveSheetIndex?: number;
+    initialHarvestOrderId?: string;
 }
 
 export const HarvestWizard: React.FC<HarvestWizardProps> = ({
@@ -95,7 +98,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     campaignInvestments = {},
     onBalanceError,
     initialStep,
-    initialActiveSheetIndex
+    initialActiveSheetIndex,
+    initialHarvestOrderId
 }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>((initialStep as any) || 1);
 
@@ -144,6 +148,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         targetName: string;
         amount: number;
         logistics: any;
+        transportMode?: 'TRUCK' | 'BOLSA';
     }>>(() => {
         if (initialDistributions && initialDistributions.length > 0) {
             return initialDistributions;
@@ -597,31 +602,58 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     };
 
     const syncMarksToDistributions = () => {
-        // Collect all Socio marks from Step 2
+        // Collect all Socio marks and General Bags from Step 2
         const socioTotals = new Map<string, number>();
+        let silobolsaTotal = 0;
+
         transportSheets.forEach(s => {
+            const net = (normalizeNumber(s.grossWeight?.toString() || '0') - normalizeNumber(s.tareWeight?.toString() || '0'));
+            const weightValue = net > 0 ? net : 0;
+
             if (s.partnermark && s.partnermark !== 'General') {
-                const net = (normalizeNumber(s.grossWeight?.toString() || '0') - normalizeNumber(s.tareWeight?.toString() || '0'));
                 const current = socioTotals.get(s.partnermark) || 0;
-                socioTotals.set(s.partnermark, current + (net > 0 ? net : 0));
+                socioTotals.set(s.partnermark, current + weightValue);
+            } else if (s.transportType === 'BOLSA' && (!s.partnermark || s.partnermark === 'General')) {
+                // "General" Bags go obligatorely to Silobolsas
+                silobolsaTotal += weightValue;
             }
         });
 
+        // Try to find the Silobolsas warehouse if it exists
+        const silobolsaWh = warehouses.find(w => normalizeKey(w.name) === normalizeKey("Silobolsas"));
+
         setDistributions(prev => {
-            // Keep WAREHOUSE entries
-            const warehousesOnly = prev.filter(d => d.type === 'WAREHOUSE');
+            // Keep manually added WAREHOUSE entries (those NOT from marks)
+            const manualWarehouses = prev.filter(d => d.type === 'WAREHOUSE' && !d.logistics?.isFromMark);
             
             // Rebuild PARTNER entries from marks
-            const markBasedDistributions = Array.from(socioTotals.entries()).map(([name, amount]) => ({
-                id: `mark_${name}`,
-                type: 'PARTNER' as const,
-                targetId: name,
-                targetName: name,
-                amount: amount,
-                logistics: { isFromMark: true } as any
-            }));
+            const markBasedDistributions = Array.from(socioTotals.entries()).map(([name, amount]) => {
+                const hasBags = transportSheets.some(s => s.partnermark === name && s.transportType === 'BOLSA');
+                return {
+                    id: `mark_${name}`,
+                    type: 'PARTNER' as const,
+                    targetId: name,
+                    targetName: name,
+                    amount: amount,
+                    transportMode: hasBags ? 'BOLSA' : ('TRUCK' as any),
+                    logistics: { isFromMark: true } as any
+                };
+            });
 
-            return [...warehousesOnly, ...markBasedDistributions];
+            // Add the Forced Silobolsa entry if there are general bags
+            if (silobolsaTotal > 0) {
+                markBasedDistributions.push({
+                    id: 'mark_silobolsas',
+                    type: 'WAREHOUSE' as const,
+                    targetId: silobolsaWh?.id || 'PENDING_SILOBOLSA',
+                    targetName: silobolsaWh?.name || 'Silobolsas',
+                    amount: silobolsaTotal,
+                    transportMode: 'BOLSA',
+                    logistics: { isFromMark: true, isSilobolsa: true } as any
+                });
+            }
+
+            return [...manualWarehouses, ...markBasedDistributions];
         });
     };
 
@@ -686,7 +718,8 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             totalYield: Number(calculatedTotalYield),
             technicalResponsible: harvestTechnicalResponsible,
             distributions: processedDistributions,
-            transportSheets
+            transportSheets: transportSheets.map(s => ({ ...s, harvestOrderId: initialHarvestOrderId })),
+            harvestOrderId: initialHarvestOrderId
         });
     };
 
@@ -802,140 +835,173 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
                                     return (
                                         <div className="flex flex-col gap-4">
-                                            {/* Row 1: Nro Descarga | Origen */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Nro de Descarga" placeholder="..." value={getSheetValue('dischargeNumber')} onChange={e => updateSheetField('dischargeNumber', e.target.value)} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-8">
-                                                    <Input label="Origen" placeholder="..." value={getSheetValue('originAddress')} onChange={e => updateSheetField('originAddress', e.target.value)} />
-                                                </div>
-                                            </div>
-
-                                            {/* Row 2: Ciudad destino | Empresa Destino | CUIT Corredor */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Ciudad destino" placeholder="..." value={getSheetValue('destinationAddress')} onChange={e => updateSheetField('destinationAddress', e.target.value)} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Empresa de Destino" placeholder="..." value={getSheetValue('destinationCompany')} onChange={e => updateSheetField('destinationCompany', e.target.value)} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="CUIT Corredor" placeholder="..." value={getSheetValue('primarySaleCuit')} onChange={e => updateSheetField('primarySaleCuit', e.target.value)} />
-                                                </div>
-                                            </div>
-
-                                            {/* Row 3: Truck/Bolsa specific fields */}
+                                            {/* Step 2 Form Content */}
                                             {activeSheet?.transportType === 'BOLSA' ? (
-                                                <div className="grid grid-cols-12 gap-4 animate-fadeIn">
-                                                    <div className="col-span-12 sm:col-span-4">
-                                                        <Input 
-                                                            label="Nro de Bolsa" 
-                                                            placeholder="Ej: Silo 01..." 
-                                                            value={getSheetValue('bolsaNumber')} 
-                                                            onChange={e => updateSheetField('bolsaNumber', e.target.value)} 
-                                                            className="bg-blue-50/30 border-blue-100"
-                                                        />
+                                                <div className="flex flex-col gap-4 animate-fadeIn">
+                                                    {/* Row 1: Nro Descarga | Origen | Operario */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Nro de Descarga" placeholder="..." value={getSheetValue('dischargeNumber')} onChange={e => updateSheetField('dischargeNumber', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Origen" placeholder="..." value={getSheetValue('originAddress')} onChange={e => updateSheetField('originAddress', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Operario" placeholder="..." value={getSheetValue('operatorName')} onChange={e => updateSheetField('operatorName', e.target.value)} />
+                                                        </div>
                                                     </div>
-                                                    <div className="col-span-12 sm:col-span-8 flex items-center">
-                                                        <div className="w-full p-3 bg-blue-50/50 rounded-lg border border-blue-100/50">
-                                                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight italic">
-                                                                * Modo Bolsa activado: Se omiten datos de patente y chofer.
-                                                            </p>
+
+                                                    {/* Row 2: Nro de Bolsa | Peso de descarga (kg) | Humedad % */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Nro de Bolsa" placeholder="..." value={getSheetValue('bolsaNumber')} onChange={e => updateSheetField('bolsaNumber', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Peso de descarga (kg)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeight')} onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Humedad (%)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('humidity')} onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 3: Peso Hectolitrico | Marca de socio */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-6">
+                                                            <Input label="Peso Hectolítrico" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('hectoliterWeight')} onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-6">
+                                                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Marca de socio</label>
+                                                            <select className="flex-1 w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={getSheetValue('partnermark') || 'General'} onChange={e => updateSheetField('partnermark', e.target.value)}>
+                                                                <option value="General">General</option>
+                                                                {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 4: Observaciones */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12">
+                                                            <Input label="Observaciones" placeholder="..." value={getSheetValue('notes')} onChange={e => updateSheetField('notes', e.target.value)} />
                                                         </div>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="grid grid-cols-12 gap-4 animate-fadeIn">
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
+                                                <div className="flex flex-col gap-4 animate-fadeIn">
+                                                    {/* Row 1: Nro Descarga | Origen */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Nro de Descarga" placeholder="..." value={getSheetValue('dischargeNumber')} onChange={e => updateSheetField('dischargeNumber', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-8">
+                                                            <Input label="Origen" placeholder="..." value={getSheetValue('originAddress')} onChange={e => updateSheetField('originAddress', e.target.value)} />
+                                                        </div>
                                                     </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
+
+                                                    {/* Row 2: Ciudad destino | Empresa Destino | CUIT Corredor */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Ciudad destino" placeholder="..." value={getSheetValue('destinationAddress')} onChange={e => updateSheetField('destinationAddress', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Empresa de Destino" placeholder="..." value={getSheetValue('destinationCompany')} onChange={e => updateSheetField('destinationCompany', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="CUIT Corredor" placeholder="..." value={getSheetValue('primarySaleCuit')} onChange={e => updateSheetField('primarySaleCuit', e.target.value)} />
+                                                        </div>
                                                     </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
+
+                                                    {/* Row 3: Truck specific fields */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-6 sm:col-span-3">
+                                                            <Input label="Empresa Transporte" placeholder="..." value={getSheetValue('transportCompany')} onChange={e => updateSheetField('transportCompany', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-6 sm:col-span-3">
+                                                            <Input label="Chofer" placeholder="..." value={getSheetValue('driverName')} onChange={e => updateSheetField('driverName', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-6 sm:col-span-3">
+                                                            <Input label="Patente Camión" placeholder="..." value={getSheetValue('truckPlate')} onChange={e => updateSheetField('truckPlate', e.target.value)} />
+                                                        </div>
+                                                        <div className="col-span-6 sm:col-span-3">
+                                                            <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
+                                                        </div>
                                                     </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Patente Acoplado" placeholder="..." value={getSheetValue('trailerPlate')} onChange={e => updateSheetField('trailerPlate', e.target.value)} />
+
+                                                    {/* Weights Group (Campo & Planta + Calcs) */}
+                                                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-4">
+                                                        {/* Pesos Campo & Planta */}
+                                                        <div className="grid grid-cols-12 gap-4">
+                                                            <div className="col-span-6 sm:col-span-3">
+                                                                <Input label="Peso Bruto Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeight')} onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))} />
+                                                            </div>
+                                                            <div className="col-span-6 sm:col-span-3">
+                                                                <Input label="Peso Tara Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeight')} onChange={e => updateSheetField('tareWeight', normalizeNumber(e.target.value))} />
+                                                            </div>
+                                                            <div className="col-span-6 sm:col-span-3">
+                                                                <Input label="Peso Bruto Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeightPlant')} onChange={e => updateSheetField('grossWeightPlant', normalizeNumber(e.target.value))} />
+                                                            </div>
+                                                            <div className="col-span-6 sm:col-span-3">
+                                                                <Input label="Peso Tara Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeightPlant')} onChange={e => updateSheetField('tareWeightPlant', normalizeNumber(e.target.value))} />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Netos & Dif */}
+                                                        <div className="grid grid-cols-12 gap-4">
+                                                            <div className="col-span-12 sm:col-span-4">
+                                                                <Input label="Peso Neto Campo" readOnly disabled value={netF.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
+                                                            </div>
+                                                            <div className="col-span-12 sm:col-span-4">
+                                                                <Input label="Peso Neto Planta" readOnly disabled value={netP.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
+                                                            </div>
+                                                            <div className="col-span-12 sm:col-span-4">
+                                                                <Input label="Dif" readOnly disabled value={diff.toLocaleString()} className={`bg-white/50 border-slate-100 font-bold ${diff < 0 ? 'text-red-600' : 'text-emerald-600'}`} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 4: Humedad | Hectolitrico | Cuerpos Extraños */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Humedad (%)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('humidity')} onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Peso Hectolítrico" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('hectoliterWeight')} onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="% Cuerpos Extraños" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('foreignMatter')} onChange={e => updateSheetField('foreignMatter', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 5: Tierra | Verde | Fecha/Hora Partida */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="% Tierra" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('earthPercentage')} onChange={e => updateSheetField('earthPercentage', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="% Verde" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('greenPercentage')} onChange={e => updateSheetField('greenPercentage', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Fecha/Hora Partida" type="datetime-local" value={getSheetValue('departureDateTime')} onChange={e => updateSheetField('departureDateTime', e.target.value)} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 6: Km | Tarifa | Socio */}
+                                                    <div className="grid grid-cols-12 gap-4">
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Km a recorrer" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('distanceKm')} onChange={e => updateSheetField('distanceKm', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <Input label="Tarifa Flete (USD)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('freightTariff')} onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))} />
+                                                        </div>
+                                                        <div className="col-span-12 sm:col-span-4">
+                                                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Marca de socio</label>
+                                                            <select className="flex-1 w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={getSheetValue('partnermark') || 'General'} onChange={e => updateSheetField('partnermark', e.target.value)}>
+                                                                <option value="General">General</option>
+                                                                {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* Weights Group (Campo & Planta + Calcs) */}
-                                            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-4">
-                                                {/* Pesos Campo & Planta */}
-                                                <div className="grid grid-cols-12 gap-4">
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Peso Bruto Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeight')} onChange={e => updateSheetField('grossWeight', normalizeNumber(e.target.value))} />
-                                                    </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Peso Tara Campo" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeight')} onChange={e => updateSheetField('tareWeight', normalizeNumber(e.target.value))} />
-                                                    </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Peso Bruto Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('grossWeightPlant')} onChange={e => updateSheetField('grossWeightPlant', normalizeNumber(e.target.value))} />
-                                                    </div>
-                                                    <div className="col-span-6 sm:col-span-3">
-                                                        <Input label="Peso Tara Planta" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('tareWeightPlant')} onChange={e => updateSheetField('tareWeightPlant', normalizeNumber(e.target.value))} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Netos & Dif */}
-                                                <div className="grid grid-cols-12 gap-4">
-                                                    <div className="col-span-12 sm:col-span-4">
-                                                        <Input label="Peso Neto Campo" readOnly disabled value={netF.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
-                                                    </div>
-                                                    <div className="col-span-12 sm:col-span-4">
-                                                        <Input label="Peso Neto Planta" readOnly disabled value={netP.toLocaleString()} className="bg-white/50 border-slate-100 font-bold" />
-                                                    </div>
-                                                    <div className="col-span-12 sm:col-span-4">
-                                                        <Input label="Dif" readOnly disabled value={diff.toLocaleString()} className={`bg-white/50 border-slate-100 font-bold ${diff < 0 ? 'text-red-600' : 'text-emerald-600'}`} />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Row 6: Humedad | Hectolitrico | Cuerpos Extraños */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Humedad (%)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('humidity')} onChange={e => updateSheetField('humidity', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Peso Hectolítrico" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('hectoliterWeight')} onChange={e => updateSheetField('hectoliterWeight', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="% Cuerpos Extraños" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('foreignMatter')} onChange={e => updateSheetField('foreignMatter', normalizeNumber(e.target.value))} />
-                                                </div>
-                                            </div>
-
-                                            {/* Row 7: Tierra | Verde | Fecha/Hora Partida */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="% Tierra" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('earthPercentage')} onChange={e => updateSheetField('earthPercentage', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="% Verde" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('greenPercentage')} onChange={e => updateSheetField('greenPercentage', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Fecha/Hora Partida" type="datetime-local" value={getSheetValue('departureDateTime')} onChange={e => updateSheetField('departureDateTime', e.target.value)} />
-                                                </div>
-                                            </div>
-
-                                            {/* Row 8: Km | Tarifa | Socio */}
-                                            <div className="grid grid-cols-12 gap-4">
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Km a recorrer" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('distanceKm')} onChange={e => updateSheetField('distanceKm', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <Input label="Tarifa Flete (USD)" type="text" inputMode="decimal" placeholder="0" value={getSheetValue('freightTariff')} onChange={e => updateSheetField('freightTariff', normalizeNumber(e.target.value))} />
-                                                </div>
-                                                <div className="col-span-12 sm:col-span-4">
-                                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Marca de socio</label>
-                                                    <select className="flex-1 w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={getSheetValue('partnermark') || 'General'} onChange={e => updateSheetField('partnermark', e.target.value)}>
-                                                        <option value="General">General</option>
-                                                        {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                                                    </select>
-                                                </div>
-                                            </div>
                                         </div>
                                     );
                                 })()}
@@ -987,13 +1053,19 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
 
                             <div className="space-y-2 relative">
                                 {distributions.map(dist => {
-                                    const isLocked = dist.type === 'PARTNER';
+                                    const isFromMark = dist.logistics?.isFromMark;
+                                    const isSilobolsa = dist.logistics?.isSilobolsa;
+                                    const isLocked = isFromMark; // Both Socio marks and Silobolsas are now locked
+                                    
                                     const info = getPartnerQuotaInfo(dist.targetName);
                                     const isExceeded = dist.type === 'PARTNER' && info && dist.amount > info.remaining + 0.1;
                                     return (
                                         <div key={dist.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100 transition-all hover:border-slate-200 relative">
                                             <div className="flex-1 flex flex-col">
-                                                <span className="text-xs font-bold text-slate-700">{dist.targetName}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-700">{dist.targetName}</span>
+                                                    {isSilobolsa && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">Bolsas</span>}
+                                                </div>
                                                 <div 
                                                     className="flex items-center cursor-pointer group"
                                                     onClick={(e) => {
@@ -1002,7 +1074,7 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                                     }}
                                                 >
                                                     <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400 group-hover:text-slate-600 transition-colors">
-                                                        {dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
+                                                        {isSilobolsa ? 'Carga Obligatoria' : dist.type === 'WAREHOUSE' ? 'Galpón' : 'Socio'}
                                                         {dist.type === 'PARTNER' && info && (
                                                             <span className={isExceeded ? 'text-red-500 ml-1' : 'ml-1'}>
                                                                 • CUPO: {info.remaining.toLocaleString()} kg ({info.percentage.toFixed(1)}%)
@@ -1060,7 +1132,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
                                     return (
                                         <div key={sheet.id} className="flex items-center gap-4 px-4 py-3 hover:bg-blue-50/50 transition-colors cursor-pointer border-b border-slate-50" onClick={() => { setActiveSheetIndex(idx); setStep(2); }}>
                                             <span className="text-sm font-black text-blue-600 min-w-[60px]">Nro {sheet.dischargeNumber || '—'}</span>
-                                            <span className="text-sm text-slate-600 flex-1 truncate">{sheet.driverName || 'Sin chofer'}</span>
+                                            <span className="text-sm text-slate-600 flex-1 truncate">
+                                                {sheet.transportType === 'BOLSA' ? (sheet.operatorName || 'Sin operario') : (sheet.driverName || 'Sin chofer')}
+                                            </span>
                                             <div className="flex flex-col items-end min-w-[80px]">
                                                 <span className="text-xs font-black text-slate-700">{net.toLocaleString()} kg</span>
                                                 <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">
