@@ -1869,12 +1869,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                             </td>
                                                             <td className="px-6 py-3 text-[12px] font-mono text-center border-r border-b border-gray-300 whitespace-nowrap font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
                                                                 {row.avgHumidity != null ? (
-                                                                    <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded shadow-sm ${row.avgHumidity <= 14 ? 'bg-emerald-500 text-white border border-emerald-600' :
-                                                                        row.avgHumidity <= 15 ? 'bg-amber-500 text-white border border-amber-600' :
-                                                                            'bg-red-500 text-white border border-red-600'
-                                                                        }`}>
+                                                                    <span className={
+                                                                        row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                        'text-red-500'
+                                                                    }>
                                                                         {row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
-                                                                    </div>
+                                                                    </span>
                                                                 ) : (
                                                                     <span className="text-gray-400">—</span>
                                                                 )}
@@ -1977,9 +1978,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-3 text-sm font-mono text-center border-r border-b border-gray-300 text-slate-600" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>
+                                                            <td className="px-6 py-3 text-sm font-mono text-center border-r border-b border-gray-300" style={{ backgroundColor: selectedSocioRetiroDetail === row.name ? 'rgba(59, 130, 246, 0.05)' : '', borderTop: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '', borderBottom: selectedSocioRetiroDetail === row.name ? '3px solid #3b82f6' : '' }}>
                                                                 {row.avgHumidity != null ? (
-                                                                    <span className="font-bold text-slate-600">{row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%</span>
+                                                                    <span className={`font-bold ${
+                                                                        row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                        'text-red-500'
+                                                                    }`}>
+                                                                        {row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%
+                                                                    </span>
                                                                 ) : (
                                                                     <span className="text-gray-400">—</span>
                                                                 )}
@@ -2078,7 +2085,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-center">
                                                                                     {trip.humedad != null ? (
-                                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${trip.humedad >= 14 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                                                        <span className={`text-[10px] font-black ${
+                                                                                            trip.humedad <= humidityThreshold ? 'text-emerald-600' :
+                                                                                            trip.humedad <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                                            'text-red-500'
+                                                                                        }`}>
                                                                                             {trip.humedad.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%
                                                                                         </span>
                                                                                     ) : (
@@ -2222,7 +2233,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-center">
                                                                                     {trip.humedad != null ? (
-                                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${trip.humedad >= 14 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                                        <span className={`text-[10px] font-black ${
+                                                                                            trip.humedad <= humidityThreshold ? 'text-emerald-600' :
+                                                                                            trip.humedad <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                                            'text-red-500'
+                                                                                        }`}>
                                                                                             {trip.humedad.toLocaleString('es-AR', { minimumFractionDigits: 1 })}%
                                                                                         </span>
                                                                                     ) : (
@@ -2261,7 +2276,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                             <div className="bg-white border border-slate-200/60 rounded-xl py-1.5 px-5 flex flex-col justify-between min-h-[56px] w-[175px]">
                                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Humedad promedio</p>
                                                                 <div className="flex items-baseline gap-1 whitespace-nowrap">
-                                                                    <span className="text-xl font-bold text-slate-800">
+                                                                    <span className={`text-xl font-bold ${
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold ? 'text-emerald-600' :
+                                                                        row.avgHumidity != null && row.avgHumidity <= humidityThreshold + 1 ? 'text-amber-600' :
+                                                                        row.avgHumidity != null ? 'text-red-500' : 'text-slate-800'
+                                                                    }`}>
                                                                         {row.avgHumidity != null ? row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                                                                     </span>
                                                                     <span className="text-[11px] font-bold text-slate-400">%</span>
