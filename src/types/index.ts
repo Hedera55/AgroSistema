@@ -83,6 +83,7 @@ export interface Lot { // Lote
     observedYield?: number; // Actual yield after harvest
     status?: LotStatus;
     lastHarvestId?: string;
+    currentSowingOrderId?: string; // Link to the active sowing order
     boundary?: GeoJSON.FeatureCollection | string; // KML content or GeoJSON
     kmlData?: string; // Original KML file content for download
     createdBy?: string;
@@ -405,8 +406,9 @@ export interface OrderActivity {
 export interface Observation {
     id: string;
     clientId: string;
-    farmId: string;
-    lotId?: string; // Optional: can be a general farm observation
+    campaignId?: string; // Optional: can be a campaign-level observation
+    farmId?: string;     // Optional: can be a general farm observation
+    lotId?: string;      // Optional: can be a lot-specific observation
     userName: string;
     date: string; // ISO Date
     comments: string;

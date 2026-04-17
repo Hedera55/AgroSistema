@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { InventoryMovement, Client, Warehouse, TransportSheet } from '@/types';
+import { InventoryMovement, Client, Warehouse, TransportSheet, Order } from '@/types';
 import { Button } from '@/components/ui/Button';
 
 interface HarvestDetailsViewProps {
@@ -16,6 +16,9 @@ interface HarvestDetailsViewProps {
     onEdit?: () => void;
     onSelectMovement?: (movement: InventoryMovement) => void;
     isReadOnly?: boolean;
+    transportSheets?: TransportSheet[]; // Master list from Order
+    harvestOrder?: Order | null;
+    onSelectSheet?: (sheet: TransportSheet, index: number) => void;
 }
 
 export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
@@ -29,7 +32,10 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
     onClose,
     onEdit,
     onSelectMovement,
-    isReadOnly = false
+    isReadOnly = false,
+    transportSheets = [],
+    harvestOrder = null,
+    onSelectSheet
 }) => {
     const [showSheets, setShowSheets] = useState(false);
 
@@ -40,17 +46,22 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
 
     const farmName = resolvedFarm?.name || (harvestMovement as any).farmName;
     const lotName = resolvedLot?.name || (harvestMovement as any).lotName;
-    const campaignName = campaigns?.find(c => c.id === harvestMovement.campaignId)?.name || harvestMovement.campaignId || '-';
+    
+    // Master data resolution
+    const campaignId = harvestOrder?.campaignId || harvestMovement.campaignId;
+    const campaignName = campaigns?.find(c => c.id === campaignId)?.name || campaignId || '-';
+    const harvestDate = harvestOrder?.date || harvestMovement.date;
 
-    // Collect all transport sheets from all distributions
-    const allSheets: TransportSheet[] = harvestMovements.reduce((acc: TransportSheet[], m) => {
-        if (m.transportSheets && m.transportSheets.length > 0) {
-            // Deduplicate by id
-            m.transportSheets.forEach(s => {
-                if (!acc.find(existing => existing.id === s.id)) {
-                    acc.push(s);
-                }
-            });
+    // Investor resolution (Master First)
+    const masterInvestors = (harvestOrder as any)?.investors || [];
+    const socioName = harvestOrder?.investorName || harvestMovement.receiverName || harvestMovement.investorName;
+    const isWarehouse = !!harvestMovement.warehouseId;
+
+    const allSheets: TransportSheet[] = (transportSheets.length > 0 ? transportSheets : harvestMovements.flatMap(m => m.transportSheets || [])).reduce((acc: TransportSheet[], s) => {
+        // HarvestDetailsView is a batch-level view, we should always display 
+        // all transport sheets associated with the batch and simply deduplicate them.
+        if (!acc.find(existing => existing.id === s.id)) {
+            acc.push(s);
         }
         return acc;
     }, []);
@@ -101,11 +112,16 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                 <div className="border-b border-slate-200 bg-blue-50/30 animate-fadeIn">
                     <div className="px-8 py-4">
                         <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-[0.2em] mb-3">Fichas de Transporte</h3>
-                        <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                            {allSheets.map((sheet, idx) => {
-                                const net = (sheet.grossWeight || 0) - (sheet.tareWeight || 0);
-                                return (
-                                    <div key={sheet.id || idx} className="bg-white rounded-lg border border-slate-200 p-3">
+                                <div className="space-y-2 max-h-[40vh] overflow-y-auto pb-2">
+                                    {allSheets.map((sheet, idx) => {
+                                        const net = (sheet.grossWeight || 0) - (sheet.tareWeight || 0);
+                                        return (
+                                            <div 
+                                                key={sheet.id || idx} 
+                                                className={`bg-white rounded-lg border border-slate-200 p-3 relative ${onSelectSheet ? 'cursor-pointer hover:bg-blue-50/50 transition-all active:scale-[0.98] hover:border-blue-300 shadow-sm hover:shadow-md' : ''}`}
+                                                onClick={() => onSelectSheet?.(sheet, idx)}
+                                                title={onSelectSheet ? "Click para editar ficha" : undefined}
+                                            >
                                         <div className="flex items-center gap-4 mb-2">
                                             <span className="text-sm font-black text-blue-600">Nro {sheet.dischargeNumber || '—'}</span>
                                             <span className="text-sm text-slate-600">{sheet.driverName || 'Sin chofer'}</span>
@@ -147,8 +163,8 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de cosecha</label>
                         <p className="text-sm font-bold text-slate-700">
                             {(() => {
-                                if (!harvestMovement.date) return '-';
-                                const [y, m, d] = harvestMovement.date.split('-');
+                                if (!harvestDate) return '-';
+                                const [y, m, d] = harvestDate.split('-');
                                 return `${d}/${m}/${y}`;
                             })()}
                         </p>
@@ -181,7 +197,7 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Contratista</label>
                         <p className="text-sm font-bold text-slate-700">
-                            {harvestMovement.contractorName || '-'}
+                            {harvestOrder?.contractorName || harvestMovement.contractorName || '-'}
                         </p>
                     </div>
                     <div>
@@ -189,7 +205,7 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                         <p className="text-sm font-bold text-slate-700">
                             {(() => {
                                 const totalCost = harvestMovements.reduce((sum, m) => sum + (m.harvestLaborCost || 0), 0);
-                                const pricePerHa = harvestMovements.find(m => m.harvestLaborPricePerHa)?.harvestLaborPricePerHa;
+                                const pricePerHa = harvestOrder?.servicePrice || harvestMovements.find(m => m.harvestLaborPricePerHa)?.harvestLaborPricePerHa;
                                 return (
                                     <>
                                         {totalCost > 0 ? `USD ${totalCost.toLocaleString()}` : '-'}
@@ -201,9 +217,19 @@ export const HarvestDetailsView: React.FC<HarvestDetailsViewProps> = ({
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Pagado por</label>
-                        <p className="text-sm font-bold text-slate-700">
-                            {harvestMovement.investorName || '-'}
-                        </p>
+                        <div className="text-sm font-bold text-slate-700">
+                            {masterInvestors.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {masterInvestors.map((inv: any, idx: number) => (
+                                        <span key={idx} className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                                            {inv.name} ({inv.percentage}%)
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <span>{socioName || '-'}</span>
+                            )}
+                        </div>
                     </div>
                 </div>
 

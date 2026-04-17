@@ -55,6 +55,9 @@ export function calculateCampaignPartnerShares(movements: InventoryMovement[], o
         const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
         if (isTransfer) return;
 
+        // Skip Service movements that belong to an Order (to avoid double counting)
+        if (m.type === 'SERVICE' && m.harvestBatchId) return;
+
         if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
             let amount = 0;
             if (m.type === 'SERVICE') {
@@ -125,6 +128,9 @@ export function calculateCampaignPartnerInvestment(movements: InventoryMovement[
         if (m.deleted) return;
         const isTransfer = m.notes?.toLowerCase().includes('transferencia') || m.notes?.toLowerCase().includes('traslado');
         if (isTransfer) return;
+
+        // Skip Service movements that belong to an Order (to avoid double counting)
+        if (m.type === 'SERVICE' && m.harvestBatchId) return;
 
         if (m.type === 'IN' || m.type === 'PURCHASE' || m.type === 'SERVICE') {
             let amount = 0;

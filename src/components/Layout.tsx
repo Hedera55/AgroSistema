@@ -271,6 +271,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { name: 'Campos', href: `/clients/${effectiveId}/fields`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Contaduría', href: `/clients/${effectiveId}/investors`, show: showClientMenu && role !== 'CONTRATISTA' },
         { name: 'Órdenes', href: role === 'CONTRATISTA' ? '/orders' : `/clients/${effectiveId}/orders`, show: role === 'CONTRATISTA' || showClientMenu },
+        { name: 'GRÁFICOS', href: `/clients/${effectiveId}/analytics?tab=summary`, show: showClientMenu && role !== 'CONTRATISTA' },
     ].filter(item => item.show), [isMaster, role, effectiveId, showClientMenu]);
 
     // Don't show sidebar/header on login page or public context
@@ -307,9 +308,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             <div key={item.name} className="space-y-1">
                                 <Link
                                     href={item.href}
-                                    className={`block px-4 py-3 rounded-lg transition-colors ${isMainActive
-                                        ? 'bg-emerald-600 text-white shadow-lg'
-                                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                    className={`block px-4 py-3 rounded-lg transition-colors ${
+                                        item.name === 'GRÁFICOS' 
+                                            ? (pathname?.includes('/analytics') ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/20' : 'text-slate-300 hover:bg-slate-800 hover:text-white')
+                                            : (isMainActive ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white')
                                         }`}
                                 >
                                     {item.name}
@@ -338,10 +340,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     })}
 
                     {currentClientName && showClientMenu && role !== 'CONTRATISTA' && (
-                        <div className="mt-4 animate-fadeIn">
+                        <div className="mt-6 animate-fadeIn space-y-1">
                             <Link
                                 href={`/clients/${effectiveId}`}
-                                className="px-4 text-sm text-emerald-500 font-medium truncate tracking-wide hover:text-emerald-400 transition-all block mb-10"
+                                className="px-4 text-sm text-emerald-500 font-medium truncate tracking-wide hover:text-emerald-400 transition-all block mb-5"
                             >
                                 {currentClientName}
                             </Link>
@@ -477,6 +479,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 {/* Right Column: Client & Cosechas */}
                                 {currentClientName && showClientMenu && (
                                     <div className="space-y-4">
+                                        <Link
+                                            href={`/clients/${effectiveId}/analytics?tab=summary`}
+                                            onClick={() => setIsMobileMenuOpen(false)}
+                                            className="block py-2 text-slate-300 hover:text-emerald-500 font-medium border-b border-white/5"
+                                        >
+                                            GRÁFICOS
+                                        </Link>
                                         <Link
                                             href={`/clients/${effectiveId}`}
                                             onClick={() => setIsMobileMenuOpen(false)}

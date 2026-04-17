@@ -24,7 +24,7 @@ export interface HarvestProcessParams {
 
 export const processHarvest = async (params: HarvestProcessParams) => {
     const { db, clientId, lot, data, campaigns, products, identity, updaters, isEditing, existingBatchId, existingOrder } = params;
-    const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, technicalResponsible, distributions, transportSheets: sheets } = data;
+    const { date, contractor, campaignId, laborPricePerHa, investor, harvestType: selectedHarvestType, totalYield, technicalResponsible, distributions, transportSheets: sheets, sowingOrderId } = data;
 
     const batchId = existingBatchId || (existingOrder as any)?.harvestBatchId || generateId();
     const campaign = campaigns.find(c => String(c.id) === String(campaignId));
@@ -124,6 +124,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         status: 'HARVESTED',
         observedYield: totalYield,
         lastHarvestId: batchId,
+        currentSowingOrderId: undefined, // Clear the link after harvest
         lastUpdatedBy: identity.displayName || 'Sistema'
     });
 
@@ -186,19 +187,13 @@ export const processHarvest = async (params: HarvestProcessParams) => {
             referenceId: lot.id,
             campaignId: campaignId || undefined,
             notes: `Cosecha de lote ${lot.name}`,
-            contractorName: contractor || undefined,
-            harvestLaborPricePerHa: pricePerHa || undefined,
-            harvestLaborCost: isFirstDist ? (totalCost || undefined) : 0,
-            investorName: investor || undefined,
-            investors: data.investors || [],
             receiverName: dist.type === 'PARTNER' ? dist.targetName : undefined,
             createdBy: identity.displayName || 'Sistema',
             createdAt: new Date().toISOString(),
             synced: false,
             harvestBatchId: batchId,
             source: 'HARVEST',
-            technicalResponsible,
-            transportSheets: distSheets.length > 0 ? distSheets : (sheets || []),
+            transportSheets: undefined // Sanitize: ensure no trucks sneak in via dist.logistics spread
         });
     }
 
@@ -226,6 +221,11 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         synced: false,
         harvestBatchId: batchId,
         technicalResponsible,
+        sowingOrderId: sowingOrderId || (lot as any).currentSowingOrderId,
+        transportSheets: (sheets || []).map(s => ({
+            ...s,
+            lotId: lot.id // Ensure lot link is preserved
+        })),
         notes: `Cosecha de ${lot.cropSpecies || 'Cultivo'} en ${lot.name}`
     };
 

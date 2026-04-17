@@ -309,6 +309,15 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
 - **Affected Files**: `stock/history/page.tsx` (main rows + expanded sub-items), `admin/tables/page.tsx` (stock view enrichment in `loadData`).
 - **Key Principle**: The `productId` is the chain of consistency. All metadata (brand, commercial name) is derived from associating that ID with the Product Catalog. Views should never rely solely on what the movement record stored.
 ## 🌾 Harvest Data Integrity & Persistence
+### 🧩 The Fragmented Harvest Model
+A single harvest action creates a highly fragmented database footprint:
+- **1 Order**: The master record containing the global metadata (price, contractor) and the unique `harvestBatchId`.
+- **N InventoryMovements**: The split destinations (e.g., 60% Acopio, 40% Socio)—each bearing the `harvestBatchId` so they can be tracked independently in the virtual "Galpón".
+- **N TransportSheets**: The logistics associated with the batch.
+
+> [!NOTE] 
+> **ID Mapping Context**: Architecturally, `harvestBatchId` and the master `Order.id` represent the exact same concept (the underlying harvest event) and could logically be merged. They exist simultaneously due to legacy data support where harvests were instantiated purely as movements without a master Order. Today, they remain distinctly tracked but are explicitly mapped together (`order.harvestBatchId`).
+
 - **State Shadowing**: Avoid creating "lite" versions of the Harvest Wizard (e.g., side-panel forms). Always use the full `HarvestWizard` component to ensure all metadata (transport sheets, contractors) is correctly managed and aggregated.
 - **Aggregation Pattern**: When editing an event composed of multiple movements (like a multi-destination harvest), ALWAYS aggregate all sub-items (e.g., `transportSheets`) before populating the edit wizard. Failure to do so leads to data loss for all but the first movement.
 - **Save Priority (The Spread Rule)**: When updating historical movements that contain a `logistics` object, always spread the legacy logistics **FIRST**, and then apply updated metadata (Contractor, Price, Sheets). Spreading logistics last will clobber any fresh user input with stale data.
@@ -438,3 +447,23 @@ The system uses a dual-sourcing logic for calculating the **Precio Promedio Pond
     4. **Content Box**: `className="bg-white p-2 rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.25)] border border-slate-200 pointer-events-auto w-max"`. Ensure `w-max` and `whitespace-nowrap` are applied so the giant UI clone does not line-wrap due to flexbox container constraints.
     5. **Clone Strategy**: Inside the box, perfectly clone the original's layout (colors, `uppercase`, `tracking-wider`, `opacity`, `hover` states) but manually bump the sizes e.g., `text-[10px]` -> `text-[28px]` and `h-3.5 w-3.5` -> `h-9 w-9`.
 
+### 🔗 Traceability through Relational Traversal (Avoiding Duplication)
+- **Principle**: Minimize redundant ID storage. Instead of duplicating every related entity ID (e.g., `lotId`, `farmId`, `campaignId`) at every level of a chain (like a `TransportSheet`), we rely on **relational traversal**.
+- **Implementation**: If a `TransportSheet` is nested within an `InventoryMovement`, the sheet does not need its own `lotId`. The system "translates" the parent movement's `lotId` at display-time or during aggregation.
+- **Benefit**: Ensures data integrity by having a single source of truth for the relationship. If a harvest is moved to a different lot, all its sheets automatically reflect the change without requiring a batch update of individual sheet records.
+
+## 🚜 Sowing & Harvesting Traceability Feature
+
+To ensure a deterministic "Seed-to-Grain" pipeline, the system avoids "fuzzy" date-based lookups and instead uses an explicit ID-based link.
+
+- **The Lot as State Holder**: The `Lot` entity includes a `currentSowingOrderId` field. This acts as a persistent "memory" of the active crop in that specific field.
+- **The "Sowing Signal" (Syncing)**: 
+    - **Trigger**: When an order of type `SOWING` is moved to `DONE` status (applied).
+    - **Action**: The system iterates through all involved lots (`order.lotIds`) and stamps them with the `currentSowingOrderId: order.id`. 
+- **The "Harvest Hand-off" (Consumption)**: 
+    - **Trigger**: During the `processHarvest` service call.
+    - **Action**: The service retrieves the `currentSowingOrderId` from the Lot object and stores it as a permanent reference in the newly created `HarvestOrder`.
+    - **Cycle Reset**: Upon completion, the `currentSowingOrderId` is cleared from the Lot, marking it as ready for a new campaign cycle.
+- **Analytics Visibility**: 
+    - The **"Cultivo"** (Crop) filter in the Analytics dashboard is populated dynamically by scanning `HARVEST` movements.
+    - Because the harvest is technically anchored to a sowing ID, the dashboard metrics (Neto Planta, Merma, etc.) maintain 100% technical integrity even if crop names are slightly inconsistent in the order items.

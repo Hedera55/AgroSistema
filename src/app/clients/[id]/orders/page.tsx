@@ -228,22 +228,6 @@ export default function OrdersPage({ params }: { params: Promise<{ id: string }>
             };
 
             await updateOrderStatus(orderId, nextStatus, displayName || 'Sistema', auditData, order.servicePrice);
-
-            // AUTO-UPDATE-LOT: If unapplying a Sowing order, revert lot to EMPTY
-            if (nextStatus === 'PENDING' && order.type === 'SOWING') {
-                const lot = lots.find(l => l.id === order.lotId);
-                if (lot) {
-                    await db.put('lots', {
-                        ...lot,
-                        status: 'EMPTY',
-                        cropSpecies: '',
-                        yield: 0,
-                        observedYield: 0,
-                        updatedAt: new Date().toISOString()
-                    });
-                    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: 'EMPTY', cropSpecies: '', yield: 0, observedYield: 0 } : l));
-                }
-            }
         } catch (e) {
             alert('Error al actualizar el estado');
         }

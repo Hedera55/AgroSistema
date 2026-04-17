@@ -43,16 +43,24 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                 const allMovements = await db.getAll('movements');
                 const movementsForLot = allMovements.filter((m: any) => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha' && !m.deleted);
 
-                // Grouping by date and time
+                // Fetch Harvest Orders specifically to get Master logistics
+                const harvestOrders = allOrders.filter((o: Order) => o.type === 'HARVEST');
+
+                // Grouping by batch ID (Strict Mode)
                 const groups: Record<string, any> = {};
                 movementsForLot.forEach((m: any) => {
-                    const key = `${m.date}_${m.time || '00:00'}`;
+                    if (!m.harvestBatchId) return; // Skip loose movements without a Master Batch link
+                    
+                    const key = m.harvestBatchId;
                     if (!groups[key]) {
+                        // Find the harvest order for this batch
+                        const harvestOrder = harvestOrders.find(o => o.harvestBatchId === m.harvestBatchId || o.id === m.harvestBatchId);
+
                         groups[key] = {
-                            id: m.id, // Use first one's ID
+                            id: m.id,
                             harvestBatchId: m.harvestBatchId,
                             date: m.date,
-                            time: m.time,
+                            time: m.time || '00:00',
                             type: 'HARVEST',
                             observedYield: 0,
                             harvestLaborCost: 0,
@@ -61,17 +69,20 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                             contractorName: m.contractorName,
                             author: m.createdBy || 'Sistema',
                             timestamp: new Date(`${m.date}T${m.time || '00:00'}`).getTime(),
-                            movements: []
+                            movements: [],
+                            // Master logistics from Order
+                            transportSheets: harvestOrder?.transportSheets || [],
+                            harvestOrder: harvestOrder
                         };
                     }
-                        groups[key].observedYield += m.quantity;
-                        groups[key].harvestLaborCost += m.harvestLaborCost || 0;
-                        if (m.harvestLaborPricePerHa) groups[key].harvestLaborPricePerHa = m.harvestLaborPricePerHa;
-                        if (m.contractorName && !groups[key].contractorName) groups[key].contractorName = m.contractorName;
-                        if (m.investorName && !groups[key].investorName) groups[key].investorName = m.investorName;
-                        if (m.campaignId && !groups[key].campaignId) groups[key].campaignId = m.campaignId;
-                        groups[key].movements.push(m);
-                    });
+                    groups[key].observedYield += m.quantity;
+                    groups[key].harvestLaborCost += m.harvestLaborCost || 0;
+                    if (m.harvestLaborPricePerHa) groups[key].harvestLaborPricePerHa = m.harvestLaborPricePerHa;
+                    if (m.contractorName && !groups[key].contractorName) groups[key].contractorName = m.contractorName;
+                    if (m.investorName && !groups[key].investorName) groups[key].investorName = m.investorName;
+                    if (m.campaignId && !groups[key].campaignId) groups[key].campaignId = m.campaignId;
+                    groups[key].movements.push(m);
+                });
 
                 const harvestEvents = Object.values(groups);
 
@@ -161,9 +172,9 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                                     <div className="font-mono font-bold text-slate-800">
                                         {(event.harvestLaborCost > 0 || event.harvestLaborPricePerHa > 0) ? (
                                             <span>
-                                                ${(event.harvestLaborCost || 0).toLocaleString()} 
-                                                <span className="text-slate-400 font-normal mx-1">/</span> 
                                                 {event.observedYield?.toLocaleString()} kg
+                                                <span className="text-slate-400 font-normal mx-1">/</span> 
+                                                ${(event.harvestLaborCost || 0).toLocaleString()} 
                                             </span>
                                         ) : (
                                             <span>{event.observedYield?.toLocaleString()} kg</span>

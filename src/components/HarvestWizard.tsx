@@ -55,12 +55,17 @@ interface HarvestWizardProps {
     initialContractor: string;
     initialLaborPrice: string;
     initialYield: string;
+    initialCampaignId?: string;
+    initialInvestors?: Array<{ name: string; percentage: number }>;
+    initialHarvestType?: 'SEMILLA' | 'GRANO';
     initialTechnicalResponsible?: string;
     isExecutingPlan: boolean;
     initialDistributions?: any[];
     initialTransportSheets?: TransportSheet[];
     defaultWhId?: string;
     onBalanceError?: (error: { partner: string, equation: string, formula: string } | null) => void;
+    initialStep?: number;
+    initialActiveSheetIndex?: number;
 }
 
 export const HarvestWizard: React.FC<HarvestWizardProps> = ({
@@ -78,6 +83,9 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     initialContractor,
     initialLaborPrice,
     initialYield,
+    initialCampaignId,
+    initialInvestors,
+    initialHarvestType,
     isExecutingPlan,
     initialDistributions,
     initialTransportSheets,
@@ -85,23 +93,31 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
     defaultWhId,
     campaignShares = {},
     campaignInvestments = {},
-    onBalanceError
+    onBalanceError,
+    initialStep,
+    initialActiveSheetIndex
 }) => {
-    const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+    const [step, setStep] = useState<1 | 2 | 3 | 4>((initialStep as any) || 1);
 
     // Step 1 State
     const [harvestDate, setHarvestDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
     const [harvestContractor, setHarvestContractor] = useState(initialContractor || '');
-    const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(initialDistributions?.[0]?.campaignId || initialDistributions?.[0]?.logistics?.campaignId || '');
+    const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState(
+        initialCampaignId || 
+        initialDistributions?.[0]?.campaignId || 
+        initialDistributions?.[0]?.logistics?.campaignId || ''
+    );
     const [harvestLaborPrice, setHarvestLaborPrice] = useState(initialLaborPrice || '');
     const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>(
-        initialDistributions?.[0]?.investors ||
+        initialInvestors && initialInvestors.length > 0 ? initialInvestors :
+        (initialDistributions?.[0]?.investors ||
         initialDistributions?.[0]?.logistics?.investors ||
         (initialDistributions?.[0]?.investorName ? [{ name: initialDistributions?.[0]?.investorName, percentage: 100 }] :
-            initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : [])
+            initialDistributions?.[0]?.logistics?.investorName ? [{ name: initialDistributions[0].logistics.investorName, percentage: 100 }] : []))
     );
     const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>(
-        (initialDistributions?.[0]?.type === 'SEMILLA' || initialDistributions?.[0]?.logistics?.type === 'SEMILLA') ? 'SEMILLA' : 'GRANO'
+        initialHarvestType ||
+        ((initialDistributions?.[0]?.type === 'SEMILLA' || initialDistributions?.[0]?.logistics?.type === 'SEMILLA') ? 'SEMILLA' : 'GRANO')
     );
     const [harvestTechnicalResponsible, setHarvestTechnicalResponsible] = useState(
         initialTechnicalResponsible || 
@@ -170,7 +186,11 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
         };
         return [firstSheet];
     });
-    const [activeSheetIndex, setActiveSheetIndex] = useState(initialTransportSheets && initialTransportSheets.length > 0 ? initialTransportSheets.length - 1 : 0);
+    const [activeSheetIndex, setActiveSheetIndex] = useState(
+        initialActiveSheetIndex !== undefined 
+            ? initialActiveSheetIndex 
+            : (initialTransportSheets && initialTransportSheets.length > 0 ? initialTransportSheets.length - 1 : 0)
+    );
     const [selectedProfileId, setSelectedProfileId] = useState('general');
     const [customProfiles, setCustomProfiles] = useState<Array<{ id: string; name: string; data: Partial<TransportSheet> }>>([]);
 

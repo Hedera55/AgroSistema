@@ -1,0 +1,142 @@
+20:13:03.827 DEBUG Quality: validSheets IDs: 
+Array(8) [ {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…} ]
+​
+0: Object { lot: "5ee584f3-346c-4bf7-9b61-d0903184d803", batch: "90db7207-e33c-4ac5-9394-0f0be412dc11", date: "2026-04-12", … }
+​
+​
+batch: "90db7207-e33c-4ac5-9394-0f0be412dc11"
+​
+​
+date: "2026-04-12"
+​
+​
+lot: "5ee584f3-346c-4bf7-9b61-d0903184d803"
+​
+​
+time: "07:04"
+​
+​
+<prototype>: Object { … }
+​
+1: Object { lot: "5ee584f3-346c-4bf7-9b61-d0903184d803", batch: "90db7207-e33c-4ac5-9394-0f0be412dc11", date: "2026-04-12", … }
+​
+​
+batch: "90db7207-e33c-4ac5-9394-0f0be412dc11"
+​
+​
+date: "2026-04-12"
+​
+​
+lot: "5ee584f3-346c-4bf7-9b61-d0903184d803"
+​
+​
+time: "07:04"
+​
+​
+<prototype>: Object { … }
+​
+2: Object { lot: "5ee584f3-346c-4bf7-9b61-d0903184d803", batch: "90db7207-e33c-4ac5-9394-0f0be412dc11", date: "2026-04-12", … }
+​
+​
+batch: "90db7207-e33c-4ac5-9394-0f0be412dc11"
+​
+​
+date: "2026-04-12"
+​
+​
+lot: "5ee584f3-346c-4bf7-9b61-d0903184d803"
+​
+​
+time: "07:04"
+​
+​
+<prototype>: Object { … }
+​
+3: Object { lot: "5ee584f3-346c-4bf7-9b61-d0903184d803", batch: "90db7207-e33c-4ac5-9394-0f0be412dc11", date: "2026-04-12", … }
+​
+​
+batch: "90db7207-e33c-4ac5-9394-0f0be412dc11"
+​
+​
+date: "2026-04-12"
+​
+​
+lot: "5ee584f3-346c-4bf7-9b61-d0903184d803"
+​
+​
+time: "07:04"
+​
+​
+<prototype>: Object { … }
+​
+4: Object { lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e", batch: "9c69c271-6031-4fcf-9174-cde5fc9be659", date: "2026-04-13", … }
+​
+​
+batch: "9c69c271-6031-4fcf-9174-cde5fc9be659"
+​
+​
+date: "2026-04-13"
+​
+​
+lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e"
+​
+​
+time: "07:05"
+​
+​
+<prototype>: Object { … }
+​
+5: Object { lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e", batch: "9c69c271-6031-4fcf-9174-cde5fc9be659", date: "2026-04-13", … }
+​
+​
+batch: "9c69c271-6031-4fcf-9174-cde5fc9be659"
+​
+​
+date: "2026-04-13"
+​
+​
+lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e"
+​
+​
+time: "07:05"
+​
+​
+<prototype>: Object { … }
+​
+6: Object { lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e", batch: "9c69c271-6031-4fcf-9174-cde5fc9be659", date: "2026-04-13", … }
+​
+​
+batch: "9c69c271-6031-4fcf-9174-cde5fc9be659"
+​
+​
+date: "2026-04-13"
+​
+​
+lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e"
+​
+​
+time: "07:05"
+​
+​
+<prototype>: Object { … }
+​
+7: Object { lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e", batch: "9c69c271-6031-4fcf-9174-cde5fc9be659", date: "2026-04-13", … }
+​
+​
+batch: "9c69c271-6031-4fcf-9174-cde5fc9be659"
+​
+​
+date: "2026-04-13"
+​
+​
+lot: "f09a24c9-98a8-4210-82e6-bd8f3b8f5a1e"
+​
+​
+time: "07:05"
+​
+​
+<prototype>: Object { … }
+​
+length: 8
+​
+<prototype>: Array []

@@ -239,25 +239,42 @@ export function useOrders(clientId: string) {
 
             await db.put('orders', updatedOrder);
 
-            // --- AUTOMATED LOT STATUS UPDATE ---
-            // If it's a SOWING order and it's being marked as DONE, update the Lot status
-            if (order.type === 'SOWING' && newStatus === 'DONE' && order.lotId) {
-                const lot = await db.get('lots', order.lotId);
-                if (lot) {
-                    // Find the seed item in the order
-                    const seedItem = order.items?.find(i => i.productType === 'SEED');
-                    const sowedCrop = seedItem?.productName || order.items?.[0]?.productName || 'Desconocido';
-                    await db.put('lots', {
-                        ...lot,
-                        clientId: lot.clientId || clientId,
-                        cropSpecies: sowedCrop,
-                        status: 'SOWED',
-                        updatedAt: new Date().toISOString(),
-                        synced: false
-                    });
+            // --- AUTOMATED LOT STATUS UPDATE (MULTI-LOT SUPPORT) ---
+            if (order.type === 'SOWING') {
+                const lotIds = order.lotIds && order.lotIds.length > 0 ? order.lotIds : (order.lotId ? [order.lotId] : []);
+                
+                for (const lid of lotIds) {
+                    const lot = await db.get('lots', lid);
+                    if (lot) {
+                        if (newStatus === 'DONE') {
+                            // Apply Sowing: Stamp ID and status
+                            const seedItem = order.items?.find(i => i.productType === 'SEED');
+                            const sowedCrop = seedItem?.productName || order.items?.[0]?.productName || 'Desconocido';
+                            await db.put('lots', {
+                                ...lot,
+                                status: 'SOWED',
+                                cropSpecies: sowedCrop,
+                                currentSowingOrderId: order.id, // THE TRACING LINK
+                                updatedAt: new Date().toISOString(),
+                                synced: false
+                            });
+                        } else if (newStatus === 'PENDING') {
+                            // Revert Sowing: Clear status and link
+                            await db.put('lots', {
+                                ...lot,
+                                status: 'EMPTY',
+                                cropSpecies: '',
+                                currentSowingOrderId: undefined,
+                                yield: 0,
+                                observedYield: 0,
+                                updatedAt: new Date().toISOString(),
+                                synced: false
+                            });
+                        }
+                    }
                 }
             }
-            // ------------------------------------
+            // -------------------------------------------------------
 
             await db.logOrderActivity({
                 orderId: order.id,

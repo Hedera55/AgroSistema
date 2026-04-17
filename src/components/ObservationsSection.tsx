@@ -9,13 +9,15 @@ import { generateId } from '@/lib/uuid';
 
 interface ObservationsSectionProps {
     clientId: string;
-    farmId: string;
-    lotId?: string; // If present, shows lot-specific observations
+    campaignId?: string; // If present, shows campaign-specific observations
+    farmId?: string;     // Optional if campaignId is present
+    lotId?: string;      // If present, shows lot-specific observations
     isReadOnly?: boolean;
 }
 
 export function ObservationsSection({
     clientId,
+    campaignId,
     farmId,
     lotId,
     isReadOnly = false
@@ -35,7 +37,7 @@ export function ObservationsSection({
 
     useEffect(() => {
         fetchObservations();
-    }, [farmId, lotId]);
+    }, [farmId, lotId, campaignId]);
 
     async function fetchObservations() {
         setLoading(true);
@@ -43,8 +45,10 @@ export function ObservationsSection({
             const all = await db.getAll('observations');
             const filtered = all.filter((o: Observation) =>
                 o.clientId === clientId &&
-                o.farmId === farmId &&
-                (lotId ? o.lotId === lotId : !o.lotId) &&
+                (campaignId 
+                    ? o.campaignId === campaignId 
+                    : (o.farmId === farmId && (lotId ? o.lotId === lotId : !o.lotId))
+                ) &&
                 !o.deleted // Don't show deleted items
             );
             // Sort by date descending
@@ -78,6 +82,7 @@ export function ObservationsSection({
                 const newVal: Observation = {
                     id: generateId(),
                     clientId,
+                    campaignId,
                     farmId,
                     lotId: lotId || undefined,
                     userName,

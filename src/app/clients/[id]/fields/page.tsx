@@ -89,9 +89,12 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const [harvestMovements, setHarvestMovements] = useState<InventoryMovement[]>([]);
     const [harvestPlanOrder, setHarvestPlanOrder] = useState<Order | null>(null);
     const [isEditingHarvestPanel, setIsEditingHarvestPanel] = useState(false);
+    const [wizardInitialStep, setWizardInitialStep] = useState<number>(1);
+    const [wizardInitialActiveSheetIndex, setWizardInitialActiveSheetIndex] = useState<number | undefined>(undefined);
     const [contractors, setContractors] = useState<{ id: string, username: string }[]>([]);
     const [client, setClient] = useState<any>(null);
     const [selectedHarvestInvestor, setSelectedHarvestInvestor] = useState('');
+    const [selectedHarvestInvestors, setSelectedHarvestInvestors] = useState<Array<{ name: string; percentage: number }>>([]);
     const [selectedHarvestWarehouseId, setSelectedHarvestWarehouseId] = useState('');
     const [selectedHarvestCampaignId, setSelectedHarvestCampaignId] = useState('');
     const [harvestType, setHarvestType] = useState<'SEMILLA' | 'GRANO'>('GRANO');
@@ -212,12 +215,30 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
             return;
         }
 
-        // If the lot associated with the panel is no longer selected, close it
+        // If the lot associated with the panel is no longer selected...
         if (activePanel.lotId && activePanel.lotId !== selectedLotId) {
+            // "If I open ver historial del lote, it stays open even if I click another lote"
+            if (activePanel.type === 'history' && selectedLotId) {
+                const newLot = lots.find(l => l.id === selectedLotId) || allClientLots.find(l => l.id === selectedLotId);
+                if (newLot) {
+                    setActivePanel(prev => ({
+                        ...(prev as any),
+                        id: newLot.id,
+                        farmId: selectedFarmId,
+                        lotId: newLot.id,
+                        name: newLot.name,
+                        subtitle: `Lote de ${farms.find(f => f.id === selectedFarmId)?.name}`
+                    }));
+                    setSelectedEvent(null);
+                    setSelectedMovement(null);
+                    return;
+                }
+            }
+            // Otherwise, close it.
             setActivePanel(null);
             return;
         }
-    }, [selectedFarmId, selectedLotId, activePanel]);
+    }, [selectedFarmId, selectedLotId, activePanel?.farmId, activePanel?.lotId, activePanel?.type, lots, farms, allClientLots]);
 
     const openPanel = (
         type: PanelType,
@@ -397,51 +418,64 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
         }
     };
 
-    const handleEditHarvest = (event: any) => {
+    const handleEditHarvest = async (event: any, initialStep = 1, initialSheetIndex?: number) => {
         // Find lot and farm
-        const lotId = activePanel?.lotId || activePanel?.id;
-        const lot = lots.find(l => l.id === lotId);
-        const farm = farms.find(f => f.id === selectedFarmId);
+        const lotId = activePanel?.lotId || activePanel?.id || event.lotId || event.referenceId;
+        const lot = lots.find(l => l.id === lotId) || allClientLots.find(l => l.id === lotId);
+        const farm = farms.find(f => f.id === selectedFarmId) || farms.find(f => f.id === lot?.farmId);
 
         if (!lot || !farm) return;
 
-        // 1. Prepare wizard states
-        // 1. Aggregate ALL transport sheets from all related movements
-        const eventMovements = (event.movements || [event]);
-        const allSheets: any[] = [];
-        eventMovements.forEach((m: any) => {
-            if (m.transportSheets) {
-                m.transportSheets.forEach((s: any) => {
-                    if (!allSheets.find(existing => existing.id === s.id)) {
-                        allSheets.push(s);
-                    }
-                });
-            }
-        });
+        // 1. Prepare logistics recovery pool from the grouped event
+        // Both History and Side Panel now pass an event with pre-grouped .movements and .transportSheets
+        const allSheets: any[] = event.transportSheets || [];
 
-        // 2. Prepare wizard states
-        setHarvestDate(event.date);
-        setHarvestContractor(event.contractorName || '');
-        setObservedYield(event.observedYield?.toString() || event.quantity?.toString() || '');
-        setHarvestLaborPrice(event.harvestLaborPricePerHa?.toString() || event.movements?.[0]?.harvestLaborPricePerHa?.toString() || '');
-        setSelectedHarvestInvestor(event.investorName || event.movements?.[0]?.investorName || '');
-        setSelectedHarvestCampaignId(event.campaignId || event.movements?.[0]?.campaignId || '');
-        setHarvestTechnicalResponsible(event.technicalResponsible || event.movements?.[0]?.technicalResponsible || '');
+        // 2. Prepare wizard states using Harvest Order source of truth
+        const source = event.harvestOrder || event;
+        const mainMov = event.movements?.[0] || event;
+
+        setHarvestDate(source.date || event.date);
+        setHarvestContractor(source.contractorName || event.contractorName || '');
+        setObservedYield(source.expectedYield?.toString() || event.observedYield?.toString() || event.quantity?.toString() || '');
+        setHarvestLaborPrice(source.servicePrice?.toString() || event.harvestLaborPricePerHa?.toString() || mainMov?.harvestLaborPricePerHa?.toString() || '');
+        setSelectedHarvestInvestor(source.investorName || mainMov?.investorName || '');
+        setSelectedHarvestCampaignId(source.campaignId || mainMov?.campaignId || '');
+        setHarvestTechnicalResponsible(source.technicalResponsible || mainMov?.technicalResponsible || '');
+        setHarvestType(source.harvestType === 'SEMILLA' ? 'SEMILLA' : 'GRANO');
+        
+        // Populate plural investors
+        const masterInvestors = (source as any).investors;
+        if (masterInvestors && Array.isArray(masterInvestors)) {
+            setSelectedHarvestInvestors(masterInvestors);
+        } else {
+            const fallbackSocio = source.investorName || mainMov?.investorName;
+            if (fallbackSocio) {
+                setSelectedHarvestInvestors([{ name: fallbackSocio, percentage: 100 }]);
+            } else {
+                setSelectedHarvestInvestors([]);
+            }
+        }
 
         // 3. Open Wizard in Edit Mode
+        setWizardInitialStep(initialStep);
+        setWizardInitialActiveSheetIndex(initialSheetIndex);
         setHarvestPlanOrder({
             ...event,
-            transportSheets: allSheets // Pass the aggregated sheets
+            transportSheets: allSheets // Pass the recovered master sheets
         });
         setIsEditingHarvestPanel(true);
         setIsHarvesting(true);
         setSelectedLotId(lot.id);
 
-        // 3. Scroll to it
+        // 4. Scroll to it
         setTimeout(() => {
             const anchor = document.getElementById('harvest-wizard-scroll-anchor');
             anchor?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
+    };
+
+    const handleOpenSheetEdit = (event: any, index: number) => {
+        handleEditHarvest(event, 2, index);
     };
 
     const handleCancelHarvest = async (lot: Lot) => {
@@ -754,25 +788,66 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
     const fetchHarvestDetails = async (lotId: string) => {
         try {
             const allMovements = await db.getAll('movements') as InventoryMovement[];
-            const hms = allMovements.filter(m => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha');
-            setHarvestMovements(hms);
+            const movementsForLot = allMovements.filter(m => m.referenceId === lotId && m.type === 'HARVEST' && m.productName !== 'Labor de Cosecha' && !m.deleted);
+            
+            // Grouping by batch ID (Strict Mode matching LotHistory algorithm)
+            const groups: Record<string, any> = {};
+            const allOrders = await db.getAll('orders') as Order[];
+            const harvestOrders = allOrders.filter(o => o.type === 'HARVEST' && !o.deleted);
 
-            if (hms.length > 0) {
-                const harvest = hms[0];
-                // rough matching for expense
-                const expense = allMovements.find(m => m.referenceId === lotId && m.type === 'OUT' && m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' && m.date === harvest.date);
+            movementsForLot.forEach(m => {
+                if (!m.harvestBatchId) return; // Skip loose movements
+                
+                const key = m.harvestBatchId;
+                if (!groups[key]) {
+                    const harvestOrder = harvestOrders.find(o => o.harvestBatchId === m.harvestBatchId || o.id === m.harvestBatchId);
 
-                setHarvestMovement({
-                    ...harvest,
-                    harvestLaborCost: expense?.purchasePrice || 0,
-                    harvestLaborPricePerHa: expense?.harvestLaborPricePerHa || 0
-                });
+                    groups[key] = {
+                        id: m.id,
+                        harvestBatchId: m.harvestBatchId,
+                        date: m.date,
+                        time: m.time || '00:00',
+                        type: 'HARVEST',
+                        observedYield: 0,
+                        harvestLaborCost: 0,
+                        harvestLaborPricePerHa: m.harvestLaborPricePerHa,
+                        crop: m.productName,
+                        contractorName: m.contractorName,
+                        author: m.createdBy || 'Sistema',
+                        timestamp: new Date(`${m.date}T${m.time || '00:00'}`).getTime(),
+                        movements: [],
+                        transportSheets: harvestOrder?.transportSheets || [],
+                        harvestOrder: harvestOrder
+                    };
+                }
+                groups[key].observedYield += m.quantity;
+                if (m.harvestLaborPricePerHa) groups[key].harvestLaborPricePerHa = m.harvestLaborPricePerHa;
+                if (m.contractorName && !groups[key].contractorName) groups[key].contractorName = m.contractorName;
+                if (m.investorName && !groups[key].investorName) groups[key].investorName = m.investorName;
+                if (m.campaignId && !groups[key].campaignId) groups[key].campaignId = m.campaignId;
+                groups[key].movements.push(m);
+            });
+
+            const sortedEvents = Object.values(groups).sort((a, b) => b.timestamp - a.timestamp);
+
+            if (sortedEvents.length > 0) {
+                const mostRecentHarvest = sortedEvents[0];
+                
+                // rough matching for expense (kept for legacy support if needed, though Order handles this better now)
+                const expense = allMovements.find(m => m.referenceId === lotId && m.type === 'OUT' && (m.productId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' || m.notes?.includes('Labor de cosecha')) && m.date === mostRecentHarvest.date && !m.deleted);
+                mostRecentHarvest.harvestLaborCost = expense?.purchasePrice || 0;
+
+                setHarvestMovement(mostRecentHarvest);
+                // Also Keep original movements for legacy compatibility if external components need the raw list
+                setHarvestMovements(mostRecentHarvest.movements); 
             } else {
                 setHarvestMovement(null);
+                setHarvestMovements([]);
             }
         } catch (error) {
             console.error('Error fetching harvest details:', error);
             setHarvestMovement(null);
+            setHarvestMovements([]);
         }
     };
 
@@ -1390,10 +1465,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
-                                                                                                    setIsEditingHarvestPanel(false);
+                                                                                                    setIsEditingHarvestPanel(true);
                                                                                                     setHarvestDate(lotHarvestPlan.date);
                                                                                                     setHarvestContractor(lotHarvestPlan.contractorName || '');
                                                                                                     setHarvestLaborPrice(lotHarvestPlan.servicePrice?.toString() || '');
+                                                                                                    setSelectedHarvestCampaignId(lotHarvestPlan.campaignId || '');
+                                                                                                    setHarvestTechnicalResponsible(lotHarvestPlan.technicalResponsible || '');
+                                                                                                    const planInvestors = (lotHarvestPlan as any).investors || (lotHarvestPlan.investorName ? [{name: lotHarvestPlan.investorName, percentage: 100}] : []);
+                                                                                                    setSelectedHarvestInvestors(planInvestors);
                                                                                                     setSelectedLotId(lot.id);
                                                                                                     setHarvestPlanOrder(lotHarvestPlan); // Set current plan
                                                                                                     setIsHarvesting(true);
@@ -1423,6 +1502,10 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                                                                                     setHarvestDate(lotHarvestPlan.date);
                                                                                                     setHarvestContractor(lotHarvestPlan.contractorName || '');
                                                                                                     setHarvestLaborPrice(lotHarvestPlan.servicePrice?.toString() || '');
+                                                                                                    setSelectedHarvestCampaignId(lotHarvestPlan.campaignId || '');
+                                                                                                    setHarvestTechnicalResponsible(lotHarvestPlan.technicalResponsible || '');
+                                                                                                    const confInvestors = (lotHarvestPlan as any).investors || (lotHarvestPlan.investorName ? [{name: lotHarvestPlan.investorName, percentage: 100}] : []);
+                                                                                                    setSelectedHarvestInvestors(confInvestors);
                                                                                                     setSelectedLotId(lot.id);
 
                                                                                                     // Default warehouse selection
@@ -1461,9 +1544,9 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 <p>Seleccione un Campo para gestionar lotes</p>
                             </div>
                         )}
-                    </div>
                 </div>
             </div>
+        </div>
 
             {selectedLotId && (
                 <div className="container mx-auto max-w-7xl mt-4 px-4 lg:px-8">
@@ -1487,7 +1570,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                 </div>
             )}
 
-            {activePanel && (
+            {activePanel && activePanel.type !== 'harvest_details' && (
                 <div className="container mx-auto max-w-7xl px-4 lg:px-8 pb-20">
                     <div
                         ref={obsSectionRef}
@@ -1701,40 +1784,42 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                     )}
                                 </div>
                             )}
-                            {activePanel?.type === 'harvest_details' && (
-                                <div className="p-6 bg-white animate-fadeIn">
-                                    {harvestMovement ? (
-                                        !isEditingHarvestPanel ? (
-                                            <HarvestDetailsView
-                                                harvestMovement={harvestMovement}
-                                                harvestMovements={harvestMovements}
-                                                client={profile as any}
-                                                warehouses={warehouses}
-                                                farms={farms}
-                                                lots={allClientLots}
-                                                campaigns={campaigns}
-                                                onClose={() => setActivePanel(null)}
-                                                onEdit={() => handleEditHarvest(harvestMovement)}
-                                                isReadOnly={isReadOnly}
-                                            />
-                                        ) : null
-                                    ) : (
-                                        <div className="text-center py-8 text-slate-400">
-                                            <p>No se encontró información de la cosecha.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {activePanel && activePanel.type === 'harvest_details' && (
+                <div className="container mx-auto max-w-7xl px-4 lg:px-8 pb-20 mt-8 animate-fadeIn">
+                    {harvestMovement ? (
+                        <HarvestDetailsView
+                            harvestMovement={harvestMovement}
+                            harvestMovements={harvestMovements}
+                            client={profile as any}
+                            warehouses={warehouses}
+                            farms={farms}
+                            lots={allClientLots}
+                            campaigns={campaigns}
+                            onClose={() => setActivePanel(null)}
+                            onEdit={() => handleEditHarvest(harvestMovement)}
+                            onSelectSheet={(sheet, idx) => handleOpenSheetEdit(harvestMovement, idx)}
+                            isReadOnly={isReadOnly}
+                            transportSheets={(harvestMovement as any).transportSheets}
+                        />
+                    ) : (
+                        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400 shadow-lg">
+                            <p>No se encontró información de la cosecha.</p>
+                        </div>
+                    )}
+                </div>
+            )}
 
                     {/* SEPARATE FLOATING BOX FOR DETAILS (Level 3) */}
                     {selectedEvent && (
                         <div
                             ref={detailSectionRef}
-                            className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-24"
+                            className="mt-8 animate-fadeIn scroll-mt-24"
                         >
-                            <div className="px-0 pb-0">
                                 {selectedEvent.type === 'HARVEST' ? (
                                     <HarvestDetailsView
                                         harvestMovement={selectedEvent.movements[0]}
@@ -1746,6 +1831,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         campaigns={campaigns}
                                         onClose={() => setSelectedEvent(null)}
                                         onEdit={() => handleEditHarvest(selectedEvent)}
+                                        onSelectSheet={(sheet, idx) => handleOpenSheetEdit(selectedEvent, idx)}
                                         onSelectMovement={(m) => {
                                             setSelectedMovement({
                                                 m,
@@ -1756,6 +1842,8 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                             }, 100);
                                         }}
                                         isReadOnly={isReadOnly}
+                                        transportSheets={selectedEvent.transportSheets}
+                                        harvestOrder={selectedEvent.harvestOrder}
                                     />
                                 ) : (
                                     selectedEvent.rawOrder && (
@@ -1771,17 +1859,14 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                         />
                                     )
                                 )}
-                            </div>
                         </div>
                     )}
-                </div>
-            )}
-
+                
             {/* SEPARATE FLOATING BOX FOR MOVEMENTS (Level 4) */}
             {selectedMovement && (
                 <div
                     ref={logisticsSectionRef}
-                    className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg animate-fadeIn ring-1 ring-slate-100 scroll-mt-24 border-t-4 border-t-amber-500"
+                    className="mt-8 animate-fadeIn scroll-mt-24"
                 >
                     <MovementDetailsView
                         movement={selectedMovement.m}
@@ -1862,8 +1947,13 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                             initialContractor={harvestContractor}
                             initialLaborPrice={harvestLaborPrice}
                             initialYield={observedYield}
+                            initialCampaignId={selectedHarvestCampaignId}
+                            initialInvestors={selectedHarvestInvestors}
+                            initialHarvestType={harvestType}
                             initialTechnicalResponsible={harvestTechnicalResponsible}
                             isExecutingPlan={!isEditingHarvestPanel}
+                            initialStep={wizardInitialStep}
+                            initialActiveSheetIndex={wizardInitialActiveSheetIndex}
                             initialDistributions={(harvestPlanOrder as any)?.movements?.map((m: any) => ({
                                 id: m.id,
                                 type: m.receiverName ? 'PARTNER' : 'WAREHOUSE',
