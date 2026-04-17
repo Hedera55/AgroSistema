@@ -41,6 +41,21 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     const [distMetric, setDistMetric] = useState<'participacion' | 'retirado'>('participacion');
     const [selectedSocioDetail, setSelectedSocioDetail] = useState<string | null>(null);
     const [selectedSocioRetiroDetail, setSelectedSocioRetiroDetail] = useState<string | null>(null);
+    const [humidityThreshold, setHumidityThreshold] = useState<number>(14);
+    const [isEditingThreshold, setIsEditingThreshold] = useState(false);
+    const [tempThreshold, setTempThreshold] = useState<string>('');
+
+    useEffect(() => {
+        const stored = localStorage.getItem('agronomic_humidity_threshold');
+        if (stored) {
+            setHumidityThreshold(Number(stored));
+        }
+    }, []);
+
+    const handleThresholdChange = (newVal: number) => {
+        setHumidityThreshold(newVal);
+        localStorage.setItem('agronomic_humidity_threshold', newVal.toString());
+    };
 
     // Horizontal scroll refs for tables
     const dailyTableScrollRef = useHorizontalScroll();
@@ -155,8 +170,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         const currentCampaignShares = selectedCampaignId ? (campaignShares[selectedCampaignId] || {}) : {};
 
         // 0. Pre-filter movements by selected campaign and crop, excluding deleted records
-        const campaignMovements = movements.filter(m => 
-            !m.deleted && 
+        const campaignMovements = movements.filter(m =>
+            !m.deleted &&
             (selectedCampaignId ? m.campaignId === selectedCampaignId : true)
         );
         const filteredMovements = campaignMovements.filter(m => {
@@ -206,7 +221,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         let humiditySum = 0;
         let humidityCount = 0;
 
-        const HUMIDITY_THRESHOLD = 14;
+        const HUMIDITY_THRESHOLD = humidityThreshold;
         const qualityStats = {
             minHum: Infinity,
             maxHum: -Infinity,
@@ -256,7 +271,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             }
 
             const eventId = m.harvestBatchId || m.id;
-            
+
             // Ensure evolution entry exists
             if (!evolutionMap.has(eventId)) {
                 evolutionMap.set(eventId, {
@@ -276,16 +291,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
         // 3. Process LOGISTICS and WEIGHTS from Orders (Master List)
         // We use orders as the strict source of truth for trucks and harvest events.
         // Legacy data without Orders will NOT appear here until migrated (Edit & Save).
-        const campaignOrders = orders.filter(o => 
+        const campaignOrders = orders.filter(o =>
             !o.deleted &&
-            o.type === 'HARVEST' && 
+            o.type === 'HARVEST' &&
             (selectedCampaignId ? o.campaignId === selectedCampaignId : true) &&
             (!selectedCrop || (lots.find(l => l.id === o.lotId)?.cropSpecies === selectedCrop))
         );
 
         campaignOrders.forEach(o => {
             const eventId = o.harvestBatchId || o.id;
-            
+
             // Ensure evolution entry exists
             if (!evolutionMap.has(eventId)) {
                 evolutionMap.set(eventId, {
@@ -325,16 +340,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 if (o.type === 'HARVEST') {
                     // Inclusion logic: use lotId from order
                     const lotLink = o.lotId;
-                    
-                    qualityStats.validSheets.push({ 
-                        sheet, 
-                        parentLotId: lotLink || sheet.lotId, 
-                        indexInMovement: sheetIdx + 1, 
-                        parentDate: o.date, 
+
+                    qualityStats.validSheets.push({
+                        sheet,
+                        parentLotId: lotLink || sheet.lotId,
+                        indexInMovement: sheetIdx + 1,
+                        parentDate: o.date,
                         parentTime: o.time || '00:00',
                         harvestBatchId: o.harvestBatchId || o.id
                     });
-                    
+
                     if (sheet.humidity != null && sheet.humidity > 0) {
                         if (sheet.humidity < qualityStats.minHum) qualityStats.minHum = sheet.humidity;
                         if (sheet.humidity > qualityStats.maxHum) qualityStats.maxHum = sheet.humidity;
@@ -664,18 +679,18 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     const bId = s.harvestBatchId || 'unknown';
                     if (!batches.includes(bId)) batches.push(bId);
                 });
-                
+
                 // Always take the last 6 sheets, regardless of humidity
                 // Reverse so newest (highest number trip) is on the left
                 const latest6 = qualityStats.validSheets.slice(-6).reverse();
-                
+
                 const rawChartData = latest6.map((entry) => {
                     const globalIdx = sheetToGlobalIndex.get(entry) || entry.indexInMovement;
                     const sheetNum = entry.sheet.dischargeNumber || String(globalIdx);
-                    
+
                     const effectiveLotId = entry.parentLotId || entry.sheet.lotId;
                     const lotNameBase = effectiveLotId ? getLotDisplayName(effectiveLotId).split(' - ')[0] : 'S/C';
-                    
+
                     // Add index suffix if this lot has >1 harvest event in the campaign
                     let suffix = '';
                     if (effectiveLotId && lotHarvestsMap.has(effectiveLotId)) {
@@ -685,10 +700,10 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             suffix = ` ${bIdx}`;
                         }
                     }
-                    
+
                     const label = `V${sheetNum} ${lotNameBase}${suffix}`;
                     const hasHumidity = entry.sheet.humidity != null && entry.sheet.humidity > 0;
-                    
+
                     return {
                         label,
                         humidity: hasHumidity ? entry.sheet.humidity : 1.5, // Small stub for no-data
@@ -708,7 +723,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         isPadding: true
                     } as any);
                 }
-                
+
                 return {
                     minHum: qualityStats.minHum === Infinity ? 0 : qualityStats.minHum,
                     maxHum: qualityStats.maxHum === -Infinity ? 0 : qualityStats.maxHum,
@@ -778,7 +793,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 }
             }
         };
-    }, [movements, selectedCampaignId, selectedPartner, selectedCrop, client, lots, farms, orders]);
+    }, [movements, selectedCampaignId, selectedPartner, selectedCrop, client, lots, farms, orders, humidityThreshold]);
 
     // Campaign participation shares for Socios KPI
     const campaignShares = useMemo(() => {
@@ -1215,7 +1230,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     </linearGradient>
                                                 </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                                                <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tickFormatter={(val) => { const d = new Date(`${val}T12:00:00`); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`; }} />
+                                                <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tickFormatter={(val) => { const d = new Date(`${val}T12:00:00`); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; }} />
                                                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(val) => `${val.toLocaleString('es-AR')} tn`} width={70} />
                                                 <Area type="monotone" dataKey="acumuladoTn" stroke="#0C8A52" strokeWidth={2.5} fill="url(#areaGradientResumen)" dot={{ stroke: '#0C8A52', strokeWidth: 2, r: 3, fill: '#fff' }} label={{ position: 'top', fill: '#475569', fontSize: 11, fontWeight: 600, formatter: (val: any) => `${Number(val || 0).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} tn` }} />
                                             </AreaChart>
@@ -1248,32 +1263,80 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 <div className="bg-white border border-slate-200 rounded-[24px] md:rounded-[28px] p-6 lg:p-10 shadow-sm flex flex-col h-[400px]">
                                     <div className="flex justify-between items-center mb-10">
                                         <h3 className="text-base md:text-lg font-bold text-slate-800 tracking-tight transition-colors">Calidad — humedad por viaje</h3>
-                                        <span className="bg-slate-100 text-slate-400 text-[10px] uppercase font-black px-2 py-1 rounded-md tracking-widest">referencia: ≤14% óptimo</span>
+                                        {isEditingThreshold ? (
+                                            <div className="flex items-center h-[28px] mb-1.5">
+                                                <input
+                                                    type="text"
+                                                    className="w-14 h-full text-xs font-bold text-slate-800 px-2 bg-white border border-slate-800 rounded-md focus:outline-none text-center tracking-wider"
+                                                    placeholder=""
+                                                    value={tempThreshold}
+                                                    onChange={e => {
+                                                        let val = e.target.value.replace(/[^\d.,]/g, '');
+                                                        const match = val.match(/[.,]/);
+                                                        if (match) {
+                                                            const sep = match[0];
+                                                            const firstIdx = val.indexOf(sep);
+                                                            val = val.substring(0, firstIdx + 1) + val.substring(firstIdx + 1).replace(/[.,]/g, '');
+                                                        }
+                                                        setTempThreshold(val);
+                                                    }}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            let val = parseFloat(tempThreshold.replace(',', '.'));
+                                                            if (!isNaN(val) && val >= 0) handleThresholdChange(val);
+                                                            setIsEditingThreshold(false);
+                                                        } else if (e.key === 'Escape') {
+                                                            setIsEditingThreshold(false);
+                                                        }
+                                                    }}
+                                                    onBlur={() => {
+                                                        let val = parseFloat(tempThreshold.replace(',', '.'));
+                                                        if (!isNaN(val) && val >= 0) handleThresholdChange(val);
+                                                        setIsEditingThreshold(false);
+                                                    }}
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div
+                                                className="px-2 py-1 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-transparent shadow-sm mb-1.5"
+                                                onClick={() => {
+                                                    setTempThreshold(humidityThreshold.toString().replace('.', ','));
+                                                    setIsEditingThreshold(true);
+                                                }}
+                                                title="Editar límite de humedad"
+                                            >
+                                                <span className="text-[10px] uppercase font-bold tracking-wider">
+                                                    MAX H%: {humidityThreshold}%
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex-1 w-full relative min-h-[220px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={withdrawalData.quality.chartData} margin={{ top: 25, right: 0, left: -20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis 
-                                                    dataKey="label" 
-                                                    axisLine={false} 
-                                                    tickLine={false} 
-                                                    tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 700 }} 
+                                                <XAxis
+                                                    dataKey="label"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 700 }}
                                                     dy={10}
                                                     angle={-25}
                                                     textAnchor="end"
                                                     height={60}
                                                     interval={0}
                                                 />
-                                                <YAxis 
-                                                    axisLine={false} 
-                                                    tickLine={false} 
-                                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} 
+                                                <YAxis
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
                                                     tickFormatter={(val) => `${val}%`}
                                                     domain={[0, (dataMax: number) => Math.max(dataMax * 1.1, 18)]}
                                                     ticks={[0, 4, 8, 10, 12, 14, 16, 18]}
                                                 />
-                                                <Tooltip 
+                                                <Tooltip
                                                     cursor={{ fill: 'transparent' }}
                                                     content={({ active, payload }) => {
                                                         if (active && payload && payload.length) {
@@ -1296,9 +1359,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                     }}
                                                 />
                                                 <ReferenceLine y={withdrawalData.quality.threshold} stroke="#3b82f6" strokeDasharray="3 3" />
-                                                <Bar 
-                                                    dataKey="humidity" 
-                                                    radius={[6, 6, 0, 0]} 
+                                                <Bar
+                                                    dataKey="humidity"
+                                                    radius={[6, 6, 0, 0]}
                                                     maxBarSize={32}
                                                     label={({ x, y, width, value, index }: any) => {
                                                         const entry = withdrawalData.quality.chartData[index];
@@ -1807,8 +1870,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                                             <td className="px-6 py-3 text-[12px] font-mono text-center border-r border-b border-gray-300 whitespace-nowrap font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif', backgroundColor: selectedSocioDetail === row.name ? 'rgba(16, 185, 129, 0.05)' : '', borderTop: selectedSocioDetail === row.name ? '3px solid #10b981' : '', borderBottom: selectedSocioDetail === row.name ? '3px solid #10b981' : '' }}>
                                                                 {row.avgHumidity != null ? (
                                                                     <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded shadow-sm ${row.avgHumidity <= 14 ? 'bg-emerald-500 text-white border border-emerald-600' :
-                                                                            row.avgHumidity <= 15 ? 'bg-amber-500 text-white border border-amber-600' :
-                                                                                'bg-red-500 text-white border border-red-600'
+                                                                        row.avgHumidity <= 15 ? 'bg-amber-500 text-white border border-amber-600' :
+                                                                            'bg-red-500 text-white border border-red-600'
                                                                         }`}>
                                                                         {row.avgHumidity.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
                                                                     </div>

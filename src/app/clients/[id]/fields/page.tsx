@@ -1581,8 +1581,7 @@ export default function FieldsPage({ params }: { params: Promise<{ id: string }>
                                 <h2 className="text-lg font-bold text-slate-800 flex-shrink-0">
                                     {activePanel.type === 'observations' ? 'Observaciones' :
                                         activePanel.type === 'crop_assign' ? (lots.find(l => l.id === activePanel.id)?.status === 'NOT_SOWED' ? 'Editar Cultivo' : 'Asignar Cultivo') :
-                                            activePanel.type === 'sowing_details' ? 'Detalle de Siembra' :
-                                                activePanel.type === 'harvest_details' ? 'Detalle de Cosecha' : 'Historial del Lote'}
+                                            activePanel.type === 'sowing_details' ? 'Detalle de Siembra' : 'Historial del Lote'}
                                 </h2>
                                 <div className="hidden md:block w-px h-5 bg-slate-300"></div>
                                 <div className="flex items-center gap-2 overflow-hidden text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md whitespace-nowrap">

@@ -222,7 +222,7 @@ export const processHarvest = async (params: HarvestProcessParams) => {
         harvestBatchId: batchId,
         technicalResponsible,
         sowingOrderId: sowingOrderId || (lot as any).currentSowingOrderId,
-        transportSheets: (sheets || []).map(s => ({
+        transportSheets: (sheets || []).map((s: any) => ({
             ...s,
             lotId: lot.id // Ensure lot link is preserved
         })),

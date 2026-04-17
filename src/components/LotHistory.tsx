@@ -54,7 +54,7 @@ export function LotHistory({ clientId, lotId, refreshKey = 0, onSelectEvent, onE
                     const key = m.harvestBatchId;
                     if (!groups[key]) {
                         // Find the harvest order for this batch
-                        const harvestOrder = harvestOrders.find(o => o.harvestBatchId === m.harvestBatchId || o.id === m.harvestBatchId);
+                        const harvestOrder = harvestOrders.find((o: Order) => o.harvestBatchId === m.harvestBatchId || o.id === m.harvestBatchId);
 
                         groups[key] = {
                             id: m.id,

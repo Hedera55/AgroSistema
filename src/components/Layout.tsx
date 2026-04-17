@@ -141,7 +141,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             window.removeEventListener('lotsUpdated', handleUpdate);
             window.removeEventListener('clientSelectionChanged', handleUpdate);
         };
-    }, [effectiveId]);
+    }, [effectiveId, syncStatus]);
     // Fetch client name for display
     useEffect(() => {
         if (effectiveId) {

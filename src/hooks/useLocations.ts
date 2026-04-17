@@ -122,6 +122,7 @@ export function useLots(farmId: string) {
         const finalLot = { ...lot, synced: false, updatedAt: new Date().toISOString() };
         await db.put('lots', finalLot);
         await refresh();
+        window.dispatchEvent(new CustomEvent('lotsUpdated'));
         syncService.pushChanges();
     };
 
@@ -138,6 +139,7 @@ export function useLots(farmId: string) {
         };
         await db.put('lots', finalLot);
         await refresh();
+        window.dispatchEvent(new CustomEvent('lotsUpdated'));
         syncService.pushChanges();
     };
 
@@ -154,6 +156,7 @@ export function useLots(farmId: string) {
             updatedAt: new Date().toISOString()
         });
         await refresh();
+        window.dispatchEvent(new CustomEvent('lotsUpdated'));
         syncService.pushChanges();
     };
 
