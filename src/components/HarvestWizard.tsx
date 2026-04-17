@@ -627,7 +627,15 @@ export const HarvestWizard: React.FC<HarvestWizardProps> = ({
             const manualWarehouses = prev.filter(d => d.type === 'WAREHOUSE' && !d.logistics?.isFromMark);
             
             // Rebuild PARTNER entries from marks
-            const markBasedDistributions = Array.from(socioTotals.entries()).map(([name, amount]) => {
+            const markBasedDistributions: Array<{
+                id: string;
+                type: 'WAREHOUSE' | 'PARTNER';
+                targetId: string;
+                targetName: string;
+                amount: number;
+                transportMode?: 'TRUCK' | 'BOLSA';
+                logistics: any;
+            }> = Array.from(socioTotals.entries()).map(([name, amount]) => {
                 const hasBags = transportSheets.some(s => s.partnermark === name && s.transportType === 'BOLSA');
                 return {
                     id: `mark_${name}`,
